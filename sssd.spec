@@ -1,22 +1,12 @@
-# this is the git snapshot we're packaging
-%define datetag     20090309
-%define vcs         git
-%define vcsversion  691c9b3
-%define alphatag    %{datetag}%{vcs}%{vcsversion}
-
 Name: sssd
-Version: 0.1.0
-Release: 5.%{alphatag}%{dist}
+Version: 0.2.0
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 # The entire source code is GPLv3+ except replace/ which is LGPLv3+
 License: GPLv3+ and LGPLv3+
-URL: http://www.freeipa.org/
-# Tarfile created using git
-# git clone git clone git://fedorahosted.org/sssd.git
-# cd sssd
-# git-archive --format=tar --prefix=%{name}-%{version}/ %{name}-%{version} | gzip > %{name}-%{version}.tar.gz
-Source0: sssd-%{version}.tar.gz
+URL: http://fedorahosted.org/sssd
+Source: https://fedorahosted.org/sssd/attachment/wiki/WikiStart/sssd-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -64,9 +54,8 @@ pushd server
            --sysconfdir=%{_sysconfdir} \
            --without-tests     \
            --without-policykit \
-           --with-openldap \
            --with-infopipe \
-           --with-initrd-dir=%{_initrddir} \
+           --with-init-dir=%{_initrddir} \
 
 make %{?_smp_mflags}
 popd
@@ -99,15 +88,20 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sssd
 %{_sbindir}/sss_useradd
 %{_sbindir}/sss_userdel
+%{_sbindir}/sss_usermod
 %{_sbindir}/sss_groupadd
 %{_sbindir}/sss_groupdel
+%{_sbindir}/sss_groupmod
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
 %{_libdir}/ldb/memberof.so*
-%{_sharedstatedir}/sss/
+%dir /var/lib/sss/
+%attr(700,root,root) %dir /var/lib/sss/db
+%dir /var/lib/sss/pipes
+%attr(700,root,root) %dir /var/lib/sss/pipes/private
 %config(noreplace) %{_sysconfdir}/dbus-1/system.d/org.freeipa.sssd.infopipe.conf
 %{_datadir}/%{name}/introspect/infopipe/org.freeipa.sssd.infopipe.Introspect.xml
-/%{_lib}/libnss_sss.so.0.0.1
+/%{_lib}/libnss_sss.so
 /%{_lib}/libnss_sss.so.2
 /%{_lib}/security/pam_sss.so
 
@@ -128,6 +122,9 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Tue Mar 10 2009 Simo Sorce <ssorce@redhat.com> - 0.2.0-1
+- Version 0.2.0
+
 * Sun Mar 08 2009 Jakub Hrozek <jhrozek@redhat.com> - 0.1.0-5.20090309git691c9b3
 - package git snapshot
 
