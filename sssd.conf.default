@@ -4,7 +4,6 @@ activeServices = nss, dp, pam
 
 [services/nss]
 description = NSS Responder Configuration
-timeout = 150
 # the following prevents sssd for searching for the root user/group in
 # all domains (you can add here a comma separated list of system accounts are
 # always going to be /etc/passwd users, or that you want to filter out)
@@ -13,20 +12,17 @@ filterUsers = root
 
 [services/dp]
 description = Data Provider Configuration
-timeout = 150
 
 [services/pam]
 description = PAM Responder Configuration
-timeout = 150
 
 [services/info]
 description = InfoPipe Configuration
-timeout = 150
 
 [services/monitor]
 description = Service Monitor Configuration
-sbusTimeout = 150
-servicePingTime = 300
+#if a backend is particularly slow you can raise this timeout here
+sbusTimeout = 30
 
 [domains]
 description = Domains served by SSSD
@@ -91,3 +87,6 @@ description = Domains served by SSSD
 ; provider = proxy
 ; libName = ldap
 ; libPath = libnss_ldap.so.2
+;
+#if a backend is particularly slow you can raise this timeout here
+; timeout = 60

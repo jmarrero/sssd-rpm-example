@@ -1,6 +1,6 @@
 Name: sssd
-Version: 0.3.0
-Release: 2%{?dist}
+Version: 0.3.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 
@@ -13,12 +13,10 @@ Source1: sssd.conf.default
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch100: 0001-Add-a-LSB-header-to-the-initscript.patch
-Patch101: 0001-Build-fixes-for-RPM-packaging-of-SSSD.patch
 
 ### Dependencies ###
 
-Requires: libldb >= 0.9.3
+Requires: libldb = 0.9.3
 
 Requires(preun):  initscripts chkconfig
 Requires(postun): /sbin/service
@@ -52,9 +50,6 @@ services for projects like FreeIPA.
 
 %prep
 %setup -q
-
-%patch100 -p1 -b .lsb_init
-%patch101 -p1 -b .build_fixes
 
 %build
 
@@ -143,6 +138,10 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Mon Apr 13 2009 Simo Sorce <ssorce@redhat.com> - 0.3.1-1
+- Version 0.3.1
+- includes previous release patches
+
 * Mon Apr 13 2009 Simo Sorce <ssorce@redhat.com> - 0.3.0-2
 - Try to fix build adding automake as an explicit BuildRequire
 - Add also a couple of last minute patches from upstream
