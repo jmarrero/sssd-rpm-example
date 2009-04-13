@@ -1,0 +1,37 @@
+>From 8dcfa62361fd6ed0fe6babf7c24702dbc53729ae Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 8 Apr 2009 11:42:02 +0200
+Subject: [PATCH] Add a LSB header to the initscript
+
+---
+ server/sysv/sssd |   14 ++++++++++++++
+ 1 files changed, 14 insertions(+), 0 deletions(-)
+
+diff --git a/server/sysv/sssd b/server/sysv/sssd
+index c1364b9..9facb44 100644
+--- a/server/sysv/sssd
++++ b/server/sysv/sssd
+@@ -9,6 +9,20 @@
+ #              basis to provide client auditing and policy services for projects
+ #              like FreeIPA.
+ #
++### BEGIN INIT INFO
++# Provides: sssd
++# Required-Start: $remote_fs $time
++# Should-Start: $syslog
++# Should-Stop: $null
++# Required-Stop: $null
++# Short-Description: System Security Services Daemon
++# Description: Provides a set of daemons to manage access to remote directories
++#              and authentication mechanisms. It provides an NSS and PAM
++#              interface toward the system and a pluggable backend system to
++#              connect to multiple different account sources. It is also the
++#              basis to provide client auditing and policy services for projects
++#              like FreeIPA.
++### END INIT INFO
+ 
+ RETVAL=0
+ prog="sssd"
+-- 
+1.6.0.6
+
