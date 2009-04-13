@@ -26,7 +26,6 @@ Requires(postun): /sbin/service
 ### Build Dependencies ###
 
 BuildRequires: autoconf
-BuildRequires: automake
 BuildRequires: popt-devel
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
@@ -38,6 +37,10 @@ BuildRequires: openldap-devel
 BuildRequires: pam-devel
 BuildRequires: nss-devel
 BuildRequires: nspr-devel
+BuildRequires: pcre-devel
+BuildRequires: zlib-devel
+BuildRequires: automake
+BuildRequires: libtool
 
 %description
 Provides a set of daemons to manage access to remote directories and
