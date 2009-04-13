@@ -1,12 +1,15 @@
 Name: sssd
-Version: 0.2.1
+Version: 0.3.0
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
+
 # The entire source code is GPLv3+ except replace/ which is LGPLv3+
 License: GPLv3+ and LGPLv3+
 URL: http://fedorahosted.org/sssd
 Source: https://fedorahosted.org/sssd/attachment/wiki/WikiStart/sssd-%{version}.tar.gz
+
+Source1: sssd.conf.default
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -47,6 +50,15 @@ services for projects like FreeIPA.
 
 %build
 
+# common
+pushd common
+autoreconf -i -f
+%configure --disable-shared \
+           --enable-static
+
+make %{?_smp_mflags}
+popd
+
 # sssd
 pushd server
 ./autogen.sh
@@ -54,7 +66,7 @@ pushd server
            --sysconfdir=%{_sysconfdir} \
            --without-tests     \
            --without-policykit \
-           --with-infopipe \
+           --without-infopipe \
            --with-init-dir=%{_initrddir} \
 
 make %{?_smp_mflags}
@@ -78,6 +90,8 @@ pushd sss_client
 make install DESTDIR=$RPM_BUILD_ROOT
 popd
 
+install -m700 %{SOURCE1} $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -99,8 +113,7 @@ rm -rf $RPM_BUILD_ROOT
 %attr(700,root,root) %dir /var/lib/sss/db
 %dir /var/lib/sss/pipes
 %attr(700,root,root) %dir /var/lib/sss/pipes/private
-%config(noreplace) %{_sysconfdir}/dbus-1/system.d/org.freeipa.sssd.infopipe.conf
-%{_datadir}/%{name}/introspect/infopipe/org.freeipa.sssd.infopipe.Introspect.xml
+%config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 /%{_lib}/libnss_sss.so
 /%{_lib}/libnss_sss.so.2
 /%{_lib}/security/pam_sss.so
@@ -122,6 +135,10 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Mon Apr 13 2009 Simo Sorce <ssorce@redhat.com> - 0.3.0-1
+- Version 0.3.0
+- Provides file based configuration and lots of improvements
+
 * Tue Mar 10 2009 Simo Sorce <ssorce@redhat.com> - 0.2.1-1
 - Version 0.2.1
 
