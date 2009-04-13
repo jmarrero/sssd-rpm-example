@@ -1,6 +1,6 @@
 Name: sssd
 Version: 0.3.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 
@@ -26,6 +26,7 @@ Requires(postun): /sbin/service
 ### Build Dependencies ###
 
 BuildRequires: autoconf
+BuildRequires: automake
 BuildRequires: popt-devel
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
@@ -135,6 +136,9 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Mon Apr 13 2009 Simo Sorce <ssorce@redhat.com> - 0.3.0-2
+- Try to fix build adding automake as an explicit BuildRequire
+
 * Mon Apr 13 2009 Simo Sorce <ssorce@redhat.com> - 0.3.0-1
 - Version 0.3.0
 - Provides file based configuration and lots of improvements
