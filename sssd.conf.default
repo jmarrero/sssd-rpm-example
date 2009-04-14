@@ -16,9 +16,6 @@ description = Data Provider Configuration
 [services/pam]
 description = PAM Responder Configuration
 
-[services/info]
-description = InfoPipe Configuration
-
 [services/monitor]
 description = Service Monitor Configuration
 #if a backend is particularly slow you can raise this timeout here
