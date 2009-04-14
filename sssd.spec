@@ -14,6 +14,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch101: 0001-Add-reconnection-code-between-the-NSS-responder-and.patch
+Patch102: 0002-Replace-the-example-sssd.conf-file-with-the-one-used.patch
 Patch103: 0003-Make-reconnection-to-the-Data-Provider-a-global-sett.patch
 Patch104: 0004-Add-common-function-to-retrieve-comma-sep.-lists.patch
 Patch105: 0005-Fixing-memory-issues-in-ini-and-collection.patch
@@ -56,6 +57,7 @@ services for projects like FreeIPA.
 %setup -q
 
 %patch101 -p1 -b .reconnect
+%patch102 -p1 -b .examples
 %patch103 -p1 -b .global_reconnect_option
 %patch104 -p1 -b .fix_filters
 %patch105 -p1 -b .fix_mem_issues
