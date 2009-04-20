@@ -1,6 +1,6 @@
 Name: sssd
-Version: 0.3.1
-Release: 2%{?dist}
+Version: 0.3.2
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 
@@ -13,11 +13,6 @@ Source1: sssd.conf.default
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch101: 0001-Add-reconnection-code-between-the-NSS-responder-and.patch
-Patch102: 0002-Replace-the-example-sssd.conf-file-with-the-one-used.patch
-Patch103: 0003-Make-reconnection-to-the-Data-Provider-a-global-sett.patch
-Patch104: 0004-Add-common-function-to-retrieve-comma-sep.-lists.patch
-Patch105: 0005-Fixing-memory-issues-in-ini-and-collection.patch
 
 ### Dependencies ###
 
@@ -56,11 +51,6 @@ services for projects like FreeIPA.
 %prep
 %setup -q
 
-%patch101 -p1 -b .reconnect
-%patch102 -p1 -b .examples
-%patch103 -p1 -b .global_reconnect_option
-%patch104 -p1 -b .fix_filters
-%patch105 -p1 -b .fix_mem_issues
 
 %build
 
@@ -104,7 +94,7 @@ pushd sss_client
 make install DESTDIR=$RPM_BUILD_ROOT
 popd
 
-install -m700 %{SOURCE1} $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
+install -m600 %{SOURCE1} $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -149,6 +139,11 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Mon Apr 20 2009 Jakub Hrozek <jhrozek@redhat.com> - 0.3.2-1
+- bugfix release 0.3.2
+- includes previous release patches
+- change permissions of the /etc/sssd/sssd.conf to 0600
+
 * Tue Apr 14 2009 Simo Sorce <ssorce@redhat.com> - 0.3.1-2
 - Add last minute bug fixes, found in testing the package
 
