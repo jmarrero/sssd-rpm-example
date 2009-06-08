@@ -1,22 +1,22 @@
 Name: sssd
-Version: 0.3.2
-Release: 2%{?dist}
+Version: 0.4.1
+Release: 0%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 
 # The entire source code is GPLv3+ except replace/ which is LGPLv3+
 License: GPLv3+ and LGPLv3+
 URL: http://fedorahosted.org/sssd
-Source: https://fedorahosted.org/sssd/attachment/wiki/WikiStart/sssd-%{version}.tar.gz
-
+Source: https://fedorahosted.org/released/sssd/sssd-%{version}.tar.gz
 Source1: sssd.conf.default
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch010: sssd-0.4.1-debug_fn.patch
 
 ### Dependencies ###
 
-Requires: libldb = 0.9.3
+Requires: libldb >= 0.9.3
 
 Requires(preun):  initscripts chkconfig
 Requires(postun): /sbin/service
@@ -26,6 +26,9 @@ Requires(postun): /sbin/service
 ### Build Dependencies ###
 
 BuildRequires: autoconf
+BuildRequires: automake
+BuildRequires: libtool
+BuildRequires: m4
 BuildRequires: popt-devel
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
@@ -38,8 +41,9 @@ BuildRequires: pam-devel
 BuildRequires: nss-devel
 BuildRequires: nspr-devel
 BuildRequires: pcre-devel
-BuildRequires: automake
-BuildRequires: libtool
+BuildRequires: libxslt
+BuildRequires: libxml2
+BuildRequires: docbook-style-xsl
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -51,49 +55,32 @@ services for projects like FreeIPA.
 %prep
 %setup -q
 
+%patch010 -p1 -b .debug_fn
 
 %build
-
-# common
-pushd common
-autoreconf -i -f
-%configure --disable-shared \
-           --enable-static
-
-make %{?_smp_mflags}
-popd
-
-# sssd
-pushd server
-./autogen.sh
-%configure --prefix=%{_usr} \
-           --sysconfdir=%{_sysconfdir} \
-           --without-tests     \
-           --without-policykit \
-           --without-infopipe \
-           --with-init-dir=%{_initrddir} \
+%configure \
+    --without-tests \
+    --without-policykit \
+    --without-infopipe \
+    --with-init-dir=%{_initrddir} \
+    --enable-nsslibdir=/%{_lib}
 
 make %{?_smp_mflags}
-popd
-
-pushd sss_client
-./autogen.sh
-%configure --libdir=/%{_lib}
-make %{?_smp_mflags}
-popd
 
 %install
 rm -rf $RPM_BUILD_ROOT
 
-# sssd
-pushd server
 make install DESTDIR=$RPM_BUILD_ROOT
-popd
 
-pushd sss_client
-make install DESTDIR=$RPM_BUILD_ROOT
-popd
+# Remove .la files created by libtool
+rm -f \
+    $RPM_BUILD_ROOT/%{_lib}/libnss_sss.la \
+    $RPM_BUILD_ROOT/%{_lib}/security/pam_sss.la \
+    $RPM_BUILD_ROOT/%{_libdir}/ldb/memberof.la \
+    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_ldap.la \
+    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_proxy.la
 
+mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/sssd
 install -m600 %{SOURCE1} $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
 
 %clean
@@ -102,7 +89,7 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(-,root,root,-)
 %doc COPYING
-%{_initrddir}/%{name}
+%attr(755,root,root) %{_initrddir}/%{name}
 %{_sbindir}/sssd
 %{_sbindir}/sss_useradd
 %{_sbindir}/sss_userdel
@@ -112,15 +99,18 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sss_groupmod
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
-%{_libdir}/ldb/memberof.so*
+%{_libdir}/ldb/memberof.so
 %dir /var/lib/sss/
 %attr(700,root,root) %dir /var/lib/sss/db
 %dir /var/lib/sss/pipes
 %attr(700,root,root) %dir /var/lib/sss/pipes/private
+%dir %{_sysconfdir}/sssd
 %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
-/%{_lib}/libnss_sss.so
 /%{_lib}/libnss_sss.so.2
 /%{_lib}/security/pam_sss.so
+%{_mandir}/man5/*
+%{_mandir}/man8/*
+%{_datadir}/locale/*/LC_MESSAGES/sss_client.mo
 
 %post
 /sbin/ldconfig
@@ -139,6 +129,10 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Mon Jun  8 2009 Simo Sorce <ssorce@redhat.com> - 0.4.1-0
+- latest upstream release.
+- also add a patch that fixes debugging output (potential segfault)
+
 * Mon Apr 20 2009 Simo Sorce <ssorce@redhat.com> - 0.3.2-2
 - release out of the official 0.3.2 tarball
 
