@@ -62,6 +62,7 @@ description = Domains served by SSSD
 ; maxId = 999
 ; legacy = FALSE
 ; magicPrivateGroups = TRUE
+; provider = local
 
 # Example LDAP domain that uses the proxy backend and the standard nss_ldap
 # and pam_ldap modules (Useful until we have good working native ldap backends).
