@@ -1,6 +1,6 @@
 Name: sssd
 Version: 0.4.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 
@@ -14,6 +14,8 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 ### Patches ###
 Patch010: sssd-0.4.1-debug_fn.patch
 Patch011: sssd-0.4.1-conf_check.patch
+Patch012: sssd-0.4.1-reload_conf.patch
+Patch013: sssd-0.4.1-reload_conf_2.patch
 
 ### Dependencies ###
 
@@ -58,6 +60,8 @@ services for projects like FreeIPA.
 
 %patch010 -p1 -b .debug_fn
 %patch011 -p1 -b .conf_check
+%patch012 -p1 -b .reload_conf
+%patch013 -p1 -b .reload_conf_2
 
 %build
 %configure \
@@ -131,6 +135,9 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Mon Jun 22 2009 Simo Sorce <ssorce@redhat.com> - 0.4.1-2
+- Fix a couple of segfaults that may happen on reload
+
 * Thu Jun 11 2009 Simo Sorce <ssorce@redhat.com> - 0.4.1-1
 - add missing configure check that broke stopping the daemon
 - also fix default config to add a missing required option
