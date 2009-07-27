@@ -1,6 +1,6 @@
 Name: sssd
 Version: 0.4.1
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 
@@ -135,6 +135,9 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Sun Jul 26 2009 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 0.4.1-3
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_12_Mass_Rebuild
+
 * Mon Jun 22 2009 Simo Sorce <ssorce@redhat.com> - 0.4.1-2
 - Fix a couple of segfaults that may happen on reload
 
