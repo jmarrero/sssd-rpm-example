@@ -1,6 +1,6 @@
 Name: sssd
 Version: 0.4.1
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 
@@ -16,6 +16,7 @@ Patch010: sssd-0.4.1-debug_fn.patch
 Patch011: sssd-0.4.1-conf_check.patch
 Patch012: sssd-0.4.1-reload_conf.patch
 Patch013: sssd-0.4.1-reload_conf_2.patch
+Patch014: sssd-0.4.1-cve-2009-2410.patch
 
 ### Dependencies ###
 
@@ -62,6 +63,7 @@ services for projects like FreeIPA.
 %patch011 -p1 -b .conf_check
 %patch012 -p1 -b .reload_conf
 %patch013 -p1 -b .reload_conf_2
+%patch014 -p1 -b .cve-2009-2410
 
 %build
 %configure \
@@ -135,6 +137,10 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Wed Jul 29 2009 Jakub Hrozek <jhrozek@redhat.com> - 0.4.1-4
+- Fix for CVE-2009-2410 - Native SSSD users with no password set could log in
+  without a password. (Patch by Stephen Gallagher)
+
 * Sun Jul 26 2009 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 0.4.1-3
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_12_Mass_Rebuild
 
