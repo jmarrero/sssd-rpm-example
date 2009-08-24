@@ -1,6 +1,6 @@
 Name: sssd
-Version: 0.4.1
-Release: 4%{?dist}
+Version: 0.5.0
+Release: 0%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 
@@ -12,20 +12,19 @@ Source1: sssd.conf.default
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch010: sssd-0.4.1-debug_fn.patch
-Patch011: sssd-0.4.1-conf_check.patch
-Patch012: sssd-0.4.1-reload_conf.patch
-Patch013: sssd-0.4.1-reload_conf_2.patch
-Patch014: sssd-0.4.1-cve-2009-2410.patch
 
 ### Dependencies ###
 
 Requires: libldb >= 0.9.3
+Requires: libtdb >= 1.1.3
 
 Requires(preun):  initscripts chkconfig
 Requires(postun): /sbin/service
 
 %define servicename sssd
+%define sssdstatedir %{_localstatedir}/lib/sss
+%define dbpath %{sssdstatedir}/db
+%define pipepath %{sssdstatedir}/pipes
 
 ### Build Dependencies ###
 
@@ -48,6 +47,8 @@ BuildRequires: pcre-devel
 BuildRequires: libxslt
 BuildRequires: libxml2
 BuildRequires: docbook-style-xsl
+BuildRequires: krb5-devel
+BuildRequires: c-ares-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -59,17 +60,11 @@ services for projects like FreeIPA.
 %prep
 %setup -q
 
-%patch010 -p1 -b .debug_fn
-%patch011 -p1 -b .conf_check
-%patch012 -p1 -b .reload_conf
-%patch013 -p1 -b .reload_conf_2
-%patch014 -p1 -b .cve-2009-2410
-
 %build
 %configure \
     --without-tests \
-    --without-policykit \
-    --without-infopipe \
+    --with-db-path=%{dbpath} \
+    --with-pipe-path=%{pipepath} \
     --with-init-dir=%{_initrddir} \
     --enable-nsslibdir=/%{_lib}
 
@@ -86,7 +81,9 @@ rm -f \
     $RPM_BUILD_ROOT/%{_lib}/security/pam_sss.la \
     $RPM_BUILD_ROOT/%{_libdir}/ldb/memberof.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_ldap.la \
-    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_proxy.la
+    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_proxy.la \
+    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_krb5.la \
+    $RPM_BUILD_ROOT/%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.la
 
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/sssd
 install -m600 %{SOURCE1} $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
@@ -108,10 +105,11 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
 %{_libdir}/ldb/memberof.so
-%dir /var/lib/sss/
-%attr(700,root,root) %dir /var/lib/sss/db
-%dir /var/lib/sss/pipes
-%attr(700,root,root) %dir /var/lib/sss/pipes/private
+%{_libdir}/krb5/plugins/libkrb5/*
+%dir %{sssdstatedir}
+%attr(700,root,root) %dir %{dbpath}
+%attr(755,root,root) %dir %{pipepath}
+%attr(700,root,root) %dir %{pipepath}/private
 %dir %{_sysconfdir}/sssd
 %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 /%{_lib}/libnss_sss.so.2
@@ -119,6 +117,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/*
 %{_mandir}/man8/*
 %{_datadir}/locale/*/LC_MESSAGES/sss_client.mo
+%{_datadir}/locale/*/LC_MESSAGES/sss_daemon.mo
 
 %post
 /sbin/ldconfig
@@ -137,6 +136,9 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Mon Aug 24 2009 Simo Sorce <ssorce@redhat.com> - 0.5.0-0
+- New upstream release 0.5.0
+
 * Wed Jul 29 2009 Jakub Hrozek <jhrozek@redhat.com> - 0.4.1-4
 - Fix for CVE-2009-2410 - Native SSSD users with no password set could log in
   without a password. (Patch by Stephen Gallagher)
