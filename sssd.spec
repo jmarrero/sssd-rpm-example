@@ -1,5 +1,7 @@
+%{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib(1)")}
+
 Name: sssd
-Version: 0.5.0
+Version: 0.6.0
 Release: 0%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -18,6 +20,8 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 Requires: libldb >= 0.9.3
 Requires: libtdb >= 1.1.3
 
+Requires: sssd-client = 0.6.0
+Requires(post): python
 Requires(preun):  initscripts chkconfig
 Requires(postun): /sbin/service
 
@@ -32,7 +36,8 @@ BuildRequires: autoconf
 BuildRequires: automake
 BuildRequires: libtool
 BuildRequires: m4
-BuildRequires: popt-devel
+%{?fedora:BuildRequires: popt-devel}
+%{?rhel:BuildRequires: popt}
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
 BuildRequires: libtdb-devel
@@ -49,6 +54,7 @@ BuildRequires: libxml2
 BuildRequires: docbook-style-xsl
 BuildRequires: krb5-devel
 BuildRequires: c-ares-devel
+BuildRequires: python-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -56,6 +62,14 @@ authentication mechanisms. It provides an NSS and PAM interface toward
 the system and a pluggable backend system to connect to multiple different
 account sources. It is also the basis to provide client auditing and policy
 services for projects like FreeIPA.
+
+%package client
+Summary: SSSD Client libraries for NSS and PAM
+Group: Applications/System
+
+%description client
+Provides the libraries needed by the PAM and NSS stacks to connect to the SSSD
+service.
 
 %prep
 %setup -q
@@ -83,15 +97,22 @@ rm -f \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_ldap.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_proxy.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_krb5.la \
-    $RPM_BUILD_ROOT/%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.la
+    $RPM_BUILD_ROOT/%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.la \
+    $RPM_BUILD_ROOT/%{python_sitearch}/pysss.la
 
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/sssd
 install -m600 %{SOURCE1} $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
 
+touch locator.filelist
+if test -e $RPM_BUILD_ROOT/%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
+then
+    echo %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so > locator.filelist
+fi
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
-%files
+%files -f locator.filelist
 %defattr(-,root,root,-)
 %doc COPYING
 %attr(755,root,root) %{_initrddir}/%{name}
@@ -105,23 +126,40 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
 %{_libdir}/ldb/memberof.so
-%{_libdir}/krb5/plugins/libkrb5/*
 %dir %{sssdstatedir}
 %attr(700,root,root) %dir %{dbpath}
 %attr(755,root,root) %dir %{pipepath}
 %attr(700,root,root) %dir %{pipepath}/private
+%attr(750,root,root) %dir %{_var}/log/%{name}
 %dir %{_sysconfdir}/sssd
 %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
-/%{_lib}/libnss_sss.so.2
-/%{_lib}/security/pam_sss.so
-%{_mandir}/man5/*
-%{_mandir}/man8/*
+%{_mandir}/man5/sssd.conf.5*
+%{_mandir}/man5/sssd-krb5.5*
+%{_mandir}/man5/sssd-ldap.5*
+%{_mandir}/man8/sssd.8*
+%{_mandir}/man8/sss_groupadd.8*
+%{_mandir}/man8/sss_groupdel.8*
+%{_mandir}/man8/sss_groupmod.8*
+%{_mandir}/man8/sss_useradd.8*
+%{_mandir}/man8/sss_userdel.8*
+%{_mandir}/man8/sss_usermod.8*
+%{_mandir}/man8/sssd_krb5_locator_plugin.8*
 %{_datadir}/locale/*/LC_MESSAGES/sss_client.mo
 %{_datadir}/locale/*/LC_MESSAGES/sss_daemon.mo
+%{python_sitearch}/pysss.so
+
+%files client
+/%{_lib}/libnss_sss.so.2
+/%{_lib}/security/pam_sss.so
+%{_mandir}/man8/pam_sss.8*
 
 %post
 /sbin/ldconfig
 /sbin/chkconfig --add %{servicename}
+if [ $1 -ge 2 ] ; then
+# a one-time upgrade from confdb v1 to v2, only if upgrading
+    python %{_libexecdir}/%{servicename}/upgrade_config.py
+fi
 
 %preun
 if [ $1 = 0 ]; then
@@ -136,6 +174,9 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Mon Sep 28 2009 Sumit Bose <sbose@redhat.com> - 0.6.0-0
+- New upstream release 0.6.0
+
 * Mon Aug 24 2009 Simo Sorce <ssorce@redhat.com> - 0.5.0-0
 - New upstream release 0.5.0
 
