@@ -2,7 +2,7 @@
 
 Name: sssd
 Version: 0.6.0
-Release: 0%{?dist}
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 
