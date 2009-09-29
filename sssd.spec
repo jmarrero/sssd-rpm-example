@@ -15,6 +15,9 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 
+Patch1: 0001-Tighten-up-permission.patch
+Patch2: 0002-Fix-infinite-loop-with-empty-group-enumeration.patch
+
 ### Dependencies ###
 
 Requires: libldb >= 0.9.3
@@ -73,6 +76,9 @@ service.
 
 %prep
 %setup -q
+
+%patch1 -p1 -b .tighten_permission
+%patch2 -p1 -b .infinite_group_loop
 
 %build
 %configure \
