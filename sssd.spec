@@ -180,6 +180,11 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Tue Sep 29 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.6.0-1
+- Ensure that the configuration upgrade script always writes the config
+  file with 0600 permissions
+- Eliminate an infinite loop in group enumerations
+
 * Mon Sep 28 2009 Sumit Bose <sbose@redhat.com> - 0.6.0-0
 - New upstream release 0.6.0
 
