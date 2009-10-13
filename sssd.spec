@@ -1,7 +1,8 @@
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib(1)")}
+%{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print get_python_lib()")}
 
 Name: sssd
-Version: 0.6.0
+Version: 0.6.1
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -16,14 +17,13 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 ### Patches ###
 
 Patch1: 0001-Tighten-up-permission.patch
-Patch2: 0002-Fix-infinite-loop-with-empty-group-enumeration.patch
 
 ### Dependencies ###
 
 Requires: libldb >= 0.9.3
 Requires: libtdb >= 1.1.3
 
-Requires: sssd-client = 0.6.0
+Requires: sssd-client = 0.6.1
 Requires(post): python
 Requires(preun):  initscripts chkconfig
 Requires(postun): /sbin/service
@@ -78,7 +78,6 @@ service.
 %setup -q
 
 %patch1 -p1 -b .tighten_permission
-%patch2 -p1 -b .infinite_group_loop
 
 %build
 %configure \
@@ -109,6 +108,10 @@ rm -f \
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/sssd
 install -m600 %{SOURCE1} $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
 
+mkdir -p $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.d
+install -m400 server/config/etc/sssd.api.conf $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.conf
+install -m400 server/config/etc/sssd.api.d/* $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.d/
+
 touch locator.filelist
 if test -e $RPM_BUILD_ROOT/%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
 then
@@ -137,8 +140,11 @@ rm -rf $RPM_BUILD_ROOT
 %attr(755,root,root) %dir %{pipepath}
 %attr(700,root,root) %dir %{pipepath}/private
 %attr(750,root,root) %dir %{_var}/log/%{name}
-%dir %{_sysconfdir}/sssd
+%attr(700,root,root) %dir %{_sysconfdir}/sssd
 %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
+%config %{_sysconfdir}/sssd/sssd.api.conf
+%attr(700,root,root) %dir %{_sysconfdir}/sssd/sssd.api.d
+%config %{_sysconfdir}/sssd/sssd.api.d/
 %{_mandir}/man5/sssd.conf.5*
 %{_mandir}/man5/sssd-krb5.5*
 %{_mandir}/man5/sssd-ldap.5*
@@ -153,6 +159,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_datadir}/locale/*/LC_MESSAGES/sss_client.mo
 %{_datadir}/locale/*/LC_MESSAGES/sss_daemon.mo
 %{python_sitearch}/pysss.so
+%{python_sitelib}/*.py*
+%{?fedora:%{python_sitelib}/*.egg-info}
 
 %files client
 /%{_lib}/libnss_sss.so.2
@@ -180,6 +188,12 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Tue Oct 13 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.6.1-1
+- Add SSSDConfig API
+- Update polish translation for 0.6.0
+- Fix long timeout on ldap operation
+- Make dp requests more robust
+
 * Tue Sep 29 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.6.0-1
 - Ensure that the configuration upgrade script always writes the config
   file with 0600 permissions
