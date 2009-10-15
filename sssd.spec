@@ -3,7 +3,7 @@
 
 Name: sssd
 Version: 0.6.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 
@@ -163,6 +163,7 @@ rm -rf $RPM_BUILD_ROOT
 %{?fedora:%{python_sitelib}/*.egg-info}
 
 %files client
+%defattr(-,root,root,-)
 /%{_lib}/libnss_sss.so.2
 /%{_lib}/security/pam_sss.so
 %{_mandir}/man8/pam_sss.8*
@@ -188,6 +189,9 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %changelog
+* Thu Oct 15 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.6.1-2
+- Fix missing file permissions for sssd-clients
+
 * Tue Oct 13 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.6.1-1
 - Add SSSDConfig API
 - Update polish translation for 0.6.0
