@@ -3,7 +3,7 @@
 
 Name: sssd
 Version: 0.7.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 # The entire source code is GPLv3+ except replace/ which is LGPLv3+
@@ -14,6 +14,8 @@ Source1: sssd.conf.default
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+
+Patch1: 0001-Fix-migration-script-for-pre-0.5-local-domains.patch
 
 ### Dependencies ###
 
@@ -72,6 +74,8 @@ service.
 
 %prep
 %setup -q
+
+%patch1 -p1 -b .upgrade_fixes
 
 %build
 %configure \
@@ -190,6 +194,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Mon Oct 26 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.7.0-2
+- Fix upgrade issues from old (pre-0.5.0) releases of SSSD
+
 * Fri Oct 23 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.7.0-1
 - New upstream release 0.7.0
 
