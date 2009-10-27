@@ -2,26 +2,23 @@
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import *; import sys; sys.stdout.write(get_python_lib())")}
 
 Name: sssd
-Version: 0.7.0
-Release: 2%{?dist}
+Version: 0.7.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 # The entire source code is GPLv3+ except replace/ which is LGPLv3+
 License: GPLv3+ and LGPLv3+
 URL: http://fedorahosted.org/sssd
 Source: https://fedorahosted.org/released/sssd/sssd-%{version}.tar.gz
-Source1: sssd.conf.default
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-
-Patch1: 0001-Fix-migration-script-for-pre-0.5-local-domains.patch
 
 ### Dependencies ###
 
 Requires: libldb >= 0.9.3
 Requires: libtdb >= 1.1.3
-Requires: sssd-client = 0.7.0
+Requires: sssd-client = 0.7.1
 Requires(post): python
 Requires(preun):  initscripts chkconfig
 Requires(postun): /sbin/service
@@ -75,8 +72,6 @@ service.
 %prep
 %setup -q
 
-%patch1 -p1 -b .upgrade_fixes
-
 %build
 %configure \
     --without-tests \
@@ -97,7 +92,7 @@ make install DESTDIR=$RPM_BUILD_ROOT
 /usr/lib/rpm/find-lang.sh $RPM_BUILD_ROOT sss_client
 
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/sssd
-install -m600 %{SOURCE1} $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
+install -m600 server/examples/sssd.conf $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
 
 install -m400 server/config/etc/sssd.api.conf $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.conf
 install -m400 server/config/etc/sssd.api.d/* $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.d/
@@ -194,6 +189,11 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Tue Oct 27 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.7.1-1
+- Fix segfault in sssd_pam when cache_credentials was enabled
+- Update the sample configuration
+- Fix upgrade issues caused by data provider service removal
+
 * Mon Oct 26 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.7.0-2
 - Fix upgrade issues from old (pre-0.5.0) releases of SSSD
 
