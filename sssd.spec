@@ -2,7 +2,7 @@
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import *; import sys; sys.stdout.write(get_python_lib())")}
 
 Name: sssd
-Version: 0.7.1
+Version: 0.99.0
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -18,7 +18,8 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 Requires: libldb >= 0.9.3
 Requires: libtdb >= 1.1.3
-Requires: sssd-client = 0.7.1
+Requires: sssd-client = %{version}-%{release}
+Requires: cyrus-sasl-gssapi
 Requires(post): python
 Requires(preun):  initscripts chkconfig
 Requires(postun): /sbin/service
@@ -27,6 +28,7 @@ Requires(postun): /sbin/service
 %define sssdstatedir %{_localstatedir}/lib/sss
 %define dbpath %{sssdstatedir}/db
 %define pipepath %{sssdstatedir}/pipes
+%define pubconfpath %{sssdstatedir}/pubconf
 
 ### Build Dependencies ###
 
@@ -73,10 +75,13 @@ service.
 %setup -q
 
 %build
+NSS_LIBS=-lnss3 \
+KRB5_LIBS=-lkrb5 \
 %configure \
     --without-tests \
     --with-db-path=%{dbpath} \
     --with-pipe-path=%{pipepath} \
+    --with-pubconf-path=%{pubconfpath} \
     --with-init-dir=%{_initrddir} \
     --enable-nsslibdir=/%{_lib}
 
@@ -91,9 +96,9 @@ make install DESTDIR=$RPM_BUILD_ROOT
 /usr/lib/rpm/find-lang.sh $RPM_BUILD_ROOT sss_daemon
 /usr/lib/rpm/find-lang.sh $RPM_BUILD_ROOT sss_client
 
+# Copy default sssd.conf file
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/sssd
 install -m600 server/examples/sssd.conf $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
-
 install -m400 server/config/etc/sssd.api.conf $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.conf
 install -m400 server/config/etc/sssd.api.d/* $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.d/
 
@@ -105,6 +110,7 @@ rm -f \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_ldap.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_proxy.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_krb5.la \
+    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_ipa.la \
     $RPM_BUILD_ROOT/%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.la \
     $RPM_BUILD_ROOT/%{python_sitearch}/pysss.la
 
@@ -121,7 +127,7 @@ rm -rf $RPM_BUILD_ROOT
 %files -f sss_daemon.lang
 %defattr(-,root,root,-)
 %doc COPYING
-%attr(755,root,root) %{_initrddir}/%{name}
+%{_initrddir}/%{name}
 %{_sbindir}/sssd
 %{_sbindir}/sss_useradd
 %{_sbindir}/sss_userdel
@@ -135,6 +141,7 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{sssdstatedir}
 %attr(700,root,root) %dir %{dbpath}
 %attr(755,root,root) %dir %{pipepath}
+%attr(755,root,root) %dir %{pubconfpath}
 %attr(700,root,root) %dir %{pipepath}/private
 %attr(750,root,root) %dir %{_var}/log/%{name}
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
@@ -157,6 +164,7 @@ rm -rf $RPM_BUILD_ROOT
 %{python_sitearch}/pysss.so
 %{python_sitelib}/*.py*
 %{?fedora:%{python_sitelib}/*.egg-info}
+
 
 %files client -f sss_client.lang
 %defattr(-,root,root,-)
@@ -189,6 +197,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Mon Nov 30 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.99.0-1
+- New upstream release 0.99.0
+
 * Tue Oct 27 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.7.1-1
 - Fix segfault in sssd_pam when cache_credentials was enabled
 - Update the sample configuration
