@@ -2,7 +2,7 @@
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import *; import sys; sys.stdout.write(get_python_lib())")}
 
 Name: sssd
-Version: 0.99.0
+Version: 0.99.1
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -37,7 +37,12 @@ BuildRequires: automake
 BuildRequires: libtool
 BuildRequires: m4
 %{?fedora:BuildRequires: popt-devel}
-%{?rhel:BuildRequires: popt}
+%if 0%{?rhel} <= 5
+BuildRequires: popt
+%endif
+%if 0%{?rhel} >= 6
+BuildRequires: popt-devel
+%endif
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
 BuildRequires: libtdb-devel
@@ -120,6 +125,10 @@ then
     # Older versions of rpmbuild can only handle one -f option
     echo %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so >> sss_daemon.lang
 fi
+for file in `ls $RPM_BUILD_ROOT/%{python_sitelib}/*.egg-info 2> /dev/null`
+do
+    echo %{python_sitelib}/`basename $file` >> sss_daemon.lang
+done
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -163,7 +172,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sssd_krb5_locator_plugin.8*
 %{python_sitearch}/pysss.so
 %{python_sitelib}/*.py*
-%{?fedora:%{python_sitelib}/*.egg-info}
 
 
 %files client -f sss_client.lang
@@ -197,6 +205,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Fri Dec 11 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.99.1-1
+- New upstream bugfix release 0.99.1
+
 * Mon Nov 30 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.99.0-1
 - New upstream release 0.99.0
 
