@@ -2,7 +2,7 @@
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import *; import sys; sys.stdout.write(get_python_lib())")}
 
 Name: sssd
-Version: 0.99.1
+Version: 1.0.0
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -205,6 +205,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Fri Dec 18 2009 Stephen Gallagher <sgallagh@redhat.com> - 1.0.0-1
+- New upstream stable release 1.0.0
+
 * Fri Dec 11 2009 Stephen Gallagher <sgallagh@redhat.com> - 0.99.1-1
 - New upstream bugfix release 0.99.1
 
