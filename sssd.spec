@@ -3,7 +3,7 @@
 
 Name: sssd
 Version: 1.0.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 # The entire source code is GPLv3+ except replace/ which is LGPLv3+
@@ -11,6 +11,8 @@ License: GPLv3+ and LGPLv3+
 URL: http://fedorahosted.org/sssd
 Source: https://fedorahosted.org/released/sssd/sssd-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
+
+Patch1: cfg_dbg_timestamps.patch
 
 ### Patches ###
 
@@ -78,6 +80,7 @@ service.
 
 %prep
 %setup -q
+%patch1 -p1 -b .cfg_dbg_timestamps
 
 %build
 NSS_LIBS=-lnss3 \
@@ -205,6 +208,10 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Mon Dec 21 2009 Stephen Gallagher <sgallagh@redhat.com> - 1.0.0-2
+- Patch SSSDConfig API to address
+- https://bugzilla.redhat.com/show_bug.cgi?id=549482
+
 * Fri Dec 18 2009 Stephen Gallagher <sgallagh@redhat.com> - 1.0.0-1
 - New upstream stable release 1.0.0
 
