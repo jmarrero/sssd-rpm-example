@@ -2,8 +2,8 @@
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import *; import sys; sys.stdout.write(get_python_lib())")}
 
 Name: sssd
-Version: 1.0.0
-Release: 2%{?dist}
+Version: 1.0.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 # The entire source code is GPLv3+ except replace/ which is LGPLv3+
@@ -11,8 +11,6 @@ License: GPLv3+ and LGPLv3+
 URL: http://fedorahosted.org/sssd
 Source: https://fedorahosted.org/released/sssd/sssd-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
-
-Patch1: cfg_dbg_timestamps.patch
 
 ### Patches ###
 
@@ -80,7 +78,6 @@ service.
 
 %prep
 %setup -q
-%patch1 -p1 -b .cfg_dbg_timestamps
 
 %build
 NSS_LIBS=-lnss3 \
@@ -208,6 +205,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Mon Jan 11 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.0.1-1
+- Fix CVE-2010-0014
+
 * Mon Dec 21 2009 Stephen Gallagher <sgallagh@redhat.com> - 1.0.0-2
 - Patch SSSDConfig API to address
 - https://bugzilla.redhat.com/show_bug.cgi?id=549482
