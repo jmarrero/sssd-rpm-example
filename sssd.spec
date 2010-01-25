@@ -2,7 +2,7 @@
 %{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import *; import sys; sys.stdout.write(get_python_lib())")}
 
 Name: sssd
-Version: 1.0.3
+Version: 1.0.4
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -205,6 +205,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Mon Jan 25 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.0.4-1
+- Fix regression on 64-bit platforms
+
 * Fri Jan 22 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.0.3-1
 - Fixes link error on platforms that do not do implicit linking
 - Fixes double-free segfault in PAM
