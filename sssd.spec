@@ -3,7 +3,7 @@
 
 Name: sssd
 Version: 1.0.5
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 # The entire source code is GPLv3+ except replace/ which is LGPLv3+
@@ -18,6 +18,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 Requires: libldb >= 0.9.3
 Requires: libtdb >= 1.1.3
+Requires: libtevent >= 0.9.8-7
 Requires: sssd-client = %{version}-%{release}
 Requires: cyrus-sasl-gssapi
 Requires(post): python
@@ -44,7 +45,7 @@ BuildRequires: popt
 BuildRequires: popt-devel
 %endif
 BuildRequires: libtalloc-devel
-BuildRequires: libtevent-devel
+BuildRequires: libtevent-devel >= 0.9.8-7
 BuildRequires: libtdb-devel
 BuildRequires: libldb-devel
 BuildRequires: dbus-devel
@@ -207,6 +208,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Wed Feb 24 2010 Stephen Gallagehr <sgallagh@redhat.com> - 1.0.5-2
+- Rebuild against new libtevent
+
 * Fri Feb 19 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.0.5-1
 - Fix licenses in sources and on RPMs
 
