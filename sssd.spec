@@ -5,20 +5,12 @@
 
 Name: sssd
 Version: 1.1.0
-Release: 1.pre20100317git0ea7f19%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-
-# This version of the sssd is built from a prerelease copy of the sssd
-# To obtain an exact copy of these sources, use the following commands:
-# git clone git://git.fedorahosted.org/sssd.git
-# cd sssd
-# git checkout 0ea7f19
-# ./configure && make dist
-# mv sssd-1.1.0.tar.gz sssd-1.1.0-pre20100317git0ea7f19.tar.gz
-Source0: sssd-%{version}-pre20100317git0ea7f19.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 %define dhash_version 0.4.0
@@ -449,6 +441,12 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Tue Mar 22 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.0-2
+- Release SSSD 1.1.0 final
+- Fix two potential segfaults
+- Fix memory leak in monitor
+- Better error message for unusable confdb
+
 * Wed Mar 17 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.0-1.pre20100317git0ea7f19
 - Release candidate for SSSD 1.1
 - Add simple access provider
