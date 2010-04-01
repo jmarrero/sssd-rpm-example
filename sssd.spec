@@ -4,8 +4,8 @@
 %endif
 
 Name: sssd
-Version: 1.1.0
-Release: 2%{?dist}
+Version: 1.1.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -441,6 +441,14 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Thu Apr 01 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.1-1
+- New upstream release 1.1.1
+- Fixed the IPA provider (which was segfaulting at start)
+- Fixed a bug in the SSSDConfig API causing some options to revert to
+- their defaults
+- This impacted the Authconfig UI
+- Ensure that SASL binds to LDAP auto-retry when interrupted by a signal
+
 * Tue Mar 22 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.0-2
 - Release SSSD 1.1.0 final
 - Fix two potential segfaults
