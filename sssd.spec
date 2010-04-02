@@ -5,7 +5,9 @@
 
 Name: sssd
 Version: 1.1.1
-Release: 1%{?dist}
+#Never reset the Release, always increment it
+#Otherwise we can have issues if library versions do not change
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -441,6 +443,10 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Fri Apr 02 2010 Simo Sorce <ssorce@redhat.com> - 1.1.1-3
+- Bump up release number to avoid library sub-packages version issues with
+  previous releases.
+
 * Thu Apr 01 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.1-1
 - New upstream release 1.1.1
 - Fixed the IPA provider (which was segfaulting at start)
