@@ -4,10 +4,10 @@
 %endif
 
 Name: sssd
-Version: 1.1.1
+Version: 1.1.91
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 3%{?dist}
+Release: 10%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -18,7 +18,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 %define dhash_version 0.4.0
 %define path_utils_version 0.2.0
 %define collection_version 0.4.0
-%define ini_config_version 0.4.0
+%define ini_config_version 0.5.0
 %define refarray_version 0.1.0
 
 ### Patches ###
@@ -32,6 +32,7 @@ Requires: libdhash = %{dhash_version}-%{release}
 Requires: libcollection = %{collection_version}-%{release}
 Requires: libini_config = %{ini_config_version}-%{release}
 Requires: cyrus-sasl-gssapi
+Requires: keyutils-libs
 Requires(post): python
 Requires(preun):  initscripts chkconfig
 Requires(postun): /sbin/service
@@ -74,6 +75,10 @@ BuildRequires: c-ares-devel
 BuildRequires: python-devel
 BuildRequires: check-devel
 BuildRequires: doxygen
+BuildRequires: libselinux-devel
+BuildRequires: libsemanage-devel
+BuildRequires: keyutils-libs-devel
+BuildRequires: bind-utils
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -197,8 +202,6 @@ A dynamically-growing, reference-counted array
 %setup -q
 
 %build
-NSS_LIBS=-lnss3 \
-KRB5_LIBS=-lkrb5 \
 %configure \
     --with-db-path=%{dbpath} \
     --with-pipe-path=%{pipepath} \
@@ -242,6 +245,10 @@ install -m400 src/config/etc/sssd.api.d/* $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sss
 # Copy default logrotate file
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/logrotate.d
 install -m644 src/examples/logrotate $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/sssd
+
+# Make sure SSSD is able to run on read-only root
+mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/rwtab.d
+install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
 
 # Remove .la files created by libtool
 rm -f \
@@ -299,6 +306,7 @@ rm -rf $RPM_BUILD_ROOT
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
 %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 %config(noreplace) %{_sysconfdir}/logrotate.d/sssd
+%config(noreplace) %{_sysconfdir}/rwtab.d/sssd
 %config %{_sysconfdir}/sssd/sssd.api.conf
 %attr(700,root,root) %dir %{_sysconfdir}/sssd/sssd.api.d
 %config %{_sysconfdir}/sssd/sssd.api.d/
@@ -355,6 +363,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/libpath_utils.so
 %{_libdir}/pkgconfig/path_utils.pc
 %doc common/path_utils/README
+%doc common/path_utils/doc/html/
 
 %files -n libcollection
 %defattr(-,root,root,-)
@@ -400,6 +409,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/libref_array.so
 %{_libdir}/pkgconfig/ref_array.pc
 %doc common/refarray/README
+%doc common/refarray/doc/html/
 
 
 %post
@@ -443,6 +453,12 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Fri May 07 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.91-10
+- Release new upstream version 1.1.91
+- Enhancements when using SSSD with FreeIPA v2
+- Support for deferred kinit
+- Support for DNS SRV records for failover
+
 * Fri Apr 02 2010 Simo Sorce <ssorce@redhat.com> - 1.1.1-3
 - Bump up release number to avoid library sub-packages version issues with
   previous releases.
