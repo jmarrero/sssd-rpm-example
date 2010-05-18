@@ -4,10 +4,10 @@
 %endif
 
 Name: sssd
-Version: 1.1.91
+Version: 1.1.92
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 10%{?dist}
+Release: 11%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -453,6 +453,12 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Tue May 18 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.92-11
+- New LDAP access provider allows for filtering user access by LDAP attribute
+- Reduced default timeout for detecting offline status with LDAP
+- GSSAPI ticket lifetime made configurable
+- Better offline->online transition support in Kerberos
+
 * Fri May 07 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.91-10
 - Release new upstream version 1.1.91
 - Enhancements when using SSSD with FreeIPA v2
