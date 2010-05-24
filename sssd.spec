@@ -4,10 +4,10 @@
 %endif
 
 Name: sssd
-Version: 1.1.92
+Version: 1.2.0
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 11%{?dist}
+Release: 12%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -453,6 +453,12 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Mon May 24 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.2.0-12
+- New stable upstream version 1.2.0
+- Support ServiceGroups for FreeIPA v2 HBAC rules
+- Fix long-standing issue with auth_provider = proxy
+- Better logging for TLS issues in LDAP
+
 * Tue May 18 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.92-11
 - New LDAP access provider allows for filtering user access by LDAP attribute
 - Reduced default timeout for detecting offline status with LDAP
