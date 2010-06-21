@@ -4,10 +4,10 @@
 %endif
 
 Name: sssd
-Version: 1.2.0
+Version: 1.2.1
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 12%{?dist}
+Release: 15%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -15,11 +15,11 @@ URL: http://fedorahosted.org/sssd/
 Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
-%define dhash_version 0.4.0
-%define path_utils_version 0.2.0
-%define collection_version 0.4.0
-%define ini_config_version 0.5.0
-%define refarray_version 0.1.0
+%global dhash_version 0.4.0
+%global path_utils_version 0.2.0
+%global collection_version 0.4.0
+%global ini_config_version 0.5.0
+%global refarray_version 0.1.0
 
 ### Patches ###
 
@@ -37,11 +37,11 @@ Requires(post): python
 Requires(preun):  initscripts chkconfig
 Requires(postun): /sbin/service
 
-%define servicename sssd
-%define sssdstatedir %{_localstatedir}/lib/sss
-%define dbpath %{sssdstatedir}/db
-%define pipepath %{sssdstatedir}/pipes
-%define pubconfpath %{sssdstatedir}/pubconf
+%global servicename sssd
+%global sssdstatedir %{_localstatedir}/lib/sss
+%global dbpath %{sssdstatedir}/db
+%global pipepath %{sssdstatedir}/pipes
+%global pubconfpath %{sssdstatedir}/pubconf
 
 ### Build Dependencies ###
 
@@ -453,6 +453,16 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Mon Jun 21 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.2.1-15
+- New stable upstream version 1.2.1
+- Resolves: rhbz#595529 - spec file should eschew %%define in favor of
+-                         %%global
+- Resolves: rhbz#593644 - Empty list of simple_allow_users causes sssd service
+-                         to fail while restart.
+- Resolves: rhbz#599026 - Makefile typo causes SSSD not to use the kernel
+-                         keyring
+- Resolves: rhbz#599724 - sssd is broken on Rawhide
+
 * Mon May 24 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.2.0-12
 - New stable upstream version 1.2.0
 - Support ServiceGroups for FreeIPA v2 HBAC rules
