@@ -4,10 +4,10 @@
 %endif
 
 Name: sssd
-Version: 1.2.1
+Version: 1.2.91
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 15%{?dist}
+Release: 20%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -17,20 +17,21 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 %global dhash_version 0.4.0
 %global path_utils_version 0.2.0
-%global collection_version 0.4.0
-%global ini_config_version 0.5.0
+%global collection_version 0.5.0
+%global ini_config_version 0.6.0
 %global refarray_version 0.1.0
 
 ### Patches ###
+
 
 ### Dependencies ###
 
 Requires: libldb >= 0.9.3
 Requires: libtdb >= 1.1.3
 Requires: sssd-client = %{version}-%{release}
-Requires: libdhash = %{dhash_version}-%{release}
-Requires: libcollection = %{collection_version}-%{release}
-Requires: libini_config = %{ini_config_version}-%{release}
+Requires: libdhash >= %{dhash_version}
+Requires: libcollection >= %{collection_version}
+Requires: libini_config >= %{ini_config_version}
 Requires: cyrus-sasl-gssapi
 Requires: keyutils-libs
 Requires(post): python
@@ -79,6 +80,7 @@ BuildRequires: libselinux-devel
 BuildRequires: libsemanage-devel
 BuildRequires: keyutils-libs-devel
 BuildRequires: bind-utils
+BuildRequires: libnl-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -161,7 +163,7 @@ and serialization
 Summary: INI file parser for C
 Group: Development/Libraries
 Version: %{ini_config_version}
-Requires: libcollection = %{collection_version}-%{release}
+Requires: libcollection >= %{collection_version}
 License: LGPLv3+
 
 %description -n libini_config
@@ -369,8 +371,8 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %doc common/collection/COPYING
 %doc common/collection/COPYING.LESSER
-%{_libdir}/libcollection.so.1
-%{_libdir}/libcollection.so.1.0.0
+%{_libdir}/libcollection.so.2
+%{_libdir}/libcollection.so.2.0.0
 
 %files -n libcollection-devel
 %defattr(-,root,root,-)
@@ -386,8 +388,8 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %doc common/ini/COPYING
 %doc common/ini/COPYING.LESSER
-%{_libdir}/libini_config.so.1
-%{_libdir}/libini_config.so.1.0.0
+%{_libdir}/libini_config.so.2
+%{_libdir}/libini_config.so.2.0.0
 
 %files -n libini_config-devel
 %defattr(-,root,root,-)
@@ -418,6 +420,10 @@ rm -rf $RPM_BUILD_ROOT
 if [ $1 -ge 2 ] ; then
 # a one-time upgrade from confdb v1 to v2, only if upgrading
     python %{_libexecdir}/%{servicename}/upgrade_config.py
+fi
+
+if [ $1 -ge 1 ] ; then
+    /sbin/service %{servicename} condrestart 2>&1 > /dev/null
 fi
 
 %preun
@@ -453,6 +459,12 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Fri Jul 09 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.2.91-20
+- New upstream version 1.2.91 (1.3.0rc1)
+- Improved LDAP failover
+- Synchronous sysdb API (provides performance enhancements)
+- Better online reconnection detection
+
 * Mon Jun 21 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.2.1-15
 - New stable upstream version 1.2.1
 - Resolves: rhbz#595529 - spec file should eschew %%define in favor of
