@@ -7,7 +7,7 @@ Name: sssd
 Version: 1.2.91
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 20%{?dist}
+Release: 21%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -459,6 +459,9 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Thu Jul 22 2010 David Malcolm <dmalcolm@redhat.com> - 1.2.91-21
+- Rebuilt for https://fedoraproject.org/wiki/Features/Python_2.7/MassRebuild
+
 * Fri Jul 09 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.2.91-20
 - New upstream version 1.2.91 (1.3.0rc1)
 - Improved LDAP failover
