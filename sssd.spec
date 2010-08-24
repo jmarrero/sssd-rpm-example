@@ -4,10 +4,10 @@
 %endif
 
 Name: sssd
-Version: 1.2.91
+Version: 1.3.0
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 21%{?dist}
+Release: 30%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -22,7 +22,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 %global refarray_version 0.1.0
 
 ### Patches ###
-
+Patch0001: 0001-Treat-a-zero-length-password-as-a-failure.patch
 
 ### Dependencies ###
 
@@ -202,6 +202,7 @@ A dynamically-growing, reference-counted array
 
 %prep
 %setup -q
+%patch0001 -p1
 
 %build
 %configure \
@@ -459,6 +460,10 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Tue Aug 24 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-30
+- Resolves: CVE-2010-2940 - sssd allows null password entry to authenticate
+-                           against LDAP
+
 * Thu Jul 22 2010 David Malcolm <dmalcolm@redhat.com> - 1.2.91-21
 - Rebuilt for https://fedoraproject.org/wiki/Features/Python_2.7/MassRebuild
 
