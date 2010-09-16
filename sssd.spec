@@ -211,6 +211,7 @@ A dynamically-growing, reference-counted array
     --with-pubconf-path=%{pubconfpath} \
     --with-init-dir=%{_initrddir} \
     --enable-nsslibdir=/%{_lib} \
+    --enable-pammoddir=/%{_lib}/security \
     --disable-static \
     --disable-rpath
 
@@ -271,12 +272,6 @@ rm -f \
     $RPM_BUILD_ROOT/%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.la \
     $RPM_BUILD_ROOT/%{python_sitearch}/pysss.la
 
-if test -e $RPM_BUILD_ROOT/%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
-then
-    # Apppend this file to the sss_daemon.lang
-    # Older versions of rpmbuild can only handle one -f option
-    echo %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so >> sss_daemon.lang
-fi
 for file in `ls $RPM_BUILD_ROOT/%{python_sitelib}/*.egg-info 2> /dev/null`
 do
     echo %{python_sitelib}/`basename $file` >> sss_daemon.lang
@@ -336,6 +331,7 @@ rm -rf $RPM_BUILD_ROOT
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
 /%{_lib}/libnss_sss.so.2
 /%{_lib}/security/pam_sss.so
+%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
 %{_mandir}/man8/pam_sss.8*
 
 %files -n libdhash
@@ -460,6 +456,9 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Thu Sep 16 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-31
+- Resolves: rhbz#632615 - the krb5 locator plugin isn't packaged for multilib
+
 * Tue Aug 24 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-30
 - Resolves: CVE-2010-2940 - sssd allows null password entry to authenticate
 -                           against LDAP
