@@ -7,7 +7,7 @@ Name: sssd
 Version: 1.3.0
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 30%{?dist}
+Release: 31%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
