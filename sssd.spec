@@ -7,7 +7,7 @@ Name: sssd
 Version: 1.3.0
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 31%{?dist}
+Release: 32%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -175,6 +175,7 @@ Summary: Development files for libini_config
 Group: Development/Libraries
 Version: %{ini_config_version}
 Requires: libini_config = %{ini_config_version}-%{release}
+Requires: libcollection-devel
 License: LGPLv3+
 
 %description -n libini_config-devel
@@ -456,6 +457,10 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Tue Sep 28 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-32
+- Resolves: rhbz#637955 - libini_config-devel needs libcollection-devel but
+-                         doesn't require it
+
 * Thu Sep 16 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-31
 - Resolves: rhbz#632615 - the krb5 locator plugin isn't packaged for multilib
 
