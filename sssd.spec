@@ -7,7 +7,7 @@ Name: sssd
 Version: 1.3.0
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 34%{?dist}
+Release: 35%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -35,9 +35,9 @@ Requires: libcollection >= %{collection_version}
 Requires: libini_config >= %{ini_config_version}
 Requires: cyrus-sasl-gssapi
 Requires: keyutils-libs
-Requires(post): python
+Requires(post): python initscripts chkconfig /sbin/ldconfig
 Requires(preun):  initscripts chkconfig
-Requires(postun): /sbin/service
+Requires(postun): initscripts chkconfig /sbin/ldconfig
 
 %global servicename sssd
 %global sssdstatedir %{_localstatedir}/lib/sss
@@ -451,6 +451,9 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Mon Oct 04 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-35
+- Fix pre and post script requirements
+
 * Mon Oct 04 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-34
 - Resolves: rhbz#606887 - sssd stops on upgrade
 
