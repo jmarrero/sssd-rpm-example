@@ -7,7 +7,7 @@ Name: sssd
 Version: 1.3.0
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 32%{?dist}
+Release: 33%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -23,6 +23,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001: 0001-Treat-a-zero-length-password-as-a-failure.patch
+Patch0002: 0002-Return-offline-instead-of-error.patch
 
 ### Dependencies ###
 
@@ -204,6 +205,7 @@ A dynamically-growing, reference-counted array
 %prep
 %setup -q
 %patch0001 -p1
+%patch0002 -p1
 
 %build
 %configure \
@@ -457,6 +459,9 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Fri Oct 01 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-33
+- Resolves: rhbz#626205 - Unable to unlock screen
+
 * Tue Sep 28 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-32
 - Resolves: rhbz#637955 - libini_config-devel needs libcollection-devel but
 -                         doesn't require it
