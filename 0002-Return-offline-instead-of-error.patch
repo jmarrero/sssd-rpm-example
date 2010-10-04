@@ -1,0 +1,31 @@
+From f1e22670eaaa7c881593924896acc84ecc131872 Mon Sep 17 00:00:00 2001
+From: Stephen Gallagher <sgallagh@redhat.com>
+Date: Fri, 1 Oct 2010 12:34:54 -0400
+Subject: [PATCH] Return offline instead of error
+
+When the failover code returns that there are no available servers
+while we are marked offline, we were returning an error to the PAM
+authentication code. Instead, we should return success with a
+result value of SDAP_UNAVAIL so that the PAM responder will mark
+the domain offline and attempt offline authentication.
+---
+ src/providers/ldap/ldap_auth.c |    3 ++-
+ 1 files changed, 2 insertions(+), 1 deletions(-)
+
+diff --git a/src/providers/ldap/ldap_auth.c b/src/providers/ldap/ldap_auth.c
+index d01449262c39865ffc4916c8d7dd8b6874cd4a02..0ea86f3e34db0cd5bab83ecff80859f495b234e2 100644
+--- a/src/providers/ldap/ldap_auth.c
++++ b/src/providers/ldap/ldap_auth.c
+@@ -567,7 +567,8 @@ static void auth_resolve_done(struct tevent_req *subreq)
+     if (ret) {
+         /* all servers have been tried and none
+          * was found good, go offline */
+-        tevent_req_error(req, EIO);
++        state->result = SDAP_UNAVAIL;
++        tevent_req_done(req);
+         return;
+     }
+ 
+-- 
+1.7.2.3
+

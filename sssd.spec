@@ -7,7 +7,7 @@ Name: sssd
 Version: 1.3.0
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 32%{?dist}
+Release: 34%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -23,6 +23,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001: 0001-Treat-a-zero-length-password-as-a-failure.patch
+Patch0002: 0002-Return-offline-instead-of-error.patch
 
 ### Dependencies ###
 
@@ -204,6 +205,7 @@ A dynamically-growing, reference-counted array
 %prep
 %setup -q
 %patch0001 -p1
+%patch0002 -p1
 
 %build
 %configure \
@@ -415,10 +417,6 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 /sbin/chkconfig --add %{servicename}
-if [ $1 -ge 2 ] ; then
-# a one-time upgrade from confdb v1 to v2, only if upgrading
-    python %{_libexecdir}/%{servicename}/upgrade_config.py
-fi
 
 if [ $1 -ge 1 ] ; then
     /sbin/service %{servicename} condrestart 2>&1 > /dev/null
@@ -430,11 +428,7 @@ if [ $1 = 0 ]; then
     /sbin/chkconfig --del %{servicename}
 fi
 
-%postun
-/sbin/ldconfig
-if [ $1 -ge 1 ] ; then
-    /sbin/service %{servicename} condrestart 2>&1 > /dev/null
-fi
+%postun -p /sbin/ldconfig
 
 %post client -p /sbin/ldconfig
 
@@ -457,6 +451,12 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Mon Oct 04 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-34
+- Resolves: rhbz#606887 - sssd stops on upgrade
+
+* Fri Oct 01 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-33
+- Resolves: rhbz#626205 - Unable to unlock screen
+
 * Tue Sep 28 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-32
 - Resolves: rhbz#637955 - libini_config-devel needs libcollection-devel but
 -                         doesn't require it
