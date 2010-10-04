@@ -7,7 +7,7 @@ Name: sssd
 Version: 1.3.0
 #Never reset the Release, always increment it
 #Otherwise we can have issues if library versions do not change
-Release: 33%{?dist}
+Release: 34%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -417,10 +417,6 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/ldconfig
 /sbin/chkconfig --add %{servicename}
-if [ $1 -ge 2 ] ; then
-# a one-time upgrade from confdb v1 to v2, only if upgrading
-    python %{_libexecdir}/%{servicename}/upgrade_config.py
-fi
 
 if [ $1 -ge 1 ] ; then
     /sbin/service %{servicename} condrestart 2>&1 > /dev/null
@@ -432,11 +428,7 @@ if [ $1 = 0 ]; then
     /sbin/chkconfig --del %{servicename}
 fi
 
-%postun
-/sbin/ldconfig
-if [ $1 -ge 1 ] ; then
-    /sbin/service %{servicename} condrestart 2>&1 > /dev/null
-fi
+%postun -p /sbin/ldconfig
 
 %post client -p /sbin/ldconfig
 
@@ -459,6 +451,9 @@ fi
 %postun -n libref_array -p /sbin/ldconfig
 
 %changelog
+* Mon Oct 04 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-34
+- Resolves: rhbz#606887 - sssd stops on upgrade
+
 * Fri Oct 01 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.3.0-33
 - Resolves: rhbz#626205 - Unable to unlock screen
 
