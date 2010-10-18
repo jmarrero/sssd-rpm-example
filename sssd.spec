@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.4.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -233,6 +233,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Mon Oct 18 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.4.0-2
+- Fix incorrect tarball URL
+
 * Mon Oct 18 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.4.0-1
 - New upstream release 1.4.0
 - Added support for netgroups to the LDAP provider
