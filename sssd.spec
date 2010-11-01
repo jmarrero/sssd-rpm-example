@@ -4,8 +4,8 @@
 %endif
 
 Name: sssd
-Version: 1.4.0
-Release: 2%{?dist}
+Version: 1.4.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -233,6 +233,14 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Mon Nov 01 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.4.1-1
+- New upstream release 1.4.1
+- Add support for netgroups to the proxy provider
+- Fixes a minor bug with UIDs/GIDs >= 2^31
+- Fixes a segfault in the kerberos provider
+- Fixes a segfault in the NSS responder if a data provider crashes
+- Correctly use sdap_netgroup_search_base
+
 * Mon Oct 18 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.4.0-2
 - Fix incorrect tarball URL
 
