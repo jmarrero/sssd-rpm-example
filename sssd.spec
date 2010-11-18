@@ -17,6 +17,8 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 Patch0001: 0001-Log-startup-errors-to-syslog.patch
 Patch0002: 0002-Properly-document-ldap_purge_cache_timeout.patch
+Patch0003: 0003-Ensure-that-SSSD-shuts-down-completely-before-restar.patch
+Patch0004: 0004-Wait-for-all-children-to-exit.patch
 
 ### Dependencies ###
 
@@ -98,6 +100,8 @@ service.
 
 %patch0001 -p1
 %patch0002 -p1
+%patch0003 -p1
+%patch0004 -p1
 
 %build
 %configure \
@@ -239,6 +243,10 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Thu Nov 18 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.4.1-3
+- Solve a shutdown race-condition that sometimes left processes running
+- Resolves: rhbz#606887 - SSSD stops on upgrade
+
 * Tue Nov 16 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.4.1-2
 - Log startup errors to the syslog
 - Allow cache cleanup to be disabled in sssd.conf

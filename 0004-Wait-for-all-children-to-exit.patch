@@ -1,0 +1,96 @@
+From 1f1d7ead30d566a47cdcc2d8fe2618817851e1e1 Mon Sep 17 00:00:00 2001
+From: Stephen Gallagher <sgallagh@redhat.com>
+Date: Thu, 11 Nov 2010 09:04:22 -0500
+Subject: [PATCH 4/4] Wait for all children to exit
+
+Previously, there was a race-condition where the monitor might
+terminate before its children.
+---
+ src/monitor/monitor.c |   63 +++++++++++++++++++++++++++++++++++++++++++++++-
+ 1 files changed, 61 insertions(+), 2 deletions(-)
+
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index 6479f7a9fd5877e7b5baaaee4f3f92001506d730..98b671b2970b2a55c34e72a81bfc6e90c36bd820 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -1171,16 +1171,75 @@ static void monitor_quit(struct tevent_context *ev,
+                          void *siginfo,
+                          void *private_data)
+ {
++    struct mt_ctx *mt_ctx = talloc_get_type(private_data, struct mt_ctx);
++    struct mt_svc *svc;
++    pid_t pid;
++    int status;
++    errno_t error;
++
+     DEBUG(8, ("Received shutdown command\n"));
+-    monitor_cleanup();
++
++    DEBUG(0, ("Monitor received %s: terminating children\n",
++              strsignal(signum)));
++
++    /* Kill all of our known children manually */
++    DLIST_FOR_EACH(svc, mt_ctx->svc_list) {
++        if (svc->pid == 0) {
++            /* The local provider has no PID */
++            continue;
++        }
++
++        DEBUG(1, ("Terminating [%s]\n", svc->name));
++        kill(svc->pid, SIGTERM);
++
++        do {
++            errno = 0;
++            pid = waitpid(svc->pid, &status, 0);
++            if (pid == -1) {
++                /* An error occurred while waiting */
++                error = errno;
++                if (error != EINTR) {
++                    DEBUG(0, ("[%d][%s] while waiting for [%s]\n",
++                              error, strerror(error), svc->name));
++                    /* Forcibly kill this child */
++                    kill(svc->pid, SIGKILL);
++                    break;
++                }
++            } else {
++                error = 0;
++                if WIFEXITED(status) {
++                    DEBUG(1, ("Child [%s] exited gracefully\n", svc->name));
++                } else if WIFSIGNALED(status) {
++                    DEBUG(1, ("Child [%s] terminated with a signal\n", svc->name));
++                } else {
++                    DEBUG(0, ("Child [%s] did not exit cleanly\n", svc->name));
++                    /* Forcibly kill this child */
++                    kill(svc->pid, SIGKILL);
++                }
++            }
++        } while (error == EINTR);
++    }
+ 
+ #if HAVE_GETPGRP
++    /* Kill any remaining children in our process group, just in case
++     * we have any leftover children we don't expect. For example, if
++     * a krb5_child or ldap_child is running at the same moment.
++     */
++    error = 0;
+     if (getpgrp() == getpid()) {
+-        DEBUG(0,("%s: killing children\n", strsignal(signum)));
+         kill(-getpgrp(), SIGTERM);
++        do {
++            errno = 0;
++            pid = waitpid(0, &status, 0);
++            if (pid == -1) {
++                error = errno;
++            }
++        } while (error == EINTR || pid > 0);
+     }
+ #endif
+ 
++    monitor_cleanup();
++
+     exit(0);
+ }
+ 
+-- 
+1.7.3.2
+
