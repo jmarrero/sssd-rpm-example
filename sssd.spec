@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.4.1
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
