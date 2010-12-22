@@ -4,8 +4,8 @@
 %endif
 
 Name: sssd
-Version: 1.4.1
-Release: 3%{?dist}
+Version: 1.5.0
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -15,10 +15,6 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 
-Patch0001: 0001-Log-startup-errors-to-syslog.patch
-Patch0002: 0002-Properly-document-ldap_purge_cache_timeout.patch
-Patch0003: 0003-Ensure-that-SSSD-shuts-down-completely-before-restar.patch
-Patch0004: 0004-Wait-for-all-children-to-exit.patch
 
 ### Dependencies ###
 
@@ -78,6 +74,7 @@ BuildRequires: bind-utils
 BuildRequires: keyutils-libs-devel
 BuildRequires: libnl-devel
 BuildRequires: nscd
+BuildRequires: po4a
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -95,13 +92,21 @@ License: LGPLv3+
 Provides the libraries needed by the PAM and NSS stacks to connect to the SSSD
 service.
 
+%package tools
+Summary: Userspace tools for use with the SSSD
+Group: Applications/System
+License: GPLv3+
+Requires: sssd = %{version}-%{release}
+
+%description tools
+Provides userspace tools for manipulating users, groups, and nested groups in
+SSSD when using id_provider = local in /etc/sssd/sssd.conf.
+
+Also provides a userspace tool for generating an obfuscated LDAP password for
+use with ldap_default_authtok_type = obfuscated_password.
+
 %prep
 %setup -q
-
-%patch0001 -p1
-%patch0002 -p1
-%patch0003 -p1
-%patch0004 -p1
 
 %build
 %configure \
@@ -116,6 +121,7 @@ service.
     --with-test-dir=/dev/shm
 
 make %{?_smp_mflags}
+make translated-manpages
 
 %check
 export CK_TIMEOUT_MULTIPLIER=10
@@ -172,14 +178,6 @@ rm -rf $RPM_BUILD_ROOT
 %doc COPYING
 %{_initrddir}/%{name}
 %{_sbindir}/sssd
-%{_sbindir}/sss_useradd
-%{_sbindir}/sss_userdel
-%{_sbindir}/sss_usermod
-%{_sbindir}/sss_groupadd
-%{_sbindir}/sss_groupdel
-%{_sbindir}/sss_groupmod
-%{_sbindir}/sss_groupshow
-%{_sbindir}/sss_obfuscate
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
 %{_libdir}/ldb/memberof.so
@@ -202,16 +200,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sssd-ldap.5*
 %{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man8/sssd.8*
-%{_mandir}/man8/sss_groupadd.8*
-%{_mandir}/man8/sss_groupdel.8*
-%{_mandir}/man8/sss_groupmod.8*
-%{_mandir}/man8/sss_groupshow.8*
-%{_mandir}/man8/sss_useradd.8*
-%{_mandir}/man8/sss_userdel.8*
-%{_mandir}/man8/sss_usermod.8*
-%{_mandir}/man8/sss_obfuscate.8*
 %{python_sitearch}/pysss.so
 %{python_sitelib}/*.py*
+
+%lang(cs)       %{_mandir}/cs/man[58]/*
 
 %files client
 %defattr(-,root,root,-)
@@ -221,6 +213,26 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
 %{_mandir}/man8/pam_sss.8*
 %{_mandir}/man8/sssd_krb5_locator_plugin.8*
+
+%files tools
+%defattr(-,root,root,-)
+%doc COPYING
+%{_sbindir}/sss_useradd
+%{_sbindir}/sss_userdel
+%{_sbindir}/sss_usermod
+%{_sbindir}/sss_groupadd
+%{_sbindir}/sss_groupdel
+%{_sbindir}/sss_groupmod
+%{_sbindir}/sss_groupshow
+%{_sbindir}/sss_obfuscate
+%{_mandir}/man8/sss_groupadd.8*
+%{_mandir}/man8/sss_groupdel.8*
+%{_mandir}/man8/sss_groupmod.8*
+%{_mandir}/man8/sss_groupshow.8*
+%{_mandir}/man8/sss_useradd.8*
+%{_mandir}/man8/sss_userdel.8*
+%{_mandir}/man8/sss_usermod.8*
+%{_mandir}/man8/sss_obfuscate.8*
 
 %post
 /sbin/ldconfig
@@ -243,6 +255,28 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Wed Dec 22 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.5.0-1
+- New upstream release 1.5.0
+- Fixed issues with LDAP search filters that needed to be escaped
+- Add Kerberos FAST support on platforms that support it
+- Reduced verbosity of PAM_TEXT_INFO messages for cached credentials
+- Added a Kerberos access provider to honor .k5login
+- Addressed several thread-safety issues in the sss_client code
+- Improved support for delayed online Kerberos auth
+- Significantly reduced time between connecting to the network/VPN and
+- acquiring a TGT
+- Added feature for automatic Kerberos ticket renewal
+- Provides the kerberos ticket for long-lived processes or cron jobs
+- even when the user logs out
+- Added several new features to the LDAP access provider
+- Support for 'shadow' access control
+- Support for authorizedService access control
+- Ability to mix-and-match LDAP access control features
+- Added an option for a separate password-change LDAP server for those
+- platforms where LDAP referrals are not supported
+- Added support for manpage translations
+
+
 * Thu Nov 18 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.4.1-3
 - Solve a shutdown race-condition that sometimes left processes running
 - Resolves: rhbz#606887 - SSSD stops on upgrade
