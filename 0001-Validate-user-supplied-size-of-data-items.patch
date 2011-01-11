@@ -1,0 +1,294 @@
+From 3e20a867ca16c54ee788bdaf854b612f9c8618a2 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 6 Dec 2010 21:18:50 +0100
+Subject: [PATCH] Validate user supplied size of data items
+
+Specially crafted packages might lead to an integer overflow and the
+parsing of the input buffer might not continue as expected. This issue
+was identified by Sebastian Krahmer <krahmer@suse.de>.
+
+Add overflow check to SAFEALIGN_COPY_*_CHECK macros
+---
+ src/responder/pam/pamsrv_cmd.c |  147 ++++++++++++++++++++--------------------
+ src/tests/util-tests.c         |   14 ++++
+ src/util/util.h                |   14 +++-
+ 3 files changed, 98 insertions(+), 77 deletions(-)
+
+diff --git a/src/responder/pam/pamsrv_cmd.c b/src/responder/pam/pamsrv_cmd.c
+index 6a8f1dbb515c63125c810dca15ac186c58b1bafb..bb42f712399dedb01535b1347d096b5e02543dbc 100644
+--- a/src/responder/pam/pamsrv_cmd.c
++++ b/src/responder/pam/pamsrv_cmd.c
+@@ -42,18 +42,15 @@ enum pam_verbosity {
+ 
+ static void pam_reply(struct pam_auth_req *preq);
+ 
+-static int extract_authtok(uint32_t *type, uint32_t *size, uint8_t **tok, uint8_t *body, size_t blen, size_t *c) {
+-    uint32_t data_size;
++static int extract_authtok(uint32_t *type, uint32_t *size, uint8_t **tok,
++                           size_t data_size, uint8_t *body, size_t blen,
++                           size_t *c) {
+ 
+-    if (blen-(*c) < 2*sizeof(uint32_t)) return EINVAL;
+-
+-    memcpy(&data_size, &body[*c], sizeof(uint32_t));
+-    *c += sizeof(uint32_t);
+-    if (data_size < sizeof(uint32_t) || (*c)+(data_size) > blen) return EINVAL;
++    if (data_size < sizeof(uint32_t) || *c+data_size > blen ||
++        SIZE_T_OVERFLOW(*c, data_size)) return EINVAL;
+     *size = data_size - sizeof(uint32_t);
+ 
+-    memcpy(type, &body[*c], sizeof(uint32_t));
+-    *c += sizeof(uint32_t);
++    SAFEALIGN_COPY_UINT32_CHECK(type, &body[*c], blen, c);
+ 
+     *tok = body+(*c);
+ 
+@@ -62,15 +59,11 @@ static int extract_authtok(uint32_t *type, uint32_t *size, uint8_t **tok, uint8_
+     return EOK;
+ }
+ 
+-static int extract_string(char **var, uint8_t *body, size_t blen, size_t *c) {
+-    uint32_t size;
++static int extract_string(char **var, size_t size, uint8_t *body, size_t blen,
++                          size_t *c) {
+     uint8_t *str;
+ 
+-    if (blen-(*c) < sizeof(uint32_t)+1) return EINVAL;
+-
+-    memcpy(&size, &body[*c], sizeof(uint32_t));
+-    *c += sizeof(uint32_t);
+-    if (*c+size > blen) return EINVAL;
++    if (*c+size > blen || SIZE_T_OVERFLOW(*c, size)) return EINVAL;
+ 
+     str = body+(*c);
+ 
+@@ -83,16 +76,13 @@ static int extract_string(char **var, uint8_t *body, size_t blen, size_t *c) {
+     return EOK;
+ }
+ 
+-static int extract_uint32_t(uint32_t *var, uint8_t *body, size_t blen, size_t *c) {
+-    uint32_t size;
++static int extract_uint32_t(uint32_t *var, size_t size, uint8_t *body,
++                            size_t blen, size_t *c) {
+ 
+-    if (blen-(*c) < 2*sizeof(uint32_t)) return EINVAL;
++    if (size != sizeof(uint32_t) || *c+size > blen || SIZE_T_OVERFLOW(*c, size))
++        return EINVAL;
+ 
+-    memcpy(&size, &body[*c], sizeof(uint32_t));
+-    *c += sizeof(uint32_t);
+-
+-    memcpy(var, &body[*c], sizeof(uint32_t));
+-    *c += sizeof(uint32_t);
++    SAFEALIGN_COPY_UINT32_CHECK(var, &body[*c], blen, c);
+ 
+     return EOK;
+ }
+@@ -117,59 +107,66 @@ static int pam_parse_in_data_v2(struct sss_names_ctx *snctx,
+ 
+     c = sizeof(uint32_t);
+     do {
+-        memcpy(&type, &body[c], sizeof(uint32_t));
+-        c += sizeof(uint32_t);
+-        if (c > blen) return EINVAL;
++        SAFEALIGN_COPY_UINT32_CHECK(&type, &body[c], blen, &c);
+ 
+-        switch(type) {
+-            case SSS_PAM_ITEM_USER:
+-                ret = extract_string(&pam_user, body, blen, &c);
+-                if (ret != EOK) return ret;
++        if (type == SSS_END_OF_PAM_REQUEST) {
++            if (c != blen) return EINVAL;
++        } else {
++            SAFEALIGN_COPY_UINT32_CHECK(&size, &body[c], blen, &c);
++            /* the uint32_t end maker SSS_END_OF_PAM_REQUEST does not count to
++             * the remaining buffer */
++            if (size > (blen - c - sizeof(uint32_t))) {
++                DEBUG(1, ("Invalid data size.\n"));
++                return EINVAL;
++            }
+ 
+-                ret = sss_parse_name(pd, snctx, pam_user,
+-                                     &pd->domain, &pd->user);
+-                if (ret != EOK) return ret;
+-                break;
+-            case SSS_PAM_ITEM_SERVICE:
+-                ret = extract_string(&pd->service, body, blen, &c);
+-                if (ret != EOK) return ret;
+-                break;
+-            case SSS_PAM_ITEM_TTY:
+-                ret = extract_string(&pd->tty, body, blen, &c);
+-                if (ret != EOK) return ret;
+-                break;
+-            case SSS_PAM_ITEM_RUSER:
+-                ret = extract_string(&pd->ruser, body, blen, &c);
+-                if (ret != EOK) return ret;
+-                break;
+-            case SSS_PAM_ITEM_RHOST:
+-                ret = extract_string(&pd->rhost, body, blen, &c);
+-                if (ret != EOK) return ret;
+-                break;
+-            case SSS_PAM_ITEM_CLI_PID:
+-                ret = extract_uint32_t(&pd->cli_pid,
+-                                       body, blen, &c);
+-                if (ret != EOK) return ret;
+-                break;
+-            case SSS_PAM_ITEM_AUTHTOK:
+-                ret = extract_authtok(&pd->authtok_type, &pd->authtok_size,
+-                                      &pd->authtok, body, blen, &c);
+-                if (ret != EOK) return ret;
+-                break;
+-            case SSS_PAM_ITEM_NEWAUTHTOK:
+-                ret = extract_authtok(&pd->newauthtok_type,
+-                                      &pd->newauthtok_size,
+-                                      &pd->newauthtok, body, blen, &c);
+-                if (ret != EOK) return ret;
+-                break;
+-            case SSS_END_OF_PAM_REQUEST:
+-                if (c != blen) return EINVAL;
+-                break;
+-            default:
+-                DEBUG(1,("Ignoring unknown data type [%d].\n", type));
+-                size = ((uint32_t *)&body[c])[0];
+-                c += size+sizeof(uint32_t);
++            switch(type) {
++                case SSS_PAM_ITEM_USER:
++                    ret = extract_string(&pam_user, size, body, blen, &c);
++                    if (ret != EOK) return ret;
++
++                    ret = sss_parse_name(pd, snctx, pam_user,
++                                         &pd->domain, &pd->user);
++                    if (ret != EOK) return ret;
++                    break;
++                case SSS_PAM_ITEM_SERVICE:
++                    ret = extract_string(&pd->service, size, body, blen, &c);
++                    if (ret != EOK) return ret;
++                    break;
++                case SSS_PAM_ITEM_TTY:
++                    ret = extract_string(&pd->tty, size, body, blen, &c);
++                    if (ret != EOK) return ret;
++                    break;
++                case SSS_PAM_ITEM_RUSER:
++                    ret = extract_string(&pd->ruser, size, body, blen, &c);
++                    if (ret != EOK) return ret;
++                    break;
++                case SSS_PAM_ITEM_RHOST:
++                    ret = extract_string(&pd->rhost, size, body, blen, &c);
++                    if (ret != EOK) return ret;
++                    break;
++                case SSS_PAM_ITEM_CLI_PID:
++                    ret = extract_uint32_t(&pd->cli_pid, size,
++                                           body, blen, &c);
++                    if (ret != EOK) return ret;
++                    break;
++                case SSS_PAM_ITEM_AUTHTOK:
++                    ret = extract_authtok(&pd->authtok_type, &pd->authtok_size,
++                                          &pd->authtok, size, body, blen, &c);
++                    if (ret != EOK) return ret;
++                    break;
++                case SSS_PAM_ITEM_NEWAUTHTOK:
++                    ret = extract_authtok(&pd->newauthtok_type,
++                                          &pd->newauthtok_size,
++                                          &pd->newauthtok, size, body, blen, &c);
++                    if (ret != EOK) return ret;
++                    break;
++                default:
++                    DEBUG(1,("Ignoring unknown data type [%d].\n", type));
++                    c += size;
++            }
+         }
++
+     } while(c < blen);
+ 
+     if (pd->user == NULL || *pd->user == '\0') return EINVAL;
+@@ -240,6 +237,7 @@ static int pam_parse_in_data(struct sss_names_ctx *snctx,
+ 
+     start += sizeof(uint32_t);
+     pd->authtok_size = (int) body[start];
++    if (pd->authtok_size >= blen) return EINVAL;
+ 
+     start += sizeof(uint32_t);
+     end = start + pd->authtok_size;
+@@ -259,6 +257,7 @@ static int pam_parse_in_data(struct sss_names_ctx *snctx,
+ 
+     start += sizeof(uint32_t);
+     pd->newauthtok_size = (int) body[start];
++    if (pd->newauthtok_size >= blen) return EINVAL;
+ 
+     start += sizeof(uint32_t);
+     end = start + pd->newauthtok_size;
+diff --git a/src/tests/util-tests.c b/src/tests/util-tests.c
+index cf96f0e356942c2bcd2667a2b778a65a91f46e2d..a98b0c03c8119c2c54df4feecb03e221325b30e7 100644
+--- a/src/tests/util-tests.c
++++ b/src/tests/util-tests.c
+@@ -241,6 +241,19 @@ START_TEST(test_sss_filter_sanitize)
+ }
+ END_TEST
+ 
++START_TEST(test_size_t_overflow)
++{
++    fail_unless(!SIZE_T_OVERFLOW(1, 1), "unexpected overflow");
++    fail_unless(!SIZE_T_OVERFLOW(SIZE_T_MAX, 0), "unexpected overflow");
++    fail_unless(!SIZE_T_OVERFLOW(SIZE_T_MAX-10, 10), "unexpected overflow");
++    fail_unless(SIZE_T_OVERFLOW(SIZE_T_MAX, 1), "overflow not detected");
++    fail_unless(SIZE_T_OVERFLOW(SIZE_T_MAX, SIZE_T_MAX),
++                "overflow not detected");
++    fail_unless(SIZE_T_OVERFLOW(SIZE_T_MAX, ULLONG_MAX),
++                "overflow not detected");
++    fail_unless(SIZE_T_OVERFLOW(SIZE_T_MAX, -10), "overflow not detected");
++}
++END_TEST
+ 
+ Suite *util_suite(void)
+ {
+@@ -250,6 +263,7 @@ Suite *util_suite(void)
+ 
+     tcase_add_test (tc_util, test_diff_string_lists);
+     tcase_add_test (tc_util, test_sss_filter_sanitize);
++    tcase_add_test (tc_util, test_size_t_overflow);
+     tcase_set_timeout(tc_util, 60);
+ 
+     suite_add_tcase (s, tc_util);
+diff --git a/src/util/util.h b/src/util/util.h
+index f1e11a847b036b937098babed8e28740720b4763..61fe7f6c24c4c1673baf4789f4d76ae76eb25970 100644
+--- a/src/util/util.h
++++ b/src/util/util.h
+@@ -171,6 +171,11 @@ errno_t set_debug_file_from_fd(const int fd);
+ #define OUT_OF_ID_RANGE(id, min, max) \
+     (id == 0 || (min && (id < min)) || (max && (id > max)))
+ 
++#define SIZE_T_MAX ((size_t) -1)
++
++#define SIZE_T_OVERFLOW(current, add) \
++                        (((size_t)(add)) > (SIZE_T_MAX - ((size_t)(current))))
++
+ static inline void
+ safealign_memcpy(void *dest, const void *src, size_t n, size_t *counter)
+ {
+@@ -210,17 +215,20 @@ safealign_memcpy(void *dest, const void *src, size_t n, size_t *counter)
+     SAFEALIGN_SET_VALUE(dest, value, uint16_t, pctr)
+ 
+ #define SAFEALIGN_COPY_UINT32_CHECK(dest, src, len, pctr) do { \
+-    if ((*(pctr) + sizeof(uint32_t)) > (len)) return EINVAL; \
++    if ((*(pctr) + sizeof(uint32_t)) > (len) || \
++        SIZE_T_OVERFLOW(*(pctr), sizeof(uint32_t))) return EINVAL; \
+     safealign_memcpy(dest, src, sizeof(uint32_t), pctr); \
+ } while(0)
+ 
+ #define SAFEALIGN_COPY_INT32_CHECK(dest, src, len, pctr) do { \
+-    if ((*(pctr) + sizeof(int32_t)) > (len)) return EINVAL; \
++    if ((*(pctr) + sizeof(int32_t)) > (len) || \
++        SIZE_T_OVERFLOW(*(pctr), sizeof(int32_t))) return EINVAL; \
+     safealign_memcpy(dest, src, sizeof(int32_t), pctr); \
+ } while(0)
+ 
+ #define SAFEALIGN_COPY_UINT16_CHECK(dest, src, len, pctr) do { \
+-    if ((*(pctr) + sizeof(uint16_t)) > (len)) return EINVAL; \
++    if ((*(pctr) + sizeof(uint16_t)) > (len) || \
++        SIZE_T_OVERFLOW(*(pctr), sizeof(uint16_t))) return EINVAL; \
+     safealign_memcpy(dest, src, sizeof(uint16_t), pctr); \
+ } while(0)
+ 
+-- 
+1.7.3.4
+

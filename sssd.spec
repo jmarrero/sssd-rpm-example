@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.5.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -14,7 +14,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-
+Patch0001: 0001-Validate-user-supplied-size-of-data-items.patch
 
 ### Dependencies ###
 
@@ -107,6 +107,7 @@ use with ldap_default_authtok_type = obfuscated_password.
 
 %prep
 %setup -q
+%patch0001 -p1
 
 %build
 %configure \
@@ -255,6 +256,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Tue Jan 11 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.0-2
+- CVE-2010-4341 - DoS in sssd PAM responder can prevent logins
+
 * Wed Dec 22 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.5.0-1
 - New upstream release 1.5.0
 - Fixed issues with LDAP search filters that needed to be escaped
