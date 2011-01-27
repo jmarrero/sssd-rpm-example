@@ -4,8 +4,8 @@
 %endif
 
 Name: sssd
-Version: 1.5.0
-Release: 2%{?dist}
+Version: 1.5.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -14,15 +14,13 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-Validate-user-supplied-size-of-data-items.patch
 
 ### Dependencies ###
 
 Requires: libldb >= 0.9.3
 Requires: libtdb >= 1.1.3
 Requires: sssd-client = %{version}-%{release}
-Requires: cyrus-sasl-gssapi
-Requires: keyutils-libs
+Requires: krb5-libs >= 1.9
 Requires(post): initscripts chkconfig /sbin/ldconfig
 Requires(preun):  initscripts chkconfig
 Requires(postun): initscripts chkconfig /sbin/ldconfig
@@ -63,7 +61,7 @@ BuildRequires: pcre-devel
 BuildRequires: libxslt
 BuildRequires: libxml2
 BuildRequires: docbook-style-xsl
-BuildRequires: krb5-devel
+BuildRequires: krb5-devel >= 1.9
 BuildRequires: c-ares-devel
 BuildRequires: python-devel
 BuildRequires: check-devel
@@ -74,7 +72,6 @@ BuildRequires: bind-utils
 BuildRequires: keyutils-libs-devel
 BuildRequires: libnl-devel
 BuildRequires: nscd
-BuildRequires: po4a
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -107,7 +104,6 @@ use with ldap_default_authtok_type = obfuscated_password.
 
 %prep
 %setup -q
-%patch0001 -p1
 
 %build
 %configure \
@@ -122,7 +118,6 @@ use with ldap_default_authtok_type = obfuscated_password.
     --with-test-dir=/dev/shm
 
 make %{?_smp_mflags}
-make translated-manpages
 
 %check
 export CK_TIMEOUT_MULTIPLIER=10
@@ -205,6 +200,7 @@ rm -rf $RPM_BUILD_ROOT
 %{python_sitelib}/*.py*
 
 %lang(cs)       %{_mandir}/cs/man[58]/*
+%lang(uk)       %{_mandir}/uk/man[58]/*
 
 %files client
 %defattr(-,root,root,-)
@@ -256,6 +252,23 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Thu Jan 27 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-1
+- New upstream release 1.5.1
+- Addresses CVE-2010-4341 - DoS in sssd PAM responder can prevent logins
+- Vast performance improvements when enumerate = true
+- All PAM actions will now perform a forced initgroups lookup instead of just
+- a user information lookup
+-   This guarantees that all group information is available to other
+-   providers, such as the simple provider.
+- For backwards-compatibility, DNS lookups will also fall back to trying the
+- SSSD domain name as a DNS discovery domain.
+- Support for more password expiration policies in LDAP
+-    389 Directory Server
+-    FreeIPA
+-    ActiveDirectory
+- Support for ldap_tls_{cert,key,cipher_suite} config options
+-Assorted bugfixes
+
 * Tue Jan 11 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.0-2
 - CVE-2010-4341 - DoS in sssd PAM responder can prevent logins
 
