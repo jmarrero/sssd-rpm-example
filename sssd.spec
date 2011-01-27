@@ -20,6 +20,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 Requires: libldb >= 0.9.3
 Requires: libtdb >= 1.1.3
 Requires: sssd-client = %{version}-%{release}
+Requires: cyrus-sasl-gssapi
 Requires: krb5-libs >= 1.9
 Requires(post): initscripts chkconfig /sbin/ldconfig
 Requires(preun):  initscripts chkconfig
@@ -252,6 +253,10 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Thu Jan 27 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-2
+- Restore Requires: cyrus-sasl-gssapi as it is not auto-detected during
+- rpmbuild
+
 * Thu Jan 27 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-1
 - New upstream release 1.5.1
 - Addresses CVE-2010-4341 - DoS in sssd PAM responder can prevent logins
