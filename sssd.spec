@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.5.1
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -14,6 +14,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-Sanitize-search-filters-for-nested-group-lookups.patch
 
 ### Dependencies ###
 
@@ -73,6 +74,7 @@ BuildRequires: bind-utils
 BuildRequires: keyutils-libs-devel
 BuildRequires: libnl-devel
 BuildRequires: nscd
+BuildRequires: gettext-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -105,6 +107,10 @@ use with ldap_default_authtok_type = obfuscated_password.
 
 %prep
 %setup -q
+
+autoreconf -ivf
+
+%patch0001 -p1
 
 %build
 %configure \
@@ -167,6 +173,20 @@ do
     echo %{python_sitelib}/`basename $file` >> sssd.lang
 done
 
+touch sssd_tools.lang
+for man in `find $RPM_BUILD_ROOT/%{_mandir}/??/man?/ -type f | sed -e "s#$RPM_BUILD_ROOT/%{_mandir}/##"`
+do
+    lang=`echo $man | cut -c 1-2`
+    case `basename $man` in
+        sss_*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_tools.lang
+        ;;
+        *)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd.lang
+            ;;
+    esac
+done
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
@@ -200,10 +220,7 @@ rm -rf $RPM_BUILD_ROOT
 %{python_sitearch}/pysss.so
 %{python_sitelib}/*.py*
 
-%lang(cs)       %{_mandir}/cs/man[58]/*
-%lang(uk)       %{_mandir}/uk/man[58]/*
-
-%files client
+%files client -f sssd_tools.lang
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
 /%{_lib}/libnss_sss.so.2
@@ -253,6 +270,10 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Tue Feb 01 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-3
+- Fix nested group member filter sanitization for RFC2307bis
+- Put translated tool manpages into the sssd-tools subpackage
+
 * Thu Jan 27 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-2
 - Restore Requires: cyrus-sasl-gssapi as it is not auto-detected during
 - rpmbuild
