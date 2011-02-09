@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.5.1
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -270,6 +270,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Wed Feb 09 2011 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.5.1-4
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_15_Mass_Rebuild
+
 * Tue Feb 01 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-3
 - Fix nested group member filter sanitization for RFC2307bis
 - Put translated tool manpages into the sssd-tools subpackage
