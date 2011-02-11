@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.5.1
-Release: 6%{?dist}
+Release: 7%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -52,6 +52,9 @@ BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
 BuildRequires: libtdb-devel
 BuildRequires: libldb-devel
+%if 0%{?fedora} >= 15
+BuildRequires: libldb-devel >= 1.0.0
+%endif
 BuildRequires: libdhash-devel >= 0.4.2
 BuildRequires: libcollection-devel
 BuildRequires: libini_config-devel
@@ -160,7 +163,7 @@ install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
 rm -f \
     $RPM_BUILD_ROOT/%{_lib}/libnss_sss.la \
     $RPM_BUILD_ROOT/%{_lib}/security/pam_sss.la \
-    $RPM_BUILD_ROOT/%{_libdir}/ldb/memberof.la \
+    $RPM_BUILD_ROOT/%{_libdir}/ldb/modules/ldb/memberof.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_ldap.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_proxy.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_krb5.la \
@@ -273,6 +276,10 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Fri Feb 11 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-7
+- Ensure that SSSD builds against libldb-1.0.0 on F15 and later
+- Remove .la for memberOf
+
 * Fri Feb 11 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-6
 - Fix memberOf install path
 
