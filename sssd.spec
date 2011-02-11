@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.5.1
-Release: 5%{?dist}
+Release: 6%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -200,7 +200,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sssd
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
-%{_libdir}/ldb/memberof.so
+%{_libdir}/ldb/modules/ldb/memberof.so
 %dir %{sssdstatedir}
 %attr(700,root,root) %dir %{dbpath}
 %attr(755,root,root) %dir %{pipepath}
@@ -273,6 +273,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Fri Feb 11 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-6
+- Fix memberOf install path
+
 * Fri Feb 11 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-5
 - Add support for libldb 1.0.0
 
