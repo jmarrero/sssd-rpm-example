@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.5.1
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -15,6 +15,8 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001: 0001-Sanitize-search-filters-for-nested-group-lookups.patch
+Patch0002: 0002-Fix-module-registration-with-newer-LDB-libraries.patch
+Patch0003: 0003-Make-make-check-look-nice-again.patch
 
 ### Dependencies ###
 
@@ -108,11 +110,12 @@ use with ldap_default_authtok_type = obfuscated_password.
 %prep
 %setup -q
 
-autoreconf -ivf
-
 %patch0001 -p1
+%patch0002 -p1
+%patch0003 -p1
 
 %build
+autoreconf -ivf
 %configure \
     --with-db-path=%{dbpath} \
     --with-pipe-path=%{pipepath} \
@@ -270,6 +273,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Fri Feb 11 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-5
+- Add support for libldb 1.0.0
+
 * Wed Feb 09 2011 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.5.1-4
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_15_Mass_Rebuild
 

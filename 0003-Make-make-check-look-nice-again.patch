@@ -1,0 +1,95 @@
+From 21f28bdbab10881b9fb0b890dfa15af429326606 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Fri, 11 Feb 2011 12:57:30 +0100
+Subject: [PATCH 2/2] Make 'make check' look nice again
+
+With current libldb releases 'make check' will print a lot of 'unable to
+dlopen' messages although the test will succeed. This patch place the
+memberof module into a directory of its own to avoid these messages.
+
+Additionally this patch introduces TESTS_ENVIRONMENT which allows us to
+remove the SYSDB_TEST preprocessor definition.
+---
+ Makefile.am    |   11 ++++++++---
+ src/db/sysdb.c |    8 --------
+ 2 files changed, 8 insertions(+), 11 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index cc78d04..b445f9c 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -478,6 +478,12 @@ sss_groupshow_LDADD = \
+ #################
+ # Feature Tests #
+ #################
++TESTS_ENVIRONMENT = LDB_MODULES_PATH=$(abs_top_builddir)/ldb_mod_test_dir
++
++ldb_mod_test_dir: memberof.la
++	mkdir -p $(builddir)/ldb_mod_test_dir
++	cp $(builddir)/.libs/memberof.so $(builddir)/ldb_mod_test_dir
++
+ noinst_LTLIBRARIES += \
+     libsss_test_common.la
+ 
+@@ -494,7 +500,6 @@ sysdb_tests_SOURCES = \
+     src/tests/sysdb-tests.c \
+     $(SSSD_UTIL_OBJ)
+ sysdb_tests_CFLAGS = \
+-    -DSYSDB_TEST \
+     $(AM_CFLAGS) \
+     $(CHECK_CFLAGS)
+ sysdb_tests_LDADD = \
+@@ -637,7 +642,6 @@ auth_tests_SOURCES = \
+     $(SSSD_UTIL_OBJ)
+ auth_tests_CFLAGS = \
+     $(AM_CFLAGS) \
+-    -DSYSDB_TEST \
+     $(CHECK_CFLAGS)
+ auth_tests_LDADD = \
+     $(SSSD_LIBS) \
+@@ -1023,7 +1027,7 @@ docs:
+ 	@exit 1
+ endif
+ 
+-all-local:
++all-local: ldb_mod_test_dir
+ if BUILD_PYTHON_BINDINGS
+ 	cd $(srcdir)/src/config; $(PYTHON) setup.py build --build-base $(abs_builddir)/src/config
+ endif
+@@ -1055,6 +1059,7 @@ if BUILD_PYTHON_BINDINGS
+ 	cd $(srcdir)/src/config; $(PYTHON) setup.py build --build-base $(abs_builddir)/src/config clean --all
+ endif
+ 	rm -Rf doc
++	rm -Rf ldb_mod_test_dir
+ 
+ CLEANFILES = *.X */*.X */*/*.X
+ 
+diff --git a/src/db/sysdb.c b/src/db/sysdb.c
+index 1409149..694ce54 100644
+--- a/src/db/sysdb.c
++++ b/src/db/sysdb.c
+@@ -889,10 +889,6 @@ static int sysdb_check_upgrade_02(TALLOC_CTX *mem_ctx,
+         goto exit;
+     }
+ 
+-#ifdef SYSDB_TEST
+-    ldb_set_modules_dir(ctx->ldb, ABS_BUILD_DIR"/.libs");
+-#endif
+-
+     ret = ldb_connect(ldb, ldb_file, 0, NULL);
+     if (ret != LDB_SUCCESS) {
+         ret = EIO;
+@@ -1563,10 +1559,6 @@ static int sysdb_domain_init_internal(TALLOC_CTX *mem_ctx,
+         return EIO;
+     }
+ 
+-#ifdef SYSDB_TEST
+-    ldb_set_modules_dir(ctx->ldb, ABS_BUILD_DIR"/.libs");
+-#endif
+-
+     ret = ldb_connect(ctx->ldb, ctx->ldb_file, 0, NULL);
+     if (ret != LDB_SUCCESS) {
+         return EIO;
+-- 
+1.7.4
+
