@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.5.1
-Release: 7%{?dist}
+Release: 8%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -17,6 +17,9 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 Patch0001: 0001-Sanitize-search-filters-for-nested-group-lookups.patch
 Patch0002: 0002-Fix-module-registration-with-newer-LDB-libraries.patch
 Patch0003: 0003-Make-make-check-look-nice-again.patch
+Patch0004: 0004-Remove-cached-user-entry-if-initgroups-returns-ENOEN.patch
+Patch0005: 0005-Perform-initgroups-lookups-for-all-domains.patch
+Patch0006: 0006-IPA-provider-remove-deleted-groups-during-initgroups.patch
 
 ### Dependencies ###
 
@@ -116,6 +119,9 @@ use with ldap_default_authtok_type = obfuscated_password.
 %patch0001 -p1
 %patch0002 -p1
 %patch0003 -p1
+%patch0004 -p1
+%patch0005 -p1
+%patch0006 -p1
 
 %build
 autoreconf -ivf
@@ -276,6 +282,10 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Mon Feb 21 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-8
+- Resolves: rhbz#677768 - name service caches names, so id command shows
+-                         recently deleted users
+
 * Fri Feb 11 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-7
 - Ensure that SSSD builds against libldb-1.0.0 on F15 and later
 - Remove .la for memberOf

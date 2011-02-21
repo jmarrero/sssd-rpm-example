@@ -1,0 +1,36 @@
+From e7c95d693f4694f64790c3105550c141e94c5b45 Mon Sep 17 00:00:00 2001
+From: Stephen Gallagher <sgallagh@redhat.com>
+Date: Thu, 17 Feb 2011 14:33:50 -0500
+Subject: [PATCH 4/6] Remove cached user entry if initgroups returns ENOENT
+
+This behavior was present for getpwnam() but was lacking for
+initgroups.
+---
+ src/providers/ldap/ldap_id.c |   11 +++++++++++
+ 1 files changed, 11 insertions(+), 0 deletions(-)
+
+diff --git a/src/providers/ldap/ldap_id.c b/src/providers/ldap/ldap_id.c
+index 09f0026b00cda442f90e07e30e0d083a53206d85..9a234280082f7396eda4307e9e4bb4bd63b5615c 100644
+--- a/src/providers/ldap/ldap_id.c
++++ b/src/providers/ldap/ldap_id.c
+@@ -631,6 +631,17 @@ static void groups_by_user_done(struct tevent_req *subreq)
+         return;
+     }
+ 
++    if (ret == ENOENT) {
++        ret = sysdb_delete_user(state,
++                                state->ctx->be->sysdb,
++                                state->ctx->be->domain,
++                                state->name, 0);
++        if (ret != EOK && ret != ENOENT) {
++            tevent_req_error(req, ret);
++            return;
++        }
++    }
++
+     state->dp_error = DP_ERR_OK;
+     tevent_req_done(req);
+ }
+-- 
+1.7.4
+
