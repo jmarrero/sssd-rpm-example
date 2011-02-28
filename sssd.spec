@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.5.1
-Release: 8%{?dist}
+Release: 9%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -23,7 +23,7 @@ Patch0006: 0006-IPA-provider-remove-deleted-groups-during-initgroups.patch
 
 ### Dependencies ###
 
-Requires: libldb >= 0.9.3
+Requires: libldb = 1.0.2
 Requires: libtdb >= 1.1.3
 Requires: sssd-client = %{version}-%{release}
 Requires: cyrus-sasl-gssapi
@@ -282,6 +282,11 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Sun Feb 27 2011 Simo Sorce <ssorce@redhat.com> - 1.5.1-9
+- Rebuild sssd against libldb 1.0.2 so the memberof module loads again.
+- Related: rhbz#677425
+
+
 * Mon Feb 21 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-8
 - Resolves: rhbz#677768 - name service caches names, so id command shows
 -                         recently deleted users
