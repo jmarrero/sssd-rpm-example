@@ -4,8 +4,8 @@
 %endif
 
 Name: sssd
-Version: 1.5.1
-Release: 9%{?dist}
+Version: 1.5.2
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -14,12 +14,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-Sanitize-search-filters-for-nested-group-lookups.patch
-Patch0002: 0002-Fix-module-registration-with-newer-LDB-libraries.patch
-Patch0003: 0003-Make-make-check-look-nice-again.patch
-Patch0004: 0004-Remove-cached-user-entry-if-initgroups-returns-ENOEN.patch
-Patch0005: 0005-Perform-initgroups-lookups-for-all-domains.patch
-Patch0006: 0006-IPA-provider-remove-deleted-groups-during-initgroups.patch
+Patch1001: FED01-Fix-module-registration-with-newer-LDB-libraries.patch
+Patch1002: FED02-Make-make-check-look-nice-again.patch
 
 ### Dependencies ###
 
@@ -116,12 +112,8 @@ use with ldap_default_authtok_type = obfuscated_password.
 %prep
 %setup -q
 
-%patch0001 -p1
-%patch0002 -p1
-%patch0003 -p1
-%patch0004 -p1
-%patch0005 -p1
-%patch0006 -p1
+%patch1001 -p1
+%patch1002 -p1
 
 %build
 autoreconf -ivf
@@ -282,10 +274,23 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Thu Mar 10 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.2-1
+- New upstream release 1.5.2
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.2
+- Fixes for support of FreeIPA v2
+- Fixes for failover if DNS entries change
+- Improved sss_obfuscate tool with better interactive mode
+- Fix several crash bugs
+- Don't attempt to use START_TLS over SSL. Some LDAP servers can't handle this
+- Delete users from the local cache if initgroups calls return 'no such user'
+- (previously only worked for getpwnam/getpwuid)
+- Use new Transifex.net translations
+- Better support for automatic TGT renewal (now survives restart)
+- Netgroup fixes
+
 * Sun Feb 27 2011 Simo Sorce <ssorce@redhat.com> - 1.5.1-9
 - Rebuild sssd against libldb 1.0.2 so the memberof module loads again.
 - Related: rhbz#677425
-
 
 * Mon Feb 21 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.1-8
 - Resolves: rhbz#677768 - name service caches names, so id command shows
