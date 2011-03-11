@@ -4,7 +4,7 @@
 %endif
 
 Name: sssd
-Version: 1.5.2
+Version: 1.5.3
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -14,8 +14,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch1001: FED01-Fix-module-registration-with-newer-LDB-libraries.patch
-Patch1002: FED02-Make-make-check-look-nice-again.patch
 
 ### Dependencies ###
 
@@ -52,7 +50,7 @@ BuildRequires: libtevent-devel
 BuildRequires: libtdb-devel
 BuildRequires: libldb-devel
 %if 0%{?fedora} >= 15
-BuildRequires: libldb-devel >= 1.0.0
+BuildRequires: libldb-devel = 1.0.2
 %endif
 BuildRequires: libdhash-devel >= 0.4.2
 BuildRequires: libcollection-devel
@@ -111,9 +109,6 @@ use with ldap_default_authtok_type = obfuscated_password.
 
 %prep
 %setup -q
-
-%patch1001 -p1
-%patch1002 -p1
 
 %build
 autoreconf -ivf
@@ -274,6 +269,10 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Fri Mar 11 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.3-1
+- New upstream release 1.5.3
+- Support for libldb >= 1.0.0
+
 * Thu Mar 10 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.2-1
 - New upstream release 1.5.2
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.2
