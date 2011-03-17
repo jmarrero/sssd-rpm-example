@@ -5,7 +5,7 @@
 
 Name: sssd
 Version: 1.5.3
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -14,6 +14,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-Require-existence-of-GID-number-and-name-in-group-se.patch
+Patch0002: 0002-Require-existence-of-username-uid-and-gid-for-user-e.patch
 
 ### Dependencies ###
 
@@ -109,6 +111,9 @@ use with ldap_default_authtok_type = obfuscated_password.
 
 %prep
 %setup -q
+
+%patch0001 -p1
+%patch0002 -p1
 
 %build
 autoreconf -ivf
@@ -269,6 +274,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Thu Mar 17 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.3-2
+- Resolves: rhbz#683267 - sssd 1.5.1-9 breaks AD authentication
+
 * Fri Mar 11 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.3-1
 - New upstream release 1.5.3
 - Support for libldb >= 1.0.0
