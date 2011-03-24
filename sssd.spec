@@ -3,9 +3,13 @@
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
 %endif
 
+# Determine the location of the LDB modules directory
+%global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
+%global ldb_version 1.0.2
+
 Name: sssd
-Version: 1.5.3
-Release: 2%{?dist}
+Version: 1.5.4
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -14,12 +18,10 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-Require-existence-of-GID-number-and-name-in-group-se.patch
-Patch0002: 0002-Require-existence-of-username-uid-and-gid-for-user-e.patch
 
 ### Dependencies ###
 
-Requires: libldb = 1.0.2
+Requires: libldb = %{ldb_version}
 Requires: libtdb >= 1.1.3
 Requires: sssd-client = %{version}-%{release}
 Requires: cyrus-sasl-gssapi
@@ -50,10 +52,7 @@ BuildRequires: popt-devel
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
 BuildRequires: libtdb-devel
-BuildRequires: libldb-devel
-%if 0%{?fedora} >= 15
-BuildRequires: libldb-devel = 1.0.2
-%endif
+BuildRequires: libldb-devel = %{ldb_version}
 BuildRequires: libdhash-devel >= 0.4.2
 BuildRequires: libcollection-devel
 BuildRequires: libini_config-devel
@@ -112,9 +111,6 @@ use with ldap_default_authtok_type = obfuscated_password.
 %prep
 %setup -q
 
-%patch0001 -p1
-%patch0002 -p1
-
 %build
 autoreconf -ivf
 %configure \
@@ -161,7 +157,7 @@ install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
 rm -f \
     $RPM_BUILD_ROOT/%{_lib}/libnss_sss.la \
     $RPM_BUILD_ROOT/%{_lib}/security/pam_sss.la \
-    $RPM_BUILD_ROOT/%{_libdir}/ldb/modules/ldb/memberof.la \
+    $RPM_BUILD_ROOT/%{ldb_modulesdir}/memberof.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_ldap.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_proxy.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_krb5.la \
@@ -201,7 +197,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sssd
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
-%{_libdir}/ldb/modules/ldb/memberof.so
+%{ldb_modulesdir}/memberof.so
 %dir %{sssdstatedir}
 %attr(700,root,root) %dir %{dbpath}
 %attr(755,root,root) %dir %{pipepath}
@@ -274,6 +270,13 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Thu Mar 24 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.4-1
+- New upstream release 1.5.4
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.4
+- Fixes for Active Directory when not all users and groups have POSIX attributes
+- Fixes for handling users and groups that have name aliases (aliases are ignored)
+- Fix group memberships after initgroups in the IPA provider
+
 * Thu Mar 17 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.3-2
 - Resolves: rhbz#683267 - sssd 1.5.1-9 breaks AD authentication
 
