@@ -7,9 +7,12 @@
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
 %global ldb_version 1.0.2
 
+# Determine the location of the systemd unit file directory
+%global systemdunitdir %(pkg-config --variable=systemdsystemunitdir systemd)
+
 Name: sssd
 Version: 1.5.5
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -26,9 +29,9 @@ Requires: libtdb >= 1.1.3
 Requires: sssd-client = %{version}-%{release}
 Requires: cyrus-sasl-gssapi
 Requires: krb5-libs >= 1.9
-Requires(post): initscripts chkconfig /sbin/ldconfig
-Requires(preun):  initscripts chkconfig
-Requires(postun): initscripts chkconfig /sbin/ldconfig
+Requires(post): systemd-units initscripts chkconfig /sbin/ldconfig
+Requires(preun): systemd-units initscripts chkconfig
+Requires(postun): systemd-units initscripts chkconfig /sbin/ldconfig
 
 %global servicename sssd
 %global sssdstatedir %{_localstatedir}/lib/sss
@@ -153,6 +156,11 @@ install -m644 src/examples/logrotate $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/s
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/rwtab.d
 install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
 
+# Replace sysv init script with systemd unit file
+rm -f $RPM_BUILD_ROOT/%{_initrddir}/%{name}
+mkdir -p $RPM_BUILD_ROOT/%{systemdunitdir}/
+cp src/sysv/systemd/sssd.service $RPM_BUILD_ROOT/%{systemdunitdir}/
+
 # Remove .la files created by libtool
 rm -f \
     $RPM_BUILD_ROOT/%{_lib}/libnss_sss.la \
@@ -193,7 +201,7 @@ rm -rf $RPM_BUILD_ROOT
 %files -f sssd.lang
 %defattr(-,root,root,-)
 %doc COPYING
-%{_initrddir}/%{name}
+%{systemdunitdir}/sssd.service
 %{_sbindir}/sssd
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
@@ -270,6 +278,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Tue Apr 12 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.5-2
+- Install systemd unit file instead of sysv init script
+
 * Tue Apr 12 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.5-1
 - New upstream release 1.5.5
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.5
