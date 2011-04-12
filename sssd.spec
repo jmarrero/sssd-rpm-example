@@ -8,7 +8,7 @@
 %global ldb_version 1.0.2
 
 Name: sssd
-Version: 1.5.4
+Version: 1.5.5
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -270,6 +270,14 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Tue Apr 12 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.5-1
+- New upstream release 1.5.5
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.5
+- Fixes for several crash bugs
+- LDAP group lookups will no longer abort if there is a zero-length member
+- attribute
+- Add automatic fallback to 'cn' if the 'gecos' attribute does not exist
+
 * Thu Mar 24 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.4-1
 - New upstream release 1.5.4
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.4
