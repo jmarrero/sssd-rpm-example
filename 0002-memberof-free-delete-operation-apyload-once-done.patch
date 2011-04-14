@@ -1,0 +1,55 @@
+>From c808473b784459c65a99db8cf519a619df27f45a Mon Sep 17 00:00:00 2001
+From: Simo Sorce <ssorce@redhat.com>
+Date: Wed, 13 Apr 2011 17:09:09 -0400
+Subject: [PATCH] memberof: free delete operation apyload once done
+
+Large memberof delete operations can cause quite a number of searches
+and the results are attached to a delop operation structure.
+Make sure we free this payload once the operation is done and these
+results are not used anymore so that we get a smaller total memory footprint.
+---
+ src/ldb_modules/memberof.c |   14 +++++++++++++-
+ 1 files changed, 13 insertions(+), 1 deletions(-)
+
+diff --git a/src/ldb_modules/memberof.c b/src/ldb_modules/memberof.c
+index 41ea0b344e951ffc47a4882896671bd9b37e1719..4fc46fa84529ac1850cdb588ddf69be0f60e8238 100644
+--- a/src/ldb_modules/memberof.c
++++ b/src/ldb_modules/memberof.c
+@@ -1161,6 +1161,7 @@ static int mbof_del_fill_muop(struct mbof_del_ctx *del_ctx,
+ static int mbof_del_muop(struct mbof_del_ctx *ctx);
+ static int mbof_del_muop_callback(struct ldb_request *req,
+                                   struct ldb_reply *ares);
++static void free_delop_contents(struct mbof_del_operation *delop);
+ 
+ 
+ static int memberof_del(struct ldb_module *module, struct ldb_request *req)
+@@ -2182,6 +2183,8 @@ static int mbof_del_progeny(struct mbof_del_operation *delop)
+         return ret;
+     }
+ 
++    free_delop_contents(delop);
++
+     if (nextop) {
+         return mbof_del_execute_op(nextop);
+     }
+@@ -2405,7 +2408,16 @@ static int mbof_del_muop_callback(struct ldb_request *req,
+     return LDB_SUCCESS;
+ }
+ 
+-
++/* delop may carry on a lot of memory, so we need a function to clean up
++ * the payload without breaking the delop chain */
++static void free_delop_contents(struct mbof_del_operation *delop)
++{
++    talloc_zfree(delop->entry);
++    talloc_zfree(delop->parents);
++    talloc_zfree(delop->anc_ctx);
++    delop->num_parents = 0;
++    delop->cur_parent = 0;
++}
+ 
+ /* mod operation */
+ 
+-- 
+1.7.4.2
+

@@ -7,12 +7,9 @@
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
 %global ldb_version 1.0.2
 
-# Determine the location of the systemd unit file directory
-%global systemdunitdir %(pkg-config --variable=systemdsystemunitdir systemd)
-
 Name: sssd
 Version: 1.5.5
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -21,7 +18,9 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-
+Patch0001: 0001-memberof-fix-calculation-of-replaced-members.patch
+Patch0002: 0002-memberof-free-delete-operation-apyload-once-done.patch
+Patch0003: 0003-Never-remove-gecos-from-the-sysdb-cache.patch
 ### Dependencies ###
 
 Requires: libldb = %{ldb_version}
@@ -114,6 +113,10 @@ use with ldap_default_authtok_type = obfuscated_password.
 %prep
 %setup -q
 
+%patch0001 -p1
+%patch0002 -p1
+%patch0003 -p1
+
 %build
 autoreconf -ivf
 %configure \
@@ -158,8 +161,8 @@ install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
 
 # Replace sysv init script with systemd unit file
 rm -f $RPM_BUILD_ROOT/%{_initrddir}/%{name}
-mkdir -p $RPM_BUILD_ROOT/%{systemdunitdir}/
-cp src/sysv/systemd/sssd.service $RPM_BUILD_ROOT/%{systemdunitdir}/
+mkdir -p $RPM_BUILD_ROOT/%{_unitdir}/
+cp src/sysv/systemd/sssd.service $RPM_BUILD_ROOT/%{_unitdir}/
 
 # Remove .la files created by libtool
 rm -f \
@@ -201,7 +204,7 @@ rm -rf $RPM_BUILD_ROOT
 %files -f sssd.lang
 %defattr(-,root,root,-)
 %doc COPYING
-%{systemdunitdir}/sssd.service
+%{_unitdir}/sssd.service
 %{_sbindir}/sssd
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
@@ -259,25 +262,45 @@ rm -rf $RPM_BUILD_ROOT
 
 %post
 /sbin/ldconfig
-/sbin/chkconfig --add %{servicename}
 
 if [ $1 -ge 1 ] ; then
-    /sbin/service %{servicename} condrestart 2>&1 > /dev/null
+    # Initial installation
+    /bin/systemctl daemon-reload >/dev/null 2>&1 || :
 fi
 
 %preun
 if [ $1 = 0 ]; then
-    /sbin/service %{servicename} stop 2>&1 > /dev/null
-    /sbin/chkconfig --del %{servicename}
+     # Package removal, not upgrade
+    /bin/systemctl --no-reload disable sssd.service > /dev/null 2>&1 || :
+    /bin/systemctl stop sssd.service > /dev/null 2>&1 || :
+fi
+
+%triggerun -- sssd < 1.5.5-3
+if /sbin/chkconfig sssd ; then
+        /bin/systemctl --no-reload enable sssd.service >/dev/null 2>&1 || :
 fi
 
 %postun -p /sbin/ldconfig
 
 %post client -p /sbin/ldconfig
 
-%postun client -p /sbin/ldconfig
+%postun client
+/sbin/ldconfig
+/bin/systemctl daemon-reload >/dev/null 2>&1 || :
+if [ $1 -ge 1 ] ; then
+    # On upgrade, reload init system configuration if we changed unit files
+    /bin/systemctl daemon-reload >/dev/null 2>&1 || :
+    /bin/systemctl try-restart sssd.service >/dev/null 2>&1 || :
+fi
 
 %changelog
+* Thu Apr 14 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.5-3
+- Fix systemd conversion. Upgrades from SysV to systemd weren't properly
+- enabling the systemd service.
+- Fix a serious memory leak in the memberOf plugin
+- Fix an issue where the user's full name would sometimes be removed
+- from the cache
+
 * Tue Apr 12 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.5-2
 - Install systemd unit file instead of sysv init script
 
