@@ -9,7 +9,7 @@
 
 Name: sssd
 Version: 1.5.5
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -275,16 +275,12 @@ if [ $1 = 0 ]; then
     /bin/systemctl stop sssd.service > /dev/null 2>&1 || :
 fi
 
-%triggerun -- sssd < 1.5.5-3
+%triggerun -- sssd < 1.5.5-4
 if /sbin/chkconfig sssd ; then
         /bin/systemctl --no-reload enable sssd.service >/dev/null 2>&1 || :
 fi
 
-%postun -p /sbin/ldconfig
-
-%post client -p /sbin/ldconfig
-
-%postun client
+%postun
 /sbin/ldconfig
 /bin/systemctl daemon-reload >/dev/null 2>&1 || :
 if [ $1 -ge 1 ] ; then
@@ -293,7 +289,14 @@ if [ $1 -ge 1 ] ; then
     /bin/systemctl try-restart sssd.service >/dev/null 2>&1 || :
 fi
 
+%post client -p /sbin/ldconfig
+
+%postun client -p /sbin/ldconfig
+
 %changelog
+* Mon Apr 18 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.5-4
+- Fix %%postun
+
 * Thu Apr 14 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.5-3
 - Fix systemd conversion. Upgrades from SysV to systemd weren't properly
 - enabling the systemd service.
