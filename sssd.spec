@@ -8,7 +8,7 @@
 %global ldb_version 1.0.2
 
 Name: sssd
-Version: 1.5.6
+Version: 1.5.6.1
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -295,6 +295,9 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Wed Apr 20 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.6.1-1
+- Re-add manpage translations
+
 * Wed Apr 20 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.6-1
 - New upstream release 1.5.6
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.6
