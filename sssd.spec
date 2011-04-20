@@ -8,8 +8,8 @@
 %global ldb_version 1.0.2
 
 Name: sssd
-Version: 1.5.5
-Release: 5%{?dist}
+Version: 1.5.6
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -18,10 +18,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-memberof-fix-calculation-of-replaced-members.patch
-Patch0002: 0002-memberof-free-delete-operation-apyload-once-done.patch
-Patch0003: 0003-Never-remove-gecos-from-the-sysdb-cache.patch
-Patch0004: 0004-Always-generate-kpasswdinfo-file.patch
 
 ### Dependencies ###
 
@@ -115,10 +111,6 @@ use with ldap_default_authtok_type = obfuscated_password.
 %prep
 %setup -q
 
-%patch0001 -p1
-%patch0002 -p1
-%patch0003 -p1
-%patch0004 -p1
 
 %build
 autoreconf -ivf
@@ -303,6 +295,17 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Wed Apr 20 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.6-1
+- New upstream release 1.5.6
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.6
+- Fixed a serious memory leak in the memberOf plugin
+- Fixed a regression with the negative cache that caused it to be essentially
+- nonfunctional
+- Fixed an issue where the user's full name would sometimes be removed from
+- the cache
+- Fixed an issue with password changes in the kerberos provider not working
+- with kpasswd
+
 * Wed Apr 20 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.5-5
 - Resolves: rhbz#697057 - kpasswd fails when using sssd and
 -                         kadmin server != kdc server
