@@ -9,7 +9,7 @@
 
 Name: sssd
 Version: 1.5.5
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -21,6 +21,8 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 Patch0001: 0001-memberof-fix-calculation-of-replaced-members.patch
 Patch0002: 0002-memberof-free-delete-operation-apyload-once-done.patch
 Patch0003: 0003-Never-remove-gecos-from-the-sysdb-cache.patch
+Patch0004: 0004-Always-generate-kpasswdinfo-file.patch
+
 ### Dependencies ###
 
 Requires: libldb = %{ldb_version}
@@ -116,6 +118,7 @@ use with ldap_default_authtok_type = obfuscated_password.
 %patch0001 -p1
 %patch0002 -p1
 %patch0003 -p1
+%patch0004 -p1
 
 %build
 autoreconf -ivf
@@ -275,10 +278,16 @@ if [ $1 = 0 ]; then
     /bin/systemctl stop sssd.service > /dev/null 2>&1 || :
 fi
 
-%triggerun -- sssd < 1.5.5-4
-if /sbin/chkconfig sssd ; then
+%triggerun -- sssd < 1.5.5-5
+if /sbin/chkconfig --level 3 sssd ; then
         /bin/systemctl --no-reload enable sssd.service >/dev/null 2>&1 || :
 fi
+
+if /sbin/chkconfig --level 5 sssd ; then
+        /bin/systemctl --no-reload enable sssd.service >/dev/null 2>&1 || :
+fi
+
+
 
 %postun
 /sbin/ldconfig
@@ -294,6 +303,11 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Wed Apr 20 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.5-5
+- Resolves: rhbz#697057 - kpasswd fails when using sssd and
+-                         kadmin server != kdc server
+- Upgrades from SysV should now maintain enabled/disabled status
+
 * Mon Apr 18 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.5-4
 - Fix %%postun
 
