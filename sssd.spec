@@ -8,7 +8,7 @@
 %global ldb_version 1.0.2
 
 Name: sssd
-Version: 1.5.6.1
+Version: 1.5.7
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -295,6 +295,10 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Fri Apr 29 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.7-1
+- Resolves: rhbz#700891 - CVE-2011-1758 sssd: automatic TGT renewal overwrites
+-                         cached password with predicatable filename
+
 * Wed Apr 20 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.6.1-1
 - Re-add manpage translations
 
