@@ -9,7 +9,7 @@
 
 Name: sssd
 Version: 1.5.7
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -273,7 +273,7 @@ if [ $1 = 0 ]; then
     /bin/systemctl stop sssd.service > /dev/null 2>&1 || :
 fi
 
-%triggerun -- sssd < 1.5.5-5
+%triggerun -- sssd < %{version}-%{release}
 if /sbin/chkconfig --level 3 sssd ; then
         /bin/systemctl --no-reload enable sssd.service >/dev/null 2>&1 || :
 fi
@@ -281,6 +281,8 @@ fi
 if /sbin/chkconfig --level 5 sssd ; then
         /bin/systemctl --no-reload enable sssd.service >/dev/null 2>&1 || :
 fi
+
+/sbin/chkconfig --del sssd >/dev/null 2>&1 || :
 
 
 
@@ -298,6 +300,11 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Mon May 23 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.7-3
+- Resolves: rhbz#706740 - Orphaned links on rc0.d-rc6.d
+- Make sure to properly convert to systemd if upgrading from newer
+- updates for Fedora 14
+
 * Mon May 02 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.7-2
 - Fix segfault in TGT renewal
 
