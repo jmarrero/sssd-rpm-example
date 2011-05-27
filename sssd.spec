@@ -8,8 +8,8 @@
 %global ldb_version 1.0.2
 
 Name: sssd
-Version: 1.5.7
-Release: 3%{?dist}
+Version: 1.5.8
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -19,7 +19,6 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 
-Patch0001: 0001-Return-pam-data-to-the-renewal-item-if-renewal-fails.patch
 
 ### Dependencies ###
 
@@ -112,8 +111,6 @@ use with ldap_default_authtok_type = obfuscated_password.
 
 %prep
 %setup -q
-
-%patch0001 -p1
 
 %build
 autoreconf -ivf
@@ -300,6 +297,14 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Fri May 27 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.8-1
+- New upstream release 1.5.8
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.8
+- Support for the LDAP paging control
+- Support for multiple DNS servers for name resolution
+- Fixes for several group membership bugs
+- Fixes for rare crash bugs
+
 * Mon May 23 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.7-3
 - Resolves: rhbz#706740 - Orphaned links on rc0.d-rc6.d
 - Make sure to properly convert to systemd if upgrading from newer
