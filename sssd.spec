@@ -8,7 +8,7 @@
 %global ldb_version 1.0.2
 
 Name: sssd
-Version: 1.5.8
+Version: 1.5.9
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -297,6 +297,17 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Thu Jun 30 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.9-1
+- New upstream release 1.5.9
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.9
+- Support for overriding home directory, shell and primary GID locally
+- Properly honor TTL values from SRV record lookups
+- Support non-POSIX groups in nested group chains (for RFC2307bis LDAP
+- servers)
+- Properly escape IPv6 addresses in the failover code
+- Do not crash if inotify fails (e.g. resource exhaustion)
+- Don't add multiple TGT renewal callbacks (too many log messages)
+
 * Fri May 27 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.8-1
 - New upstream release 1.5.8
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.8
