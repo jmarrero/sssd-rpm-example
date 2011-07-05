@@ -8,7 +8,7 @@
 %global ldb_version 1.0.2
 
 Name: sssd
-Version: 1.5.10
+Version: 1.5.11
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -297,6 +297,13 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
+* Tue Jul 05 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.11-1
+- New upstream release 1.5.11
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.11
+- Fix a serious regression that prevented SSSD from working with ldaps:// URIs
+- IPA Provider: Fix a bug with dynamic DNS that resulted in the wrong IPv6
+- address being saved to the AAAA record
+
 * Fri Jul 01 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.10-1
 - New upstream release 1.5.10
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.10
