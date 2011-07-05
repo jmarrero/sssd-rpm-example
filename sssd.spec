@@ -9,7 +9,7 @@
 
 Name: sssd
 Version: 1.5.11
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -297,7 +297,7 @@ fi
 %postun client -p /sbin/ldconfig
 
 %changelog
-* Tue Jul 05 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.11-1
+* Tue Jul 05 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.11-2
 - New upstream release 1.5.11
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.11
 - Fix a serious regression that prevented SSSD from working with ldaps:// URIs
