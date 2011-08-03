@@ -5,11 +5,11 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.0.2
+%global ldb_version 1.1.0
 
 Name: sssd
-Version: 1.5.11
-Release: 2%{?dist}
+Version: 1.6.0
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -79,6 +79,7 @@ BuildRequires: keyutils-libs-devel
 BuildRequires: libnl-devel
 BuildRequires: nscd
 BuildRequires: gettext-devel
+BuildRequires: libunistring-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -108,6 +109,34 @@ SSSD when using id_provider = local in /etc/sssd/sssd.conf.
 
 Also provides a userspace tool for generating an obfuscated LDAP password for
 use with ldap_default_authtok_type = obfuscated_password.
+
+%package -n libipa_hbac
+Summary: FreeIPA HBAC Evaluator library
+Group: Development/Libraries
+License: LGPLv3+
+
+%description -n libipa_hbac
+Utility library to validate FreeIPA HBAC rules for authorization requests
+
+%package -n libipa_hbac-devel
+Summary: FreeIPA HBAC Evaluator library
+Group: Development/Libraries
+License: LGPLv3+
+Requires: libipa_hbac = %{version}-%{release}
+
+%description -n libipa_hbac-devel
+Utility library to validate FreeIPA HBAC rules for authorization requests
+
+%package -n libipa_hbac-python
+Summary: Python bindings for the FreeIPA HBAC Evaluator library
+Group: Development/Libraries
+License: LGPLv3+
+Requires: libipa_hbac = %{version}-%{release}
+
+%description -n libipa_hbac-python
+The libipa_hbac-python contains the bindings so that libipa_hbac can be
+used by Python applications.
+
 
 %prep
 %setup -q
@@ -170,7 +199,9 @@ rm -f \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_ipa.la \
     $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_simple.la \
     $RPM_BUILD_ROOT/%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.la \
-    $RPM_BUILD_ROOT/%{python_sitearch}/pysss.la
+    $RPM_BUILD_ROOT/%{_libdir}/libipa_hbac.la \
+    $RPM_BUILD_ROOT/%{python_sitearch}/pysss.la \
+    $RPM_BUILD_ROOT/%{python_sitearch}/pyhbac.la
 
 # Older versions of rpmbuild can only handle one -f option
 # So we need to append to the sssd.lang file
@@ -246,6 +277,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sss_groupmod
 %{_sbindir}/sss_groupshow
 %{_sbindir}/sss_obfuscate
+%{_sbindir}/sss_cache
 %{_mandir}/man8/sss_groupadd.8*
 %{_mandir}/man8/sss_groupdel.8*
 %{_mandir}/man8/sss_groupmod.8*
@@ -254,6 +286,22 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sss_userdel.8*
 %{_mandir}/man8/sss_usermod.8*
 %{_mandir}/man8/sss_obfuscate.8*
+%{_mandir}/man8/sss_cache.8*
+
+%files -n libipa_hbac
+%defattr(-,root,root,-)
+%doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
+%{_libdir}/libipa_hbac.so.*
+
+%files -n libipa_hbac-devel
+%defattr(-,root,root,-)
+%{_includedir}/ipa_hbac.h
+%{_libdir}/libipa_hbac.so
+%{_libdir}/pkgconfig/ipa_hbac.pc
+
+%files -n libipa_hbac-python
+%defattr(-,root,root,-)
+%{python_sitearch}/pyhbac.so
 
 %post
 /sbin/ldconfig
@@ -296,7 +344,24 @@ fi
 
 %postun client -p /sbin/ldconfig
 
+%post -n libipa_hbac -p /sbin/ldconfig
+
+%postun -n libipa_hbac -p /sbin/ldconfig
+
 %changelog
+* Wed Aug 03 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.0-1
+- New upstream release 1.6.0
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.6.0
+- Add host access control support for LDAP (similar to pam_host_attr)
+- Finer-grained control on principals used with Kerberos (such as for FAST or
+- validation)
+- Added a new tool sss_cache to allow selective expiring of cached entries
+- Added support for LDAP DEREF and ASQ controls
+- Added access control features for Novell Directory Server
+- FreeIPA dynamic DNS update now checks first to see if an update is needed
+- Complete rewrite of the HBAC library
+- New libraries: libipa_hbac and libipa_hbac-python
+
 * Tue Jul 05 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.5.11-2
 - New upstream release 1.5.11
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.5.11
