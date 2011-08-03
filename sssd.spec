@@ -3,13 +3,17 @@
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
 %endif
 
+%if (0%{?fedora} > 15)
+%define _hardened_build 1
+%endif
+
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
 %global ldb_version 1.1.0
 
 Name: sssd
 Version: 1.6.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -349,6 +353,9 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Aug 03 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.0-2
+- Build with _hardened_build macro
+
 * Wed Aug 03 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.0-1
 - New upstream release 1.6.0
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.6.0
