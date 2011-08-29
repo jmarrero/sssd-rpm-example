@@ -12,8 +12,8 @@
 %global ldb_version 1.1.0
 
 Name: sssd
-Version: 1.6.0
-Release: 2%{?dist}
+Version: 1.6.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -353,6 +353,20 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Mon Aug 29 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.1-1
+- New upstream release 1.6.1
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.6.1
+- Fixes a serious issue with LDAP connections when the communication is
+  dropped (e.g. VPN disconnection, waking from sleep)
+- SSSD is now less strict when dealing with users/groups with multiple names
+  when a definitive primary name cannot be determined
+- The LDAP provider will no longer attempt to canonicalize by default when
+  using SASL. An option to re-enable this has been provided.
+- Fixes for non-standard LDAP attribute names (e.g. those used by Active
+  Directory)
+- Three HBAC regressions have been fixed.
+- Fix for an infinite loop in the deref code
+
 * Wed Aug 03 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.0-2
 - Build with _hardened_build macro
 
