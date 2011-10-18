@@ -3,6 +3,12 @@
 %{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
 %endif
 
+# we don't want to provide private python extension libs
+%{?filter_setup:
+%filter_provides_in %{python_sitearch}/.*\.so$
+%filter_setup
+}
+
 %if (0%{?fedora} > 15)
 %define _hardened_build 1
 %endif
@@ -12,7 +18,7 @@
 %global ldb_version 1.1.0
 
 Name: sssd
-Version: 1.6.1
+Version: 1.6.2
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -84,6 +90,7 @@ BuildRequires: libnl-devel
 BuildRequires: nscd
 BuildRequires: gettext-devel
 BuildRequires: libunistring-devel
+BuildRequires: findutils
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -152,13 +159,14 @@ autoreconf -ivf
     --with-pipe-path=%{pipepath} \
     --with-pubconf-path=%{pubconfpath} \
     --with-init-dir=%{_initrddir} \
+    --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
     --enable-nsslibdir=/%{_lib} \
     --enable-pammoddir=/%{_lib}/security \
     --disable-static \
     --disable-rpath \
     --with-test-dir=/dev/shm
 
-make %{?_smp_mflags}
+make %{?_smp_mflags} all docs
 
 %check
 export CK_TIMEOUT_MULTIPLIER=10
@@ -173,9 +181,9 @@ make install DESTDIR=$RPM_BUILD_ROOT
 # Prepare language files
 /usr/lib/rpm/find-lang.sh $RPM_BUILD_ROOT sssd
 
-# Copy default sssd.conf file
+# Copy SSSDConfig API files
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/sssd
-install -m600 src/examples/sssd.conf $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.conf
+touch $RPM_BUILD_ROOT/%{_sysconfdir}/sssd/sssd.conf
 install -m400 src/config/etc/sssd.api.conf $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.conf
 install -m400 src/config/etc/sssd.api.d/* $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.d/
 
@@ -193,19 +201,10 @@ mkdir -p $RPM_BUILD_ROOT/%{_unitdir}/
 cp src/sysv/systemd/sssd.service $RPM_BUILD_ROOT/%{_unitdir}/
 
 # Remove .la files created by libtool
-rm -f \
-    $RPM_BUILD_ROOT/%{_lib}/libnss_sss.la \
-    $RPM_BUILD_ROOT/%{_lib}/security/pam_sss.la \
-    $RPM_BUILD_ROOT/%{ldb_modulesdir}/memberof.la \
-    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_ldap.la \
-    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_proxy.la \
-    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_krb5.la \
-    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_ipa.la \
-    $RPM_BUILD_ROOT/%{_libdir}/sssd/libsss_simple.la \
-    $RPM_BUILD_ROOT/%{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.la \
-    $RPM_BUILD_ROOT/%{_libdir}/libipa_hbac.la \
-    $RPM_BUILD_ROOT/%{python_sitearch}/pysss.la \
-    $RPM_BUILD_ROOT/%{python_sitearch}/pyhbac.la
+find $RPM_BUILD_ROOT -name "*.la" -exec rm -f {} \;
+
+# Suppress developer-only documentation
+rm -Rf ${RPM_BUILD_ROOT}/%{_docdir}/%{name}/doc
 
 # Older versions of rpmbuild can only handle one -f option
 # So we need to append to the sssd.lang file
@@ -234,24 +233,26 @@ rm -rf $RPM_BUILD_ROOT
 %files -f sssd.lang
 %defattr(-,root,root,-)
 %doc COPYING
+%doc src/examples/sssd.conf
 %{_unitdir}/sssd.service
 %{_sbindir}/sssd
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
 %{ldb_modulesdir}/memberof.so
 %dir %{sssdstatedir}
+%dir %{_localstatedir}/cache/krb5rcache
 %attr(700,root,root) %dir %{dbpath}
 %attr(755,root,root) %dir %{pipepath}
 %attr(755,root,root) %dir %{pubconfpath}
 %attr(700,root,root) %dir %{pipepath}/private
 %attr(750,root,root) %dir %{_var}/log/%{name}
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
-%config(noreplace) %{_sysconfdir}/sssd/sssd.conf
+%ghost %attr(0600,root,root) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 %config(noreplace) %{_sysconfdir}/logrotate.d/sssd
 %config(noreplace) %{_sysconfdir}/rwtab.d/sssd
 %config %{_sysconfdir}/sssd/sssd.api.conf
 %attr(700,root,root) %dir %{_sysconfdir}/sssd/sssd.api.d
-%config %{_sysconfdir}/sssd/sssd.api.d/
+%config %{_sysconfdir}/sssd/sssd.api.d/*
 %{_mandir}/man5/sssd.conf.5*
 %{_mandir}/man5/sssd-ipa.5*
 %{_mandir}/man5/sssd-krb5.5*
@@ -282,6 +283,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sss_groupshow
 %{_sbindir}/sss_obfuscate
 %{_sbindir}/sss_cache
+%{_sbindir}/sss_debuglevel
 %{_mandir}/man8/sss_groupadd.8*
 %{_mandir}/man8/sss_groupdel.8*
 %{_mandir}/man8/sss_groupmod.8*
@@ -291,6 +293,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sss_usermod.8*
 %{_mandir}/man8/sss_obfuscate.8*
 %{_mandir}/man8/sss_cache.8*
+%{_mandir}/man8/sss_debuglevel.8*
 
 %files -n libipa_hbac
 %defattr(-,root,root,-)
@@ -299,6 +302,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files -n libipa_hbac-devel
 %defattr(-,root,root,-)
+%doc hbac_doc/html
 %{_includedir}/ipa_hbac.h
 %{_libdir}/libipa_hbac.so
 %{_libdir}/pkgconfig/ipa_hbac.pc
@@ -353,6 +357,18 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Tue Oct 18 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.2-1
+- Improved handling of users and groups with multi-valued name attributes
+  (aliases)
+- Performance enhancements
+    Initgroups on RFC2307bis/FreeIPA
+    HBAC rule processing 
+- Improved process-hang detection and restarting
+- Enabled the midpoint cache refresh by default (fewer cache misses on
+  commonly-used entries)
+- Cleaned up the example configuration
+- New tool to change debug level on the fly
+
 * Mon Aug 29 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.1-1
 - New upstream release 1.6.1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.6.1
