@@ -19,7 +19,7 @@
 
 Name: sssd
 Version: 1.6.2
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -283,7 +283,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sss_groupshow
 %{_sbindir}/sss_obfuscate
 %{_sbindir}/sss_cache
-%{_sbindir}/sss_debuglevel
 %{_mandir}/man8/sss_groupadd.8*
 %{_mandir}/man8/sss_groupdel.8*
 %{_mandir}/man8/sss_groupmod.8*
@@ -293,7 +292,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sss_usermod.8*
 %{_mandir}/man8/sss_obfuscate.8*
 %{_mandir}/man8/sss_cache.8*
-%{_mandir}/man8/sss_debuglevel.8*
 
 %files -n libipa_hbac
 %defattr(-,root,root,-)
@@ -357,12 +355,16 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Oct 19 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.2-2
+- Remove %%files reference to sss_debuglevel copied from wrong upstreeam
+  spec file.
+
 * Tue Oct 18 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.2-1
 - Improved handling of users and groups with multi-valued name attributes
   (aliases)
 - Performance enhancements
     Initgroups on RFC2307bis/FreeIPA
-    HBAC rule processing 
+    HBAC rule processing
 - Improved process-hang detection and restarting
 - Enabled the midpoint cache refresh by default (fewer cache misses on
   commonly-used entries)
