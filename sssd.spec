@@ -19,7 +19,7 @@
 
 Name: sssd
 Version: 1.6.2
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -37,6 +37,7 @@ Requires: libtdb >= 1.1.3
 Requires: sssd-client = %{version}-%{release}
 Requires: cyrus-sasl-gssapi
 Requires: krb5-libs >= 1.9
+Requires: selinux-policy >= 3.10.0-46
 Requires(post): systemd-units initscripts chkconfig /sbin/ldconfig
 Requires(preun): systemd-units initscripts chkconfig
 Requires(postun): systemd-units initscripts chkconfig /sbin/ldconfig
@@ -355,6 +356,10 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Fri Oct 21 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.2-3
+- Add explicit requirement on selinux-policy version to address new SBUS
+  symlinks.
+
 * Wed Oct 19 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.2-2
 - Remove %%files reference to sss_debuglevel copied from wrong upstreeam
   spec file.
