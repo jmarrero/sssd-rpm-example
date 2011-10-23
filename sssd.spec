@@ -19,7 +19,7 @@
 
 Name: sssd
 Version: 1.6.2
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -32,12 +32,12 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Dependencies ###
 
+Conflicts: selinux-policy < 3.10.0-46
 Requires: libldb = %{ldb_version}
 Requires: libtdb >= 1.1.3
 Requires: sssd-client = %{version}-%{release}
 Requires: cyrus-sasl-gssapi
 Requires: krb5-libs >= 1.9
-Requires: selinux-policy >= 3.10.0-46
 Requires(post): systemd-units initscripts chkconfig /sbin/ldconfig
 Requires(preun): systemd-units initscripts chkconfig
 Requires(postun): systemd-units initscripts chkconfig /sbin/ldconfig
@@ -356,6 +356,10 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Sun Oct 23 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.2-4
+- Change selinux policy requirement to Conflicts: with the old version,
+  rather than Requires: the supported version.
+
 * Fri Oct 21 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.2-3
 - Add explicit requirement on selinux-policy version to address new SBUS
   symlinks.
