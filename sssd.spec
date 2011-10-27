@@ -19,7 +19,7 @@
 
 Name: sssd
 Version: 1.6.2
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -356,6 +356,9 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Oct 26 2011 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.6.2-5
+- Rebuilt for glibc bug#747377
+
 * Sun Oct 23 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.2-4
 - Change selinux policy requirement to Conflicts: with the old version,
   rather than Requires: the supported version.
