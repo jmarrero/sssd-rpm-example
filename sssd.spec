@@ -18,8 +18,8 @@
 %global ldb_version 1.1.0
 
 Name: sssd
-Version: 1.6.2
-Release: 5%{?dist}
+Version: 1.6.3
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -356,6 +356,12 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Fri Nov 04 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.3-1
+- New upstream release 1.6.3
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.6.3
+- Fixes a major cache performance issue introduced in 1.6.2
+- Fixes a potential infinite-loop with certain LDAP layouts
+
 * Wed Oct 26 2011 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.6.2-5
 - Rebuilt for glibc bug#747377
 
