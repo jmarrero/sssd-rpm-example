@@ -15,7 +15,7 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.3
+%global ldb_version 1.1.0
 
 Name: sssd
 Version: 1.6.3
@@ -28,7 +28,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-
+Patch0001: 0001-configAPI-Fix-removing-in-old-domain-when-saving-a-n.patch
 
 ### Dependencies ###
 
@@ -151,7 +151,27 @@ used by Python applications.
 
 
 %prep
+# Update timestamps on the files touched by a patch, to avoid non-equal
+# .pyc/.pyo files across the multilib peers within a build, where "Level"
+# is the patch prefix option (e.g. -p1)
+# Taken from specfile for python-simplejson
+UpdateTimestamps() {
+  Level=$1
+  PatchFile=$2
+
+  # Locate the affected files:
+  for f in $(diffstat $Level -l $PatchFile); do
+    # Set the files to have the same timestamp as that of the patch:
+    touch -r $PatchFile $f
+  done
+}
+
 %setup -q
+
+for p in %patches ; do
+    %__patch -p1 -i $p
+    UpdateTimestamps -p1 $p
+done
 
 %build
 autoreconf -ivf
@@ -356,8 +376,8 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
-* Wed Nov 09 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.3-2
-- Rebuild for new version of libldb
+* Thu Nov 10 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.3-2
+- Resolves: rhbz#752495 - Crash when apply settings
 
 * Fri Nov 04 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.3-1
 - New upstream release 1.6.3
