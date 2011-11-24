@@ -15,11 +15,11 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.0
+%global ldb_version 1.1.3
 
 Name: sssd
 Version: 1.6.3
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -376,6 +376,9 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Thu Nov 24 2011 Jakub Hrozek <jhrozek@redhat.com> - 1.6.3-3
+- Rebuild for libldb 1.1.3
+
 * Thu Nov 10 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.3-2
 - Resolves: rhbz#752495 - Crash when apply settings
 
