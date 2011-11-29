@@ -19,7 +19,7 @@
 
 Name: sssd
 Version: 1.6.3
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -29,6 +29,8 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001: 0001-configAPI-Fix-removing-in-old-domain-when-saving-a-n.patch
+Patch0002: 0002-RESPONDER-Ensure-that-all-input-strings-are-valid-UT.patch
+Patch0003: 0003-LDAP-Try-next-failover-server-on-any-error.patch
 
 ### Dependencies ###
 
@@ -376,6 +378,12 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Tue Nov 29 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.3-4
+- Resolves: rhbz#753639 - sssd_nss crashes when passed invalid UTF-8 for the
+                          username in getpwnam()
+- Resolves: rhbz#758425 - LDAP failover not working if server refuses
+                          connections
+
 * Thu Nov 24 2011 Jakub Hrozek <jhrozek@redhat.com> - 1.6.3-3
 - Rebuild for libldb 1.1.3
 
