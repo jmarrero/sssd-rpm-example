@@ -15,11 +15,11 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.3
+%global ldb_version 1.1.4
 
 Name: sssd
 Version: 1.6.3
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -378,6 +378,9 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Dec 07 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.3-5
+- Rebuild against libldb 1.1.4
+
 * Tue Nov 29 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.3-4
 - Resolves: rhbz#753639 - sssd_nss crashes when passed invalid UTF-8 for the
                           username in getpwnam()
