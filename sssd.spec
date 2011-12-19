@@ -18,8 +18,8 @@
 %global ldb_version 1.1.4
 
 Name: sssd
-Version: 1.6.3
-Release: 5%{?dist}
+Version: 1.6.4
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -28,9 +28,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-configAPI-Fix-removing-in-old-domain-when-saving-a-n.patch
-Patch0002: 0002-RESPONDER-Ensure-that-all-input-strings-are-valid-UT.patch
-Patch0003: 0003-LDAP-Try-next-failover-server-on-any-error.patch
 
 ### Dependencies ###
 
@@ -378,6 +375,13 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Mon Dec 19 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.4-1
+- New upstream release 1.6.4
+- Rolls up previous patches applied to the 1.6.3 tarball
+- Fixes a rare issue causing crashes in the failover logic
+- Fixes an issue where SSSD would return the wrong PAM error code for users
+  that it does not recognize.
+
 * Wed Dec 07 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.3-5
 - Rebuild against libldb 1.1.4
 
