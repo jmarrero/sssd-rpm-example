@@ -18,7 +18,7 @@
 %global ldb_version 1.1.4
 
 Name: sssd
-Version: 1.6.4
+Version: 1.7.0
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -253,7 +253,7 @@ rm -rf $RPM_BUILD_ROOT
 %files -f sssd.lang
 %defattr(-,root,root,-)
 %doc COPYING
-%doc src/examples/sssd.conf
+%doc src/examples/sssd-example.conf
 %{_unitdir}/sssd.service
 %{_sbindir}/sssd
 %{_libexecdir}/%{servicename}/
@@ -303,6 +303,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sss_groupshow
 %{_sbindir}/sss_obfuscate
 %{_sbindir}/sss_cache
+%{_sbindir}/sss_debuglevel
 %{_mandir}/man8/sss_groupadd.8*
 %{_mandir}/man8/sss_groupdel.8*
 %{_mandir}/man8/sss_groupmod.8*
@@ -312,6 +313,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sss_usermod.8*
 %{_mandir}/man8/sss_obfuscate.8*
 %{_mandir}/man8/sss_cache.8*
+%{_mandir}/man8/sss_debuglevel.8*
 
 %files -n libipa_hbac
 %defattr(-,root,root,-)
@@ -375,6 +377,20 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Thu Dec 22 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.7.0-1
+- New upstream release 1.7.0
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.7.0
+- Support for case-insensitive domains
+- Support for multiple search bases in the LDAP provider
+- Support for the native FreeIPA netgroup implementation
+- Reliability improvements to the process monitor
+- New DEBUG facility with more consistent log levels
+- New tool to change debug log levels without restarting SSSD
+- SSSD will now disconnect from LDAP server when idle
+- FreeIPA HBAC rules can choose to ignore srchost options for significant
+  performance gains
+- Assorted performance improvements in the LDAP provider
+
 * Mon Dec 19 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.6.4-1
 - New upstream release 1.6.4
 - Rolls up previous patches applied to the 1.6.3 tarball
