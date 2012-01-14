@@ -19,7 +19,7 @@
 
 Name: sssd
 Version: 1.7.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -377,6 +377,9 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Sat Jan 14 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.7.0-2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_17_Mass_Rebuild
+
 * Thu Dec 22 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.7.0-1
 - New upstream release 1.7.0
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.7.0
