@@ -379,7 +379,7 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
-* Wed Feb 01 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.7.0-2
+* Wed Feb 01 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.7.0-3
 - Resolves: rhbz#773706 - SSSD fails during autodetection of search bases for
                           new LDAP features
 
