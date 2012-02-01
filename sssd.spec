@@ -19,7 +19,7 @@
 
 Name: sssd
 Version: 1.7.0
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -29,12 +29,14 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 
+Patch0001: 0001-LDAP-Do-not-fail-if-RootDSE-check-cannot-determine-s.patch
+
 ### Dependencies ###
 
 Conflicts: selinux-policy < 3.10.0-46
 Requires: libldb = %{ldb_version}
 Requires: libtdb >= 1.1.3
-Requires: sssd-client = %{version}-%{release}
+Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: cyrus-sasl-gssapi
 Requires: krb5-libs >= 1.9
 Requires(post): systemd-units initscripts chkconfig /sbin/ldconfig
@@ -377,6 +379,10 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Feb 01 2011 Stephen Gallagher <sgallagh@redhat.com> - 1.7.0-2
+- Resolves: rhbz#773706 - SSSD fails during autodetection of search bases for
+                          new LDAP features
+
 * Sat Jan 14 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.7.0-2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_17_Mass_Rebuild
 
