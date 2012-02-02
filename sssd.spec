@@ -19,7 +19,7 @@
 
 Name: sssd
 Version: 1.7.0
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -30,6 +30,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 ### Patches ###
 
 Patch0001: 0001-LDAP-Do-not-fail-if-RootDSE-check-cannot-determine-s.patch
+Patch0002: 0002-DP-Fix-bugs-in-sss_dp_get_account_int.patch
 
 ### Dependencies ###
 
@@ -379,6 +380,10 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Feb 01 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.7.0-4
+- Fixes a serious memory hierarchy bug causing unpredictable behavior in the
+  LDAP provider.
+
 * Wed Feb 01 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.7.0-3
 - Resolves: rhbz#773706 - SSSD fails during autodetection of search bases for
                           new LDAP features
