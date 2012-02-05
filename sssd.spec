@@ -19,7 +19,7 @@
 
 Name: sssd
 Version: 1.7.0
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -380,6 +380,10 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Feb 01 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.7.0-5
+- Resolves: rhbz#773706 - SSSD fails during autodetection of search bases for
+                          new LDAP features - fix netgroups and sudo as well
+
 * Wed Feb 01 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.7.0-4
 - Fixes a serious memory hierarchy bug causing unpredictable behavior in the
   LDAP provider.
