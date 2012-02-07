@@ -19,12 +19,12 @@
 
 Name: sssd
 Version: 1.8.0
-Release: 1%{?dist}.beta1
+Release: 2%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta2.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -184,7 +184,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.7.91
+%setup -q -n %{name}-1.7.92
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -422,6 +422,12 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Mon Feb 06 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.0-1.beta2
+- New upstream release
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.8.0beta2
+- Fix two minor manpage bugs
+- Include the IPA AutoFS provider
+
 * Mon Feb 06 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.0-1.beta1
 - New upstream release
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.8.0beta1
