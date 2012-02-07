@@ -18,19 +18,16 @@
 %global ldb_version 1.1.4
 
 Name: sssd
-Version: 1.7.0
-Release: 5%{?dist}
+Version: 1.8.0
+Release: 1%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-
-Patch0001: 0001-LDAP-Do-not-fail-if-RootDSE-check-cannot-determine-s.patch
-Patch0002: 0002-DP-Fix-bugs-in-sss_dp_get_account_int.patch
 
 ### Dependencies ###
 
@@ -38,8 +35,10 @@ Conflicts: selinux-policy < 3.10.0-46
 Requires: libldb = %{ldb_version}
 Requires: libtdb >= 1.1.3
 Requires: sssd-client%{?_isa} = %{version}-%{release}
-Requires: cyrus-sasl-gssapi
+Requires: cyrus-sasl-gssapi%{?_isa}
+Requires: libipa_hbac%{?_isa} = %{version}-%{release}
 Requires: krb5-libs >= 1.9
+Requires: keyutils-libs
 Requires(post): systemd-units initscripts chkconfig /sbin/ldconfig
 Requires(preun): systemd-units initscripts chkconfig
 Requires(postun): systemd-units initscripts chkconfig /sbin/ldconfig
@@ -92,6 +91,7 @@ BuildRequires: keyutils-libs-devel
 BuildRequires: libnl-devel
 BuildRequires: nscd
 BuildRequires: gettext-devel
+BuildRequires: pkgconfig
 BuildRequires: libunistring-devel
 BuildRequires: findutils
 
@@ -151,6 +151,22 @@ Requires: libipa_hbac = %{version}-%{release}
 The libipa_hbac-python contains the bindings so that libipa_hbac can be
 used by Python applications.
 
+%package -n libsss_sudo
+Summary: A library to allow communication between SUDO and SSSD
+Group: Development/Libraries
+License: LGPLv3+
+
+%description -n libsss_sudo
+A utility library to allow communication between SUDO and SSSD
+
+%package -n libsss_sudo-devel
+Summary: A library to allow communication between SUDO and SSSD
+Group: Development/Libraries
+License: LGPLv3+
+Requires: libsss_sudo = %{version}-%{release}
+
+%description -n libsss_sudo-devel
+A utility library to allow communication between SUDO and SSSD
 
 %prep
 # Update timestamps on the files touched by a patch, to avoid non-equal
@@ -168,7 +184,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q
+%setup -q -n %{name}-1.7.91
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -187,7 +203,8 @@ autoreconf -ivf
     --enable-pammoddir=/%{_lib}/security \
     --disable-static \
     --disable-rpath \
-    --with-test-dir=/dev/shm
+    --with-test-dir=/dev/shm \
+    --enable-all-experimental-features
 
 make %{?_smp_mflags} all docs
 
@@ -204,11 +221,9 @@ make install DESTDIR=$RPM_BUILD_ROOT
 # Prepare language files
 /usr/lib/rpm/find-lang.sh $RPM_BUILD_ROOT sssd
 
-# Copy SSSDConfig API files
+# Prepare empty config file
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/sssd
 touch $RPM_BUILD_ROOT/%{_sysconfdir}/sssd/sssd.conf
-install -m400 src/config/etc/sssd.api.conf $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.conf
-install -m400 src/config/etc/sssd.api.d/* $RPM_BUILD_ROOT%{_sysconfdir}/sssd/sssd.api.d/
 
 # Copy default logrotate file
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/logrotate.d
@@ -243,7 +258,7 @@ do
     case `basename $man` in
         sss_*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_tools.lang
-        ;;
+            ;;
         *)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd.lang
             ;;
@@ -273,9 +288,8 @@ rm -rf $RPM_BUILD_ROOT
 %ghost %attr(0600,root,root) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 %config(noreplace) %{_sysconfdir}/logrotate.d/sssd
 %config(noreplace) %{_sysconfdir}/rwtab.d/sssd
-%config %{_sysconfdir}/sssd/sssd.api.conf
-%attr(700,root,root) %dir %{_sysconfdir}/sssd/sssd.api.d
-%config %{_sysconfdir}/sssd/sssd.api.d/*
+%{_datadir}/sssd/sssd.api.conf
+%{_datadir}/sssd/sssd.api.d
 %{_mandir}/man5/sssd.conf.5*
 %{_mandir}/man5/sssd-ipa.5*
 %{_mandir}/man5/sssd-krb5.5*
@@ -285,16 +299,20 @@ rm -rf $RPM_BUILD_ROOT
 %{python_sitearch}/pysss.so
 %{python_sitelib}/*.py*
 
-%files client -f sssd_tools.lang
+%files client
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
 /%{_lib}/libnss_sss.so.2
 /%{_lib}/security/pam_sss.so
 %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
+%{_bindir}/sss_ssh_authorizedkeys
+%{_bindir}/sss_ssh_knownhostsproxy
+%{_mandir}/man1/sss_ssh_authorizedkeys.1*
+%{_mandir}/man1/sss_ssh_knownhostsproxy.1*
 %{_mandir}/man8/pam_sss.8*
 %{_mandir}/man8/sssd_krb5_locator_plugin.8*
 
-%files tools
+%files tools -f sssd_tools.lang
 %defattr(-,root,root,-)
 %doc COPYING
 %{_sbindir}/sss_useradd
@@ -333,6 +351,30 @@ rm -rf $RPM_BUILD_ROOT
 %files -n libipa_hbac-python
 %defattr(-,root,root,-)
 %{python_sitearch}/pyhbac.so
+
+%package -n libsss_autofs
+Summary: A library to allow communication between Autofs and SSSD
+Group: Development/Libraries
+License: LGPLv3+
+
+%description -n libsss_autofs
+A utility library to allow communication between Autofs and SSSD
+
+%files -n libsss_sudo
+%defattr(-,root,root,-)
+%doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
+%{_libdir}/libsss_sudo.so.*
+
+%files -n libsss_sudo-devel
+%doc libsss_sudo_doc/html
+%{_includedir}/sss_sudo.h
+%{_libdir}/libsss_sudo.so
+%{_libdir}/pkgconfig/libsss_sudo.pc
+
+%files -n libsss_autofs
+%defattr(-,root,root,-)
+%doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
+%{_libdir}/sssd/modules/libsss_autofs.so*
 
 %post
 /sbin/ldconfig
@@ -380,6 +422,15 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Mon Feb 06 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.0-1.beta1
+- New upstream release
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.8.0beta1
+- Support for the service map in NSS
+- Support for setting default SELinux user context from FreeIPA
+- Support for retrieving SSH user and host keys from LDAP (Experimental)
+- Support for caching autofs LDAP requests (Experimental)
+- Support for caching SUDO rules (Experimental)
+
 * Wed Feb 01 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.7.0-5
 - Resolves: rhbz#773706 - SSSD fails during autodetection of search bases for
                           new LDAP features - fix netgroups and sudo as well
