@@ -19,7 +19,7 @@
 
 Name: sssd
 Version: 1.8.0
-Release: 2%{?dist}.beta2
+Release: 3%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -422,6 +422,9 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Fri Feb 10 2012 Petr Pisar <ppisar@redhat.com> - 1.8.0-3.beta2
+- Rebuild against PCRE 8.30
+
 * Mon Feb 06 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.0-1.beta2
 - New upstream release
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.8.0beta2
