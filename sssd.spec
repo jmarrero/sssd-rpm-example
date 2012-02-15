@@ -16,12 +16,12 @@
 
 Name: sssd
 Version: 1.8.0
-Release: 3%{?dist}.beta2
+Release: 4%{?dist}.beta3
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta2.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta3.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -181,7 +181,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.7.92
+%setup -q -n %{name}-1.7.93
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -274,6 +274,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/%{servicename}/
 %{_libdir}/%{name}/
 %{ldb_modulesdir}/memberof.so
+%{_bindir}/sss_ssh_authorizedkeys
+%{_bindir}/sss_ssh_knownhostsproxy
 %dir %{sssdstatedir}
 %dir %{_localstatedir}/cache/krb5rcache
 %attr(700,root,root) %dir %{dbpath}
@@ -287,6 +289,8 @@ rm -rf $RPM_BUILD_ROOT
 %config(noreplace) %{_sysconfdir}/rwtab.d/sssd
 %{_datadir}/sssd/sssd.api.conf
 %{_datadir}/sssd/sssd.api.d
+%{_mandir}/man1/sss_ssh_authorizedkeys.1*
+%{_mandir}/man1/sss_ssh_knownhostsproxy.1*
 %{_mandir}/man5/sssd.conf.5*
 %{_mandir}/man5/sssd-ipa.5*
 %{_mandir}/man5/sssd-krb5.5*
@@ -302,10 +306,6 @@ rm -rf $RPM_BUILD_ROOT
 /%{_lib}/libnss_sss.so.2
 /%{_lib}/security/pam_sss.so
 %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
-%{_bindir}/sss_ssh_authorizedkeys
-%{_bindir}/sss_ssh_knownhostsproxy
-%{_mandir}/man1/sss_ssh_authorizedkeys.1*
-%{_mandir}/man1/sss_ssh_knownhostsproxy.1*
 %{_mandir}/man8/pam_sss.8*
 %{_mandir}/man8/sssd_krb5_locator_plugin.8*
 
@@ -419,6 +419,14 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Feb 15 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.0-4.beta3
+- New upstream release 1.8.0 beta 3
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.8.0beta3
+- Fixed a regression in group enumeration since 1.7.0
+- Fixed several memory-corruption bugs
+- Finalized the ABI for the autofs support
+- Fixed a regression in the proxy provider
+
 * Fri Feb 10 2012 Petr Pisar <ppisar@redhat.com> - 1.8.0-3.beta2
 - Rebuild against PCRE 8.30
 
