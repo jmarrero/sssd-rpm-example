@@ -4,10 +4,7 @@
 %endif
 
 # we don't want to provide private python extension libs
-%{?filter_setup:
-%filter_provides_in %{python_sitearch}/.*\.so$
-%filter_setup
-}
+%define __provides_exclude_from %{python_sitearch}.*.so$
 
 %if (0%{?fedora} > 15)
 %define _hardened_build 1
