@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.8.0
-Release: 4%{?dist}.beta3
+Release: 5%{?dist}.beta3
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,6 +25,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta3.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+
+Patch1001: FED01-Change-Kerberos-credential-cache-default-loca.patch
 
 ### Dependencies ###
 
@@ -419,6 +421,9 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Feb 22 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.0-5.beta3
+- Change default kerberos credential cache location to /run/user/<username>
+
 * Wed Feb 15 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.0-4.beta3
 - New upstream release 1.8.0 beta 3
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.8.0beta3
