@@ -16,12 +16,12 @@
 
 Name: sssd
 Version: 1.8.0
-Release: 5%{?dist}.beta3
+Release: 6%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta3.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -88,7 +88,6 @@ BuildRequires: libsemanage-devel
 BuildRequires: bind-utils
 BuildRequires: keyutils-libs-devel
 BuildRequires: libnl-devel
-BuildRequires: nscd
 BuildRequires: gettext-devel
 BuildRequires: pkgconfig
 BuildRequires: libunistring-devel
@@ -183,7 +182,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.7.93
+%setup -q -n %{name}-%{version}
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -421,6 +420,28 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Tue Feb 28 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.0-6
+- New upstream release 1.8.0
+- Support for the service map in NSS
+- Support for setting default SELinux user context from FreeIPA
+- Support for retrieving SSH user and host keys from LDAP (Experimental)
+- Support for caching autofs LDAP requests (Experimental)
+- Support for caching SUDO rules (Experimental)
+- Include the IPA AutoFS provider
+- Fixed several memory-corruption bugs
+- Fixed a regression in group enumeration since 1.7.0
+- Fixed a regression in the proxy provider
+- Resolves: rhbz#741981 - Separate Cache Timeouts for SSSD
+- Resolves: rhbz#797968 - sssd_be: The requested tar get is not configured is
+                          logged at each login
+- Resolves: rhbz#754114 - [abrt] sssd-1.6.3-1.fc16: ping_check: Process
+                          /usr/sbin/sssd was killed by signal 11 (SIGSEGV)
+- Resolves: rhbz#743133 - Performance regression with Kerberos authentication
+                          against AD
+- Resolves: rhbz#773706 - SSSD fails during autodetection of search bases for
+                          new LDAP features
+- Resolves: rhbz#786957 - sssd and kerberos should change the default location for create the Credential Cashes to /run/usr/USERNAME/krb5cc
+
 * Wed Feb 22 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.0-5.beta3
 - Change default kerberos credential cache location to /run/user/<username>
 
