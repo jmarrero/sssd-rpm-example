@@ -4,7 +4,7 @@
 %endif
 
 # we don't want to provide private python extension libs
-%define __provides_exclude_from %{python_sitearch}.*.so$
+%define __provides_exclude_from %{python_sitearch}/.*\.so$
 
 %if (0%{?fedora} > 15)
 %define _hardened_build 1
@@ -15,8 +15,8 @@
 %global ldb_version 1.1.4
 
 Name: sssd
-Version: 1.8.0
-Release: 6%{?dist}
+Version: 1.8.1
+Release: 7%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -207,6 +207,9 @@ autoreconf -ivf
 make %{?_smp_mflags} all docs
 
 %check
+# 'patch' doesn't create the new tests with the executable flag
+chmod +x src/tests/pyhbac-test.py
+
 export CK_TIMEOUT_MULTIPLIER=10
 make %{?_smp_mflags} check
 unset CK_TIMEOUT_MULTIPLIER
@@ -257,11 +260,28 @@ do
         sss_*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_tools.lang
             ;;
+        pam_sss*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_client.lang
+            ;;
+        sssd_krb5_locator_plugin*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_client.lang
+            ;;
         *)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd.lang
             ;;
     esac
 done
+
+# Print these to the rpmbuild log
+echo "sssd.lang:"
+cat sssd.lang
+
+echo "sssd_client.lang:"
+cat sssd_client.lang
+
+echo "sssd_tools.lang:"
+cat sssd_tools.lang
+
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -301,7 +321,7 @@ rm -rf $RPM_BUILD_ROOT
 %{python_sitearch}/pysss.so
 %{python_sitelib}/*.py*
 
-%files client
+%files client -f sssd_client.lang
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
 /%{_lib}/libnss_sss.so.2
@@ -420,6 +440,21 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Mon Mar 12 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.1-7
+- New upstream release 1.8.1
+- Resolve issue where we could enter an infinite loop trying to connect to an
+  auth server
+- Fix serious issue with complex (3+ levels) nested groups
+- Fix netgroup support for case-insensitivity and aliases
+- Fix serious issue with lookup bundling resulting in requests never
+  completing
+- IPA provider will now check the value of nsAccountLock during pam_acct_mgmt
+  in addition to pam_authenticate
+- Fix several regressions in the proxy provider
+- Resolves: rhbz#743133 - Performance regression with Kerberos authentication
+                          against AD
+- Resolves: rhbz#799031 - --debug option for sss_debuglevel doesn't work
+
 * Tue Feb 28 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.0-6
 - New upstream release 1.8.0
 - Support for the service map in NSS
