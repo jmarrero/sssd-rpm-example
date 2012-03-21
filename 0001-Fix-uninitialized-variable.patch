@@ -1,0 +1,25 @@
+From b3671769f57521c4eeef850a4963e320f170082c Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 16 Mar 2012 09:36:38 -0400
+Subject: [PATCH] Fix uninitialized variable
+
+---
+ src/providers/ldap/ldap_common.c |    2 +-
+ 1 files changed, 1 insertions(+), 1 deletions(-)
+
+diff --git a/src/providers/ldap/ldap_common.c b/src/providers/ldap/ldap_common.c
+index d5dc4a0af5590bbe6f8d474095c6094582deb542..949244183c0db7b8e576c7b3c5e63e2bb35cb39f 100644
+--- a/src/providers/ldap/ldap_common.c
++++ b/src/providers/ldap/ldap_common.c
+@@ -1598,7 +1598,7 @@ errno_t list_missing_attrs(TALLOC_CTX *mem_ctx,
+     }
+ 
+     if (k == 0) {
+-        *missing = NULL;
++        *missing_attrs = NULL;
+     } else {
+         /* Terminate the list */
+         missing[k] = NULL;
+-- 
+1.7.7.6
+

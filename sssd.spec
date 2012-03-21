@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.8.1
-Release: 7%{?dist}
+Release: 8%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,6 +25,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+
+Patch0001: 0001-Fix-uninitialized-variable.patch
 
 Patch1001: FED01-Change-Kerberos-credential-cache-default-loca.patch
 
@@ -440,6 +442,10 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Mar 21 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.1-8
+- Fix uninitialized value bug causing crashes throughout the code
+- Resolves: rhbz#804783 - [abrt] Segfault during LDAP 'services' lookup
+
 * Mon Mar 12 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.1-7
 - New upstream release 1.8.1
 - Resolve issue where we could enter an infinite loop trying to connect to an
