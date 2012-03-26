@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.8.1
-Release: 8%{?dist}
+Release: 9%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -294,11 +294,27 @@ rm -rf $RPM_BUILD_ROOT
 %doc src/examples/sssd-example.conf
 %{_unitdir}/sssd.service
 %{_sbindir}/sssd
-%{_libexecdir}/%{servicename}/
-%{_libdir}/%{name}/
+
+%{_libexecdir}/%{servicename}/krb5_child
+%{_libexecdir}/%{servicename}/ldap_child
+%{_libexecdir}/%{servicename}/proxy_child
+%{_libexecdir}/%{servicename}/sssd_be
+%{_libexecdir}/%{servicename}/sssd_nss
+%{_libexecdir}/%{servicename}/sssd_pam
+%{_libexecdir}/%{servicename}/sssd_autofs
+%{_libexecdir}/%{servicename}/sssd_ssh
+%{_libexecdir}/%{servicename}/sssd_sudo
+
+%{_libdir}/%{name}/libsss_ipa.so
+%{_libdir}/%{name}/libsss_krb5.so
+%{_libdir}/%{name}/libsss_ldap.so
+%{_libdir}/%{name}/libsss_proxy.so
+%{_libdir}/%{name}/libsss_simple.so
+
 %{ldb_modulesdir}/memberof.so
 %{_bindir}/sss_ssh_authorizedkeys
 %{_bindir}/sss_ssh_knownhostsproxy
+
 %dir %{sssdstatedir}
 %dir %{_localstatedir}/cache/krb5rcache
 %attr(700,root,root) %dir %{dbpath}
@@ -442,6 +458,10 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Mon Mar 26 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.1-9
+- Don't duplicate libsss_autofs.so in two packages
+- Set explicit package contents instead of globbing
+
 * Wed Mar 21 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.1-8
 - Fix uninitialized value bug causing crashes throughout the code
 - Resolves: rhbz#804783 - [abrt] Segfault during LDAP 'services' lookup
