@@ -15,8 +15,8 @@
 %global ldb_version 1.1.4
 
 Name: sssd
-Version: 1.8.1
-Release: 9%{?dist}
+Version: 1.8.2
+Release: 10%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,8 +25,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-
-Patch0001: 0001-Fix-uninitialized-variable.patch
 
 Patch1001: FED01-Change-Kerberos-credential-cache-default-loca.patch
 
@@ -458,6 +456,18 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Mon Apr 09 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.2-10
+- New upstream release 1.8.2
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.8.2
+- Several fixes to case-insensitive domain functions
+- Fix for GSSAPI binds when the keytab contains unrelated principals
+- Fixed several segfaults
+- Workarounds added for LDAP servers with unreadable RootDSE
+- SSH knownhostproxy will no longer enter an infinite loop preventing login
+- The provided SYSV init script now starts SSSD earlier at startup and stops
+  it later during shutdown
+- Assorted minor fixes for issues discovered by static analysis tools
+
 * Mon Mar 26 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.1-9
 - Don't duplicate libsss_autofs.so in two packages
 - Set explicit package contents instead of globbing
