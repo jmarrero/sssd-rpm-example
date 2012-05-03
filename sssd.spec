@@ -15,8 +15,8 @@
 %global ldb_version 1.1.4
 
 Name: sssd
-Version: 1.8.2
-Release: 10%{?dist}
+Version: 1.8.3
+Release: 11%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -456,6 +456,14 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Thu May 03 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.3-11
+- New upstream release 1.8.3
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.8.3
+- Numerous manpage and translation updates
+- LDAP: Handle situations where the RootDSE isn't available anonymously
+- LDAP: Fix regression for users using non-standard LDAP attributes for user
+  information
+
 * Mon Apr 09 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.2-10
 - New upstream release 1.8.2
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.8.2
