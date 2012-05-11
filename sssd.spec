@@ -15,13 +15,13 @@
 %global ldb_version 1.1.4
 
 Name: sssd
-Version: 1.8.3
-Release: 11%{?dist}
+Version: 1.9.0
+Release: 1%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -36,6 +36,7 @@ Requires: libtdb >= 1.1.3
 Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: cyrus-sasl-gssapi%{?_isa}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
+Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires: krb5-libs >= 1.9
 Requires: keyutils-libs
 Requires(post): systemd-units initscripts chkconfig /sbin/ldconfig
@@ -122,6 +123,23 @@ SSSD when using id_provider = local in /etc/sssd/sssd.conf.
 Also provides a userspace tool for generating an obfuscated LDAP password for
 use with ldap_default_authtok_type = obfuscated_password.
 
+%package -n libsss_idmap
+Summary: FreeIPA Idmap library
+Group: Development/Libraries
+License: LGPLv3+
+
+%description -n libsss_idmap
+Utility library to SIDs to Unix uids and gids
+
+%package -n libsss_idmap-devel
+Summary: FreeIPA Idmap library
+Group: Development/Libraries
+License: LGPLv3+
+Requires: libsss_idmap = %{version}-%{release}
+
+%description -n libsss_idmap-devel
+Utility library to SIDs to Unix uids and gids
+
 %package -n libipa_hbac
 Summary: FreeIPA HBAC Evaluator library
 Group: Development/Libraries
@@ -182,7 +200,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-%{version}
+%setup -q -n %{name}-1.8.91
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -243,7 +261,7 @@ cp src/sysv/systemd/sssd.service $RPM_BUILD_ROOT/%{_unitdir}/
 find $RPM_BUILD_ROOT -name "*.la" -exec rm -f {} \;
 
 # Suppress developer-only documentation
-rm -Rf ${RPM_BUILD_ROOT}/%{_docdir}/%{name}/doc
+rm -Rf ${RPM_BUILD_ROOT}/%{_docdir}/%{name}
 
 # Older versions of rpmbuild can only handle one -f option
 # So we need to append to the sssd.lang file
@@ -370,6 +388,18 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sss_cache.8*
 %{_mandir}/man8/sss_debuglevel.8*
 
+%files -n libsss_idmap
+%defattr(-,root,root,-)
+%doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
+%{_libdir}/libsss_idmap.so.*
+
+%files -n libsss_idmap-devel
+%defattr(-,root,root,-)
+%doc idmap_doc/html
+%{_includedir}/sss_idmap.h
+%{_libdir}/libsss_idmap.so
+%{_libdir}/pkgconfig/sss_idmap.pc
+
 %files -n libipa_hbac
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
@@ -456,6 +486,16 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Fri May 11 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-1.beta1
+- New upstream release 1.9.0 beta 1
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.9.0beta1
+- Add native support for autofs to the IPA provider
+- Support for ID-mapping when connecting to Active Directory
+- Support for handling very large (> 1500 users) groups in Active Directory
+- Support for sub-domains (will be used for dealing with trust relationships)
+- Add a new fast in-memory cache to speed up lookups of cached data on
+  repeated requests
+
 * Thu May 03 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.8.3-11
 - New upstream release 1.8.3
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.8.3
