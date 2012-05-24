@@ -1,0 +1,35 @@
+From 2c3443347ea83ff5e39515bd47b632c8efa1124c Mon Sep 17 00:00:00 2001
+From: Jan Zeleny <jzeleny@redhat.com>
+Date: Tue, 15 May 2012 10:49:14 -0400
+Subject: [PATCH 18/19] Fixed issue in SELinux user maps
+
+There was an issue when IPA provider didn't set PAM_SUCCESS when
+successfully finished loading SELinux user maps. This lead to the map
+not being read in the responder.
+---
+ src/providers/ipa/ipa_session.c |    2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/providers/ipa/ipa_session.c b/src/providers/ipa/ipa_session.c
+index e23b0120e6c2ce1303f4e70190721721a99b124a..238acdde776520dbb69046b8d45ecac4569e5cbc 100644
+--- a/src/providers/ipa/ipa_session.c
++++ b/src/providers/ipa/ipa_session.c
+@@ -104,6 +104,7 @@ static void ipa_session_handler_done(struct tevent_req *req)
+     struct sysdb_attrs **maps;
+     bool in_transaction = false;
+     char *default_user;
++    struct pam_data *pd = talloc_get_type(breq->req_data, struct pam_data);
+     char *map_order;
+ 
+     ret = ipa_get_selinux_recv(req, breq, &map_count, &maps,
+@@ -140,6 +141,7 @@ static void ipa_session_handler_done(struct tevent_req *req)
+     in_transaction = false;
+ 
+ 
++    pd->pam_status = PAM_SUCCESS;
+     breq->fn(breq, DP_ERR_OK, EOK, "Success");
+     return;
+ 
+-- 
+1.7.10.1
+

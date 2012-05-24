@@ -1,0 +1,25 @@
+From a231d0b597a79b1a9a2617f543b1fef084532c9e Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 14 May 2012 15:04:38 +0200
+Subject: [PATCH 06/19] Fix libsss_hbac library version
+
+---
+ Makefile.am |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 2e13a9777a074e628b48bbd23626d019c2e5c617..e238b3538494a254c474518a1c4ea3fae7f975c8 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -492,7 +492,7 @@ libipa_hbac_la_SOURCES = \
+     src/providers/ipa/hbac_evaluator.c \
+     src/util/sss_utf8.c
+ libipa_hbac_la_LDFLAGS = \
+-    -version 1:0:1 \
++    -version-info 0:1:0 \
+     $(UNICODE_LIBS)
+ 
+ dist_pkgconfig_DATA += src/lib/idmap/sss_idmap.pc
+-- 
+1.7.10.1
+

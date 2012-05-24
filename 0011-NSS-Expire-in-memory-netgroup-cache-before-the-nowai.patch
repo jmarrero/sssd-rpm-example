@@ -1,0 +1,46 @@
+From 977de33c57278fe0d90a3f937c58046298ab8742 Mon Sep 17 00:00:00 2001
+From: Stephen Gallagher <sgallagh@redhat.com>
+Date: Wed, 16 May 2012 14:32:29 -0400
+Subject: [PATCH 11/19] NSS: Expire in-memory netgroup cache before the nowait
+ timeout
+
+The fact that we were keeping it in memory for the full duration
+of the cache timeout meant that we would never reap the benefits
+of the midpoint cache refresh.
+
+https://fedorahosted.org/sssd/ticket/1340
+---
+ src/responder/nss/nsssrv_netgroup.c |   10 +++++++++-
+ 1 file changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/src/responder/nss/nsssrv_netgroup.c b/src/responder/nss/nsssrv_netgroup.c
+index 83e79a2fae7f957264d452bbc39550cacb792774..593b7e435b1e8e504975d20a2295ce65cb60e7a0 100644
+--- a/src/responder/nss/nsssrv_netgroup.c
++++ b/src/responder/nss/nsssrv_netgroup.c
+@@ -416,6 +416,7 @@ static errno_t lookup_netgr_step(struct setent_step_ctx *step_ctx)
+     struct getent_ctx *netgr;
+     struct sysdb_ctx *sysdb;
+     char *name = NULL;
++    uint32_t lifetime;
+ 
+     /* Check each domain for this netgroup name */
+     while (dom) {
+@@ -531,7 +532,14 @@ static errno_t lookup_netgr_step(struct setent_step_ctx *step_ctx)
+                   name, dom->name));
+         netgr->ready = true;
+         netgr->found = true;
+-        set_netgr_lifetime(dom->netgroup_timeout, step_ctx, netgr);
++        if (step_ctx->nctx->cache_refresh_percent) {
++            lifetime = dom->netgroup_timeout *
++                (step_ctx->nctx->cache_refresh_percent / 100);
++        } else {
++            lifetime = dom->netgroup_timeout;
++        }
++        if (lifetime < 10) lifetime = 10;
++        set_netgr_lifetime(lifetime, step_ctx, netgr);
+         return EOK;
+     }
+ 
+-- 
+1.7.10.1
+

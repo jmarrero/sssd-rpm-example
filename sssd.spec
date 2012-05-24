@@ -12,11 +12,11 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.4
+%global ldb_version 1.1.6
 
 Name: sssd
 Version: 1.9.0
-Release: 1%{?dist}.beta1
+Release: 2%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -26,7 +26,27 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 
-Patch1001: FED01-Change-Kerberos-credential-cache-default-loca.patch
+#Fedora-specific: set the default credential cache location
+Patch0001: 0001-FEDORA-Change-Kerberos-credential-cache-default-loca.patch
+
+Patch0002: 0002-Potential-NULL-dereference-in-proxy-provider.patch
+Patch0003: 0003-Fix-typos-in-message-and-man-pages.patch
+Patch0004: 0004-Fixed-two-minor-memory-leaks.patch
+Patch0005: 0005-Rename-struct-dom_sid-to-struct-sss_dom_sid.patch
+Patch0006: 0006-Fix-libsss_hbac-library-version.patch
+Patch0007: 0007-NSS-keep-a-pointer-to-body-after-body-is-reallocated.patch
+Patch0008: 0008-Use-sized_string-correctly-in-FQDN-domains.patch
+Patch0009: 0009-RPM-Allow-running-make-rpms-on-RHEL-5-machines.patch
+Patch0010: 0010-Use-the-sysdb-attribute-name-not-LDAP-attribute-name.patch
+Patch0011: 0011-NSS-Expire-in-memory-netgroup-cache-before-the-nowai.patch
+Patch0012: 0012-Always-use-positional-arguments-in-translatable-stri.patch
+Patch0013: 0013-Simple-implementation-of-Netscape-password-warning-e.patch
+Patch0014: 0014-KRB5-Avoid-NULL-dereference-with-empty-keytab.patch
+Patch0015: 0015-Warn-to-syslog-when-dereference-requests-fail.patch
+Patch0016: 0016-Update-translation-sources.patch
+Patch0017: 0017-LDAP-nested-groups-Do-not-process-callback-with-_pos.patch
+Patch0018: 0018-Fixed-issue-in-SELinux-user-maps.patch
+Patch0019: 0019-NSS-Fix-segfault-when-mmap-cache-cannot-be-initializ.patch
 
 ### Dependencies ###
 
@@ -48,6 +68,7 @@ Requires(postun): systemd-units initscripts chkconfig /sbin/ldconfig
 %global dbpath %{sssdstatedir}/db
 %global pipepath %{sssdstatedir}/pipes
 %global pubconfpath %{sssdstatedir}/pubconf
+%global mcachepath %{sssdstatedir}/mc
 
 ### Build Dependencies ###
 
@@ -213,6 +234,7 @@ autoreconf -ivf
     --with-db-path=%{dbpath} \
     --with-pipe-path=%{pipepath} \
     --with-pubconf-path=%{pubconfpath} \
+    --with-mcache-path=%{mcachepath} \
     --with-init-dir=%{_initrddir} \
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
     --enable-nsslibdir=/%{_lib} \
@@ -336,6 +358,7 @@ rm -rf $RPM_BUILD_ROOT
 %attr(700,root,root) %dir %{dbpath}
 %attr(755,root,root) %dir %{pipepath}
 %attr(755,root,root) %dir %{pubconfpath}
+%attr(755,root,root) %dir %{mcachepath}
 %attr(700,root,root) %dir %{pipepath}/private
 %attr(750,root,root) %dir %{_var}/log/%{name}
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
@@ -486,6 +509,12 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Thu May 24 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-2.beta1
+- Fix several regressions since 1.5.x
+- Ensure that the RPM creates the /var/lib/sss/mc directory
+- Add support for Netscape password warning expiration control
+- Rebuild against libldb 1.1.6
+
 * Fri May 11 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-1.beta1
 - New upstream release 1.9.0 beta 1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.9.0beta1
