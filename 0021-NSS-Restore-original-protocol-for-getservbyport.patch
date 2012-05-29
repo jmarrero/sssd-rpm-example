@@ -1,0 +1,50 @@
+From 8126906ab783494204dc853c814b0882d2a76523 Mon Sep 17 00:00:00 2001
+From: Stephen Gallagher <sgallagh@redhat.com>
+Date: Fri, 25 May 2012 10:09:20 -0400
+Subject: [PATCH 21/21] NSS: Restore original protocol for getservbyport
+
+When fixing an endianness bug, we changed the protocol unnecessarily.
+---
+ src/responder/nss/nsssrv_services.c |    2 +-
+ src/sss_client/nss_services.c       |    5 +++--
+ 2 files changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/responder/nss/nsssrv_services.c b/src/responder/nss/nsssrv_services.c
+index db8a2ca132b4f47c4d6cd78ce99280486e22f2a0..2e539f13576d18c97d8c3bff2ced2fd5ed01290f 100644
+--- a/src/responder/nss/nsssrv_services.c
++++ b/src/responder/nss/nsssrv_services.c
+@@ -1050,7 +1050,7 @@ errno_t parse_getservbyport(TALLOC_CTX *mem_ctx,
+     SAFEALIGN_COPY_UINT16(&c, body, NULL);
+     port = ntohs(c);
+ 
+-    port_and_padding_len = 2 * sizeof(uint16_t);
++    port_and_padding_len = 2 * sizeof(uint16_t) + sizeof(uint32_t);
+     i = port_and_padding_len;
+     j = 0;
+ 
+diff --git a/src/sss_client/nss_services.c b/src/sss_client/nss_services.c
+index 8f25781a1ec188931157368a2e38067be23c0c00..159583d747fdd5b6dfbbda2c7a44b19a83ed1a1d 100644
+--- a/src/sss_client/nss_services.c
++++ b/src/sss_client/nss_services.c
+@@ -54,8 +54,8 @@ static void sss_nss_getservent_data_clean(void) {
+  *
+  * GETSERVBYPORT Request:
+  * 0-3: 16-bit port number in network byte order
+- * 4-7: Reserved/padding
+- * 8-X: Zero-terminated string (protocol)
++ * 4-15: Reserved/padding
++ * 16-X: Zero-terminated string (protocol)
+  * Protocol may be zero-length to imply "any"
+  *
+  * Replies:
+@@ -297,6 +297,7 @@ _nss_sss_getservbyport_r(int port, const char *protocol,
+ 
+     /* Padding */
+     SAFEALIGN_SET_UINT16(data + p, 0, &p);
++    SAFEALIGN_SET_UINT32(data + p, 0, &p);
+ 
+     if (protocol) {
+         memcpy(data + p, protocol, proto_len + 1);
+-- 
+1.7.10.2
+

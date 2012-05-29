@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 2%{?dist}.beta1
+Release: 3%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -47,6 +47,8 @@ Patch0016: 0016-Update-translation-sources.patch
 Patch0017: 0017-LDAP-nested-groups-Do-not-process-callback-with-_pos.patch
 Patch0018: 0018-Fixed-issue-in-SELinux-user-maps.patch
 Patch0019: 0019-NSS-Fix-segfault-when-mmap-cache-cannot-be-initializ.patch
+Patch0020: 0020-Send-16bit-protocol-numbers-from-the-sss_client.patch
+Patch0021: 0021-NSS-Restore-original-protocol-for-getservbyport.patch
 
 ### Dependencies ###
 
@@ -509,6 +511,10 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Tue May 29 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-3.beta1
+- Rebuild SSSD against ding-libs 0.3.0beta1
+- Fix endianness bug in service map protocol
+
 * Thu May 24 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-2.beta1
 - Fix several regressions since 1.5.x
 - Ensure that the RPM creates the /var/lib/sss/mc directory
