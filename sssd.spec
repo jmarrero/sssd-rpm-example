@@ -16,40 +16,15 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 4%{?dist}.beta1
+Release: 5%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta2.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-
-#Fedora-specific: set the default credential cache location
-Patch0001: 0001-FEDORA-Change-Kerberos-credential-cache-default-loca.patch
-
-Patch0002: 0002-Potential-NULL-dereference-in-proxy-provider.patch
-Patch0003: 0003-Fix-typos-in-message-and-man-pages.patch
-Patch0004: 0004-Fixed-two-minor-memory-leaks.patch
-Patch0005: 0005-Rename-struct-dom_sid-to-struct-sss_dom_sid.patch
-Patch0006: 0006-Fix-libsss_hbac-library-version.patch
-Patch0007: 0007-NSS-keep-a-pointer-to-body-after-body-is-reallocated.patch
-Patch0008: 0008-Use-sized_string-correctly-in-FQDN-domains.patch
-Patch0009: 0009-RPM-Allow-running-make-rpms-on-RHEL-5-machines.patch
-Patch0010: 0010-Use-the-sysdb-attribute-name-not-LDAP-attribute-name.patch
-Patch0011: 0011-NSS-Expire-in-memory-netgroup-cache-before-the-nowai.patch
-Patch0012: 0012-Always-use-positional-arguments-in-translatable-stri.patch
-Patch0013: 0013-Simple-implementation-of-Netscape-password-warning-e.patch
-Patch0014: 0014-KRB5-Avoid-NULL-dereference-with-empty-keytab.patch
-Patch0015: 0015-Warn-to-syslog-when-dereference-requests-fail.patch
-Patch0016: 0016-Update-translation-sources.patch
-Patch0017: 0017-LDAP-nested-groups-Do-not-process-callback-with-_pos.patch
-Patch0018: 0018-Fixed-issue-in-SELinux-user-maps.patch
-Patch0019: 0019-NSS-Fix-segfault-when-mmap-cache-cannot-be-initializ.patch
-Patch0020: 0020-Send-16bit-protocol-numbers-from-the-sss_client.patch
-Patch0021: 0021-NSS-Restore-original-protocol-for-getservbyport.patch
-Patch0022: 0022-Revert-the-client-packet-length-too-after-reverting-.patch
 
 ### Dependencies ###
 
@@ -60,7 +35,7 @@ Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: cyrus-sasl-gssapi%{?_isa}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
-Requires: krb5-libs >= 1.9
+Requires: krb5-libs >= 1.10
 Requires: keyutils-libs
 Requires(post): systemd-units initscripts chkconfig /sbin/ldconfig
 Requires(preun): systemd-units initscripts chkconfig
@@ -103,7 +78,7 @@ BuildRequires: pcre-devel
 BuildRequires: libxslt
 BuildRequires: libxml2
 BuildRequires: docbook-style-xsl
-BuildRequires: krb5-devel >= 1.9
+BuildRequires: krb5-devel >= 1.10
 BuildRequires: c-ares-devel
 BuildRequires: python-devel
 BuildRequires: check-devel
@@ -224,7 +199,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.8.91
+%setup -q -n %{name}-1.8.92
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -240,6 +215,8 @@ autoreconf -ivf
     --with-mcache-path=%{mcachepath} \
     --with-init-dir=%{_initrddir} \
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
+    --with-default-ccache-dir=/run/user/%U \
+    --with-default-ccname-template=DIR:%d/ccdir \
     --enable-nsslibdir=/%{_lib} \
     --enable-pammoddir=/%{_lib}/security \
     --disable-static \
@@ -379,7 +356,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man8/sssd.8*
 %{python_sitearch}/pysss.so
-%{python_sitelib}/*.py*
+%{python_sitelib}/SSSDConfig/*.py*
 
 %files client -f sssd_client.lang
 %defattr(-,root,root,-)
@@ -512,6 +489,17 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Fri Jun 15 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-5.beta2
+- New upstream release 1.9.0 beta 2
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.9.0beta2
+- Add support for the Kerberos DIR cache for storing multiple TGTs
+  automatically
+- Major performance enhancement when storing large groups in the cache
+- Major performance enhancement when performing initgroups() against Active
+  Directory
+- SSSDConfig data file default locations can now be set during configure for
+  easier packaging
+
 * Tue May 29 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-4.beta1
 - Fix regression in endianness patch
 
