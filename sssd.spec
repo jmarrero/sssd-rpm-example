@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 5%{?dist}.beta2
+Release: 6%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,6 +25,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta2.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+
+Patch0001: 0001-Fix-typo-breaking-DIR-cache-detection.patch
 
 ### Dependencies ###
 
@@ -489,6 +491,9 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Mon Jun 18 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-6.beta2
+- Fix accidental disabling of the DIR cache support
+
 * Fri Jun 15 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-5.beta2
 - New upstream release 1.9.0 beta 2
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.9.0beta2

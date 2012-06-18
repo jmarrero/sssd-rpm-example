@@ -1,0 +1,28 @@
+From 6adec5daccb1b942c9bb284df11792f50c564ee2 Mon Sep 17 00:00:00 2001
+From: Stephen Gallagher <sgallagh@redhat.com>
+Date: Mon, 18 Jun 2012 10:04:11 -0400
+Subject: [PATCH] Fix typo breaking DIR cache detection
+
+---
+ src/util/sss_krb5.h |    2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/util/sss_krb5.h b/src/util/sss_krb5.h
+index 4f2e67a7ff41e11bb2e6273196a74aecca626d3e..d56b3bdd53f6ff15cd0ac027e248c96d0775cded 100644
+--- a/src/util/sss_krb5.h
++++ b/src/util/sss_krb5.h
+@@ -41,11 +41,9 @@
+ #define KERBEROS_PWEXPIRE_WARNING_TIME (7 * 24 * 60 * 60)
+ #define KEYTAB_CLEAN_NAME keytab_name ? keytab_name : "default"
+ 
+-#if 0
+ #if defined HAVE_KRB5_CC_CACHE_MATCH && defined HAVE_KRB5_CC_GET_FULL_NAME
+ #define HAVE_KRB5_DIRCACHE 1
+ #endif
+-#endif
+ 
+ const char * KRB5_CALLCONV sss_krb5_get_error_message (krb5_context,
+                                                    krb5_error_code);
+-- 
+1.7.10.2
+
