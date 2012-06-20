@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 6%{?dist}.beta2
+Release: 7%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -31,14 +31,13 @@ Patch0001: 0001-Fix-typo-breaking-DIR-cache-detection.patch
 ### Dependencies ###
 
 Conflicts: selinux-policy < 3.10.0-46
-Requires: libldb = %{ldb_version}
-Requires: libtdb >= 1.1.3
+Requires: libldb%{?_isa} = %{ldb_version}
+Requires: libtdb%{?_isa} >= 1.1.3
 Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: cyrus-sasl-gssapi%{?_isa}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
-Requires: krb5-libs >= 1.10
-Requires: keyutils-libs
+Requires: krb5-libs%{?_isa} >= 1.10
 Requires(post): systemd-units initscripts chkconfig /sbin/ldconfig
 Requires(preun): systemd-units initscripts chkconfig
 Requires(postun): systemd-units initscripts chkconfig /sbin/ldconfig
@@ -92,7 +91,7 @@ BuildRequires: keyutils-libs-devel
 BuildRequires: libnl-devel
 BuildRequires: gettext-devel
 BuildRequires: pkgconfig
-BuildRequires: libunistring-devel
+BuildRequires: glib2-devel
 BuildRequires: findutils
 
 %description
@@ -224,7 +223,8 @@ autoreconf -ivf
     --disable-static \
     --disable-rpath \
     --with-test-dir=/dev/shm \
-    --enable-all-experimental-features
+    --enable-all-experimental-features \
+    --with-unicode-lib=glib2
 
 make %{?_smp_mflags} all docs
 
@@ -491,6 +491,11 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Jun 20 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-7.beta2
+- Switch unicode library from libunistring to Glib
+- Drop unnecessary explicit Requires on keyutils
+- Guarantee that versioned Requires include the correct architecture
+
 * Mon Jun 18 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-6.beta2
 - Fix accidental disabling of the DIR cache support
 
