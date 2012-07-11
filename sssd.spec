@@ -12,16 +12,16 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.6
+%global ldb_version 1.1.8
 
 Name: sssd
 Version: 1.9.0
-Release: 8%{?dist}.beta3
+Release: 9%{?dist}.beta4
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta3.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta4.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -199,7 +199,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.8.93
+%setup -q -n %{name}-1.8.94
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -329,6 +329,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/%{name}/libsss_ldap.so
 %{_libdir}/%{name}/libsss_proxy.so
 %{_libdir}/%{name}/libsss_simple.so
+%{_libdir}/%{name}/libsss_ad.so
 
 %{ldb_modulesdir}/memberof.so
 %{_bindir}/sss_ssh_authorizedkeys
@@ -355,6 +356,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sssd-krb5.5*
 %{_mandir}/man5/sssd-ldap.5*
 %{_mandir}/man5/sssd-simple.5*
+%{_mandir}/man5/sssd-ad.5*
 %{_mandir}/man8/sssd.8*
 %{python_sitearch}/pysss.so
 %{python_sitelib}/SSSDConfig/*.py*
@@ -491,6 +493,18 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Jul 11 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-9.beta4
+- New upstream release 1.9.0 beta 4
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.9.0beta4
+- Add a new AD provider to improve integration with Active Directory 2008 R2
+  or later servers
+- SUDO integration was completely rewritten. The new implementation works
+  with multiple domains and uses an improved refresh mechanism to download
+  only the necessary rules
+- The IPA authentication provider now supports subdomains
+- Fixed regression for setups that were setting default_tkt_enctypes
+  manually by reverting a previous workaround.
+
 * Mon Jun 25 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-8.beta3
 - New upstream release 1.9.0 beta 3
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.9.0beta3
