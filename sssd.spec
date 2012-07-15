@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 9%{?dist}.beta4
+Release: 10%{?dist}.beta4
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -313,6 +313,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_unitdir}/sssd.service
 %{_sbindir}/sssd
 
+%dir %{_libexecdir}/%{servicename}
 %{_libexecdir}/%{servicename}/krb5_child
 %{_libexecdir}/%{servicename}/ldap_child
 %{_libexecdir}/%{servicename}/proxy_child
@@ -324,6 +325,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/%{servicename}/sssd_sudo
 %{_libexecdir}/%{servicename}/sssd_pac
 
+%dir %{_libdir}/%{name}
 %{_libdir}/%{name}/libsss_ipa.so
 %{_libdir}/%{name}/libsss_krb5.so
 %{_libdir}/%{name}/libsss_ldap.so
@@ -347,6 +349,7 @@ rm -rf $RPM_BUILD_ROOT
 %ghost %attr(0600,root,root) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 %config(noreplace) %{_sysconfdir}/logrotate.d/sssd
 %config(noreplace) %{_sysconfdir}/rwtab.d/sssd
+%dir %{_datadir}/sssd
 %{_datadir}/sssd/sssd.api.conf
 %{_datadir}/sssd/sssd.api.d
 %{_mandir}/man1/sss_ssh_authorizedkeys.1*
@@ -359,6 +362,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sssd-ad.5*
 %{_mandir}/man8/sssd.8*
 %{python_sitearch}/pysss.so
+%dir %{python_sitelib}/SSSDConfig
 %{python_sitelib}/SSSDConfig/*.py*
 
 %files client -f sssd_client.lang
@@ -493,6 +497,9 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Wed Jul 11 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-10.beta4
+- Own several directories create during make install (#839782)
+
 * Wed Jul 11 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-9.beta4
 - New upstream release 1.9.0 beta 4
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.9.0beta4
