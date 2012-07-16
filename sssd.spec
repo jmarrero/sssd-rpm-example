@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 10%{?dist}.beta4
+Release: 11%{?dist}.beta4
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,6 +25,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta4.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+
+Patch0001: 0001-AD-Add-missing-DP-option-terminator.patch
 
 ### Dependencies ###
 
@@ -497,6 +499,10 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Fri Jul 16 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-11.beta4
+- Fix broken ARM build
+- Add missing DP_OPTION_TERMINATOR in AD provider options
+
 * Wed Jul 11 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-10.beta4
 - Own several directories create during make install (#839782)
 
