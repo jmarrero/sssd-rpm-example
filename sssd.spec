@@ -16,17 +16,16 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 11%{?dist}.beta4
+Release: 12%{?dist}.beta5
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta4.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta5.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 
-Patch0001: 0001-AD-Add-missing-DP-option-terminator.patch
 
 ### Dependencies ###
 
@@ -201,7 +200,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.8.94
+%setup -q -n %{name}-1.8.95
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -499,6 +498,17 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Thu Jul 19 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-12.beta5
+- New upstream release 1.9.0 beta 5
+- Obsoletes the patch for missing DP_OPTION_TERMINATOR in AD provider options
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.9.0beta5
+- Many fixes for the support for setting default SELinux user context from
+  FreeIPA, most notably fixed the specificity evaluation
+- Fixed an incorrect default in the krb5_canonicalize option of the AD
+  provider which was preventing password change operation
+- The shadowLastChange attribute value is now correctly updated with the
+  number of days since the Epoch, not seconds
+
 * Fri Jul 16 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-11.beta4
 - Fix broken ARM build
 - Add missing DP_OPTION_TERMINATOR in AD provider options
