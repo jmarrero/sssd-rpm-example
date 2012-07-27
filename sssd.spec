@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 12%{?dist}.beta5
+Release: 13%{?dist}.beta5
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -498,6 +498,9 @@ fi
 %postun -n libipa_hbac -p /sbin/ldconfig
 
 %changelog
+* Fri Jul 27 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.9.0-13.beta5
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_18_Mass_Rebuild
+
 * Thu Jul 19 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-12.beta5
 - New upstream release 1.9.0 beta 5
 - Obsoletes the patch for missing DP_OPTION_TERMINATOR in AD provider options
