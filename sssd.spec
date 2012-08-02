@@ -12,16 +12,16 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.8
+%global ldb_version 1.1.9
 
 Name: sssd
 Version: 1.9.0
-Release: 13%{?dist}.beta5
+Release: 14%{?dist}.beta6
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta5.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta6.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -37,9 +37,9 @@ Requires: cyrus-sasl-gssapi%{?_isa}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires: krb5-libs%{?_isa} >= 1.10
-Requires(post): systemd-units initscripts chkconfig /sbin/ldconfig
+Requires(post): systemd-units initscripts chkconfig
 Requires(preun): systemd-units initscripts chkconfig
-Requires(postun): systemd-units initscripts chkconfig /sbin/ldconfig
+Requires(postun): systemd-units initscripts chkconfig
 
 %global servicename sssd
 %global sssdstatedir %{_localstatedir}/lib/sss
@@ -105,6 +105,8 @@ services for projects like FreeIPA.
 Summary: SSSD Client libraries for NSS and PAM
 Group: Applications/System
 License: LGPLv3+
+Requires(post): /sbin/ldconfig
+Requires(postun): /sbin/ldconfig
 
 %description client
 Provides the libraries needed by the PAM and NSS stacks to connect to the SSSD
@@ -127,6 +129,8 @@ use with ldap_default_authtok_type = obfuscated_password.
 Summary: FreeIPA Idmap library
 Group: Development/Libraries
 License: LGPLv3+
+Requires(post): /sbin/ldconfig
+Requires(postun): /sbin/ldconfig
 
 %description -n libsss_idmap
 Utility library to SIDs to Unix uids and gids
@@ -144,6 +148,8 @@ Utility library to SIDs to Unix uids and gids
 Summary: FreeIPA HBAC Evaluator library
 Group: Development/Libraries
 License: LGPLv3+
+Requires(post): /sbin/ldconfig
+Requires(postun): /sbin/ldconfig
 
 %description -n libipa_hbac
 Utility library to validate FreeIPA HBAC rules for authorization requests
@@ -171,6 +177,8 @@ used by Python applications.
 Summary: A library to allow communication between SUDO and SSSD
 Group: Development/Libraries
 License: LGPLv3+
+Requires(post): /sbin/ldconfig
+Requires(postun): /sbin/ldconfig
 
 %description -n libsss_sudo
 A utility library to allow communication between SUDO and SSSD
@@ -200,7 +208,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.8.95
+%setup -q -n %{name}-1.8.96
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -361,6 +369,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sssd-ldap.5*
 %{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man5/sssd-ad.5*
+%{_mandir}/man5/sssd-sudo.5*
 %{_mandir}/man8/sssd.8*
 %{python_sitearch}/pysss.so
 %dir %{python_sitelib}/SSSDConfig
@@ -389,6 +398,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sss_obfuscate
 %{_sbindir}/sss_cache
 %{_sbindir}/sss_debuglevel
+%{_sbindir}/sss_seed
 %{_mandir}/man8/sss_groupadd.8*
 %{_mandir}/man8/sss_groupdel.8*
 %{_mandir}/man8/sss_groupmod.8*
@@ -399,6 +409,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sss_obfuscate.8*
 %{_mandir}/man8/sss_cache.8*
 %{_mandir}/man8/sss_debuglevel.8*
+%{_mandir}/man8/sss_seed.8*
 
 %files -n libsss_idmap
 %defattr(-,root,root,-)
@@ -453,8 +464,6 @@ A utility library to allow communication between Autofs and SSSD
 %{_libdir}/sssd/modules/libsss_autofs.so*
 
 %post
-/sbin/ldconfig
-
 if [ $1 -ge 1 ] ; then
     # Initial installation
     /bin/systemctl daemon-reload >/dev/null 2>&1 || :
@@ -481,7 +490,6 @@ fi
 
 
 %postun
-/sbin/ldconfig
 /bin/systemctl daemon-reload >/dev/null 2>&1 || :
 if [ $1 -ge 1 ] ; then
     # On upgrade, reload init system configuration if we changed unit files
@@ -497,7 +505,31 @@ fi
 
 %postun -n libipa_hbac -p /sbin/ldconfig
 
+%post -n libsss_idmap -p /sbin/ldconfig
+
+%postun -n libsss_idmap -p /sbin/ldconfig
+
+%post -n libsss_sudo -p /sbin/ldconfig
+
+%postun -n libsss_sudo -p /sbin/ldconfig
+
 %changelog
+* Thu Aug 02 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-13.beta6
+- New upstream release 1.9.0 beta 6
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.9.0beta6
+- A new option, override_shell was added. If this option is set, all users
+  managed by SSSD will have their shell set to its value.
+- Fixes for the support for setting default SELinux user context from FreeIPA.
+- Fixed a regression introduced in beta 5 that broke LDAP SASL binds
+- The SSSD supports the concept of a Primary Server and a Back Up Server in
+  failover
+- A new command-line tool sss_seed is available to help prime the cache with
+  a user record when deploying a new machine
+- SSSD is now able to discover and save the domain-realm mappings
+  between an IPA server and a trusted Active Directory server.
+- Packaging changes to fix ldconfig usage in subpackages (#843995)
+- Rebuild against libldb 1.1.9
+
 * Fri Jul 27 2012 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.9.0-13.beta5
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_18_Mass_Rebuild
 
