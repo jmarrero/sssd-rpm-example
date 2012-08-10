@@ -1,0 +1,24 @@
+From ffcf27b0b773b580289d596f796aaf86c45ba920 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 8 Aug 2012 19:26:35 +0200
+Subject: [PATCH] Abort PAM access phase if HBAC does not return PAM_SUCCESS
+
+---
+ src/providers/data_provider_be.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/providers/data_provider_be.c b/src/providers/data_provider_be.c
+index 2e4ee0754e62a48248cc7537243705b3a1004502..dcce69ca42fe4b8f216a69a6877e0aeaf20872cc 100644
+--- a/src/providers/data_provider_be.c
++++ b/src/providers/data_provider_be.c
+@@ -793,6 +793,7 @@ static void be_pam_handler_callback(struct be_req *req,
+     pd = talloc_get_type(req->req_data, struct pam_data);
+ 
+     if (pd->cmd == SSS_PAM_ACCT_MGMT &&
++        pd->pam_status == PAM_SUCCESS &&
+         req->phase == REQ_PHASE_ACCESS &&
+         dp_err_type == DP_ERR_OK) {
+         if (!becli->bectx->bet_info[BET_SELINUX].bet_ops) {
+-- 
+1.7.11.2
+

@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 14%{?dist}.beta6
+Release: 15%{?dist}.beta6
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,6 +25,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta6.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001:  0001-Abort-PAM-access-phase-if-HBAC-does-not-return-PAM_S.patch
 
 
 ### Dependencies ###
@@ -514,6 +515,10 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Fri Aug 10 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-14.beta6
+- Don't discard HBAC rule processing result if SELinux is on
+  Resolves: rhbz#846792 (CVE-2012-3462)
+
 * Thu Aug 02 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-13.beta6
 - New upstream release 1.9.0 beta 6
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.9.0beta6
