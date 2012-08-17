@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 15%{?dist}.beta6
+Release: 16%{?dist}.beta6
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -26,6 +26,8 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001:  0001-Abort-PAM-access-phase-if-HBAC-does-not-return-PAM_S.patch
+Patch0002:  0002-Do-not-try-to-remove-the-temp-login-file-if-already-.patch
+Patch0003:  0003-Only-create-the-SELinux-login-file-if-there-are-mapp.patch
 
 
 ### Dependencies ###
@@ -515,6 +517,10 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Fri Aug 17 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-16.beta6
+- Only create the SELinux login file if there are SELinux mappings on
+  the IPA server
+
 * Fri Aug 10 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-14.beta6
 - Don't discard HBAC rule processing result if SELinux is on
   Resolves: rhbz#846792 (CVE-2012-3462)
