@@ -12,11 +12,11 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.9
+%global ldb_version 1.1.10
 
 Name: sssd
 Version: 1.9.0
-Release: 16%{?dist}.beta6
+Release: 17%{?dist}.beta6
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -517,6 +517,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Mon Aug 20 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-17.beta6
+- Rebuild against libldb 1.10
+
 * Fri Aug 17 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-16.beta6
 - Only create the SELinux login file if there are SELinux mappings on
   the IPA server
