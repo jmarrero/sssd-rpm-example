@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 17%{?dist}.beta6
+Release: 18%{?dist}.beta6
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -28,7 +28,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 Patch0001:  0001-Abort-PAM-access-phase-if-HBAC-does-not-return-PAM_S.patch
 Patch0002:  0002-Do-not-try-to-remove-the-temp-login-file-if-already-.patch
 Patch0003:  0003-Only-create-the-SELinux-login-file-if-there-are-mapp.patch
-
+Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
 
@@ -228,7 +228,7 @@ autoreconf -ivf
     --with-init-dir=%{_initrddir} \
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
     --with-default-ccache-dir=/run/user/%U \
-    --with-default-ccname-template=DIR:%d/ccdir \
+    --with-default-ccname-template=DIR:%d/krb5cc \
     --enable-nsslibdir=/%{_lib} \
     --enable-pammoddir=/%{_lib}/security \
     --disable-static \
@@ -517,6 +517,11 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Fri Aug 24 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-18.beta6
+- Change the default ccache location to DIR:/run/user/${UID}/krb5cc
+  and patch man page accordingly
+- Resolves: rhbz#851304
+
 * Mon Aug 20 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-17.beta6
 - Rebuild against libldb 1.10
 
