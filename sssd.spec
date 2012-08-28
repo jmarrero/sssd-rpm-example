@@ -12,11 +12,11 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.10
+%global ldb_version 1.1.11
 
 Name: sssd
 Version: 1.9.0
-Release: 18%{?dist}.beta6
+Release: 19%{?dist}.beta6
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -517,6 +517,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Tue Aug 28 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-19.beta6
+- Rebuild against libldb 1.11
+
 * Fri Aug 24 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-18.beta6
 - Change the default ccache location to DIR:/run/user/${UID}/krb5cc
   and patch man page accordingly
