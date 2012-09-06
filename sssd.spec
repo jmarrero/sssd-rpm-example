@@ -16,12 +16,12 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 20%{?dist}.beta6
+Release: 21%{?dist}.beta7
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta6.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta7.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -182,6 +182,7 @@ Group: Development/Libraries
 License: LGPLv3+
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
+Requires: sssd = %{version}-%{release}
 
 %description -n libsss_sudo
 A utility library to allow communication between SUDO and SSSD
@@ -211,7 +212,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.8.96
+%setup -q -n %{name}-1.8.97
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -375,6 +376,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sssd-sudo.5*
 %{_mandir}/man8/sssd.8*
 %{python_sitearch}/pysss.so
+%{python_sitearch}/pysss_murmur.so
 %dir %{python_sitelib}/SSSDConfig
 %{python_sitelib}/SSSDConfig/*.py*
 
@@ -517,6 +519,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Thu Sep 06 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-21.beta7
+- New upstream release 1.9.0 beta7
+
 * Mon Sep 03 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-20.beta6
 - Rebuild against libldb 1.12
 
