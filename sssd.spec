@@ -25,9 +25,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta7.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001:  0001-Abort-PAM-access-phase-if-HBAC-does-not-return-PAM_S.patch
-Patch0002:  0002-Do-not-try-to-remove-the-temp-login-file-if-already-.patch
-Patch0003:  0003-Only-create-the-SELinux-login-file-if-there-are-mapp.patch
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -521,6 +518,7 @@ fi
 %changelog
 * Thu Sep 06 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-21.beta7
 - New upstream release 1.9.0 beta7
+- obsoletes patches #1-#3
 
 * Mon Sep 03 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-20.beta6
 - Rebuild against libldb 1.12
