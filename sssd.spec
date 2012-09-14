@@ -16,12 +16,12 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 21%{?dist}.beta7
+Release: 22%{?dist}.rc1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta7.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}rc1.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -209,7 +209,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.8.97
+%setup -q -n %{name}-1.8.98
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -237,9 +237,6 @@ autoreconf -ivf
 make %{?_smp_mflags} all docs
 
 %check
-# 'patch' doesn't create the new tests with the executable flag
-chmod +x src/tests/pyhbac-test.py
-
 export CK_TIMEOUT_MULTIPLIER=10
 make %{?_smp_mflags} check
 unset CK_TIMEOUT_MULTIPLIER
@@ -516,6 +513,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Fri Sep 14 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-22.rc1
+- New upstream release 1.9.0 rc1
+
 * Thu Sep 06 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-21.beta7
 - New upstream release 1.9.0 beta7
 - obsoletes patches #1-#3
