@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 23%{?dist}
+Release: 24%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -47,7 +47,6 @@ Requires(postun): systemd-units initscripts chkconfig
 %global pipepath %{sssdstatedir}/pipes
 %global mcpath %{sssdstatedir}/mc
 %global pubconfpath %{sssdstatedir}/pubconf
-%global mcachepath %{sssdstatedir}/mc
 
 ### Build Dependencies ###
 
@@ -224,7 +223,7 @@ autoreconf -ivf
     --with-db-path=%{dbpath} \
     --with-pipe-path=%{pipepath} \
     --with-pubconf-path=%{pubconfpath} \
-    --with-mcache-path=%{mcachepath} \
+    --with-mcache-path=%{mcpath} \
     --with-init-dir=%{_initrddir} \
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
     --with-default-ccache-dir=/run/user/%U \
@@ -358,7 +357,6 @@ rm -rf $RPM_BUILD_ROOT
 %attr(755,root,root) %dir %{pipepath}
 %attr(755,root,root) %dir %{pubconfpath}
 %attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
-%attr(755,root,root) %dir %{mcachepath}
 %attr(700,root,root) %dir %{pipepath}/private
 %attr(750,root,root) %dir %{_var}/log/%{name}
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
@@ -522,8 +520,12 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Tue Sep 25 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-24
+- Use mcpath insted of mcachepath macro to be consistent with
+  upsteam spec file
+
 * Tue Sep 25 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-23
-- New upstream release 1.9.0 rc1
+- New upstream release 1.9.0
 
 * Fri Sep 14 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-22.rc1
 - New upstream release 1.9.0 rc1
