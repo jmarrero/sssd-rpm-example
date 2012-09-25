@@ -91,6 +91,7 @@ BuildRequires: libnl-devel
 BuildRequires: gettext-devel
 BuildRequires: pkgconfig
 BuildRequires: glib2-devel
+BuildRequires: diffstat
 BuildRequires: findutils
 BuildRequires: samba4-devel >= samba4-4.0.0-59beta2
 BuildRequires: selinux-policy-targeted
