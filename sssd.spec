@@ -16,12 +16,12 @@
 
 Name: sssd
 Version: 1.9.0
-Release: 22%{?dist}.rc1
+Release: 23%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}rc1.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -45,6 +45,7 @@ Requires(postun): systemd-units initscripts chkconfig
 %global sssdstatedir %{_localstatedir}/lib/sss
 %global dbpath %{sssdstatedir}/db
 %global pipepath %{sssdstatedir}/pipes
+%global mcpath %{sssdstatedir}/mc
 %global pubconfpath %{sssdstatedir}/pubconf
 %global mcachepath %{sssdstatedir}/mc
 
@@ -93,6 +94,7 @@ BuildRequires: pkgconfig
 BuildRequires: glib2-devel
 BuildRequires: findutils
 BuildRequires: samba4-devel >= samba4-4.0.0-59beta2
+BuildRequires: selinux-policy-targeted
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -209,7 +211,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.8.98
+%setup -q -n %{name}-1.9.0
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -231,8 +233,7 @@ autoreconf -ivf
     --enable-pammoddir=/%{_lib}/security \
     --disable-static \
     --disable-rpath \
-    --with-test-dir=/dev/shm \
-    --enable-all-experimental-features
+    --with-test-dir=/dev/shm
 
 make %{?_smp_mflags} all docs
 
@@ -280,12 +281,16 @@ do
 done
 
 touch sssd_tools.lang
+touch sssd_client.lang
 for man in `find $RPM_BUILD_ROOT/%{_mandir}/??/man?/ -type f | sed -e "s#$RPM_BUILD_ROOT/%{_mandir}/##"`
 do
     lang=`echo $man | cut -c 1-2`
     case `basename $man` in
         sss_*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_tools.lang
+            ;;
+        sssd_krb5_*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_client.lang
             ;;
         pam_sss*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_client.lang
@@ -347,8 +352,12 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{sssdstatedir}
 %dir %{_localstatedir}/cache/krb5rcache
 %attr(700,root,root) %dir %{dbpath}
+%attr(755,root,root) %dir %{mcpath}
+%ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/passwd
+%ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/group
 %attr(755,root,root) %dir %{pipepath}
 %attr(755,root,root) %dir %{pubconfpath}
+%attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
 %attr(755,root,root) %dir %{mcachepath}
 %attr(700,root,root) %dir %{pipepath}/private
 %attr(750,root,root) %dir %{_var}/log/%{name}
@@ -513,6 +522,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Tue Sep 25 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-23
+- New upstream release 1.9.0 rc1
+
 * Fri Sep 14 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-22.rc1
 - New upstream release 1.9.0 rc1
 
