@@ -12,11 +12,11 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.12
+%global ldb_version 1.1.13
 
 Name: sssd
 Version: 1.9.0
-Release: 24%{?dist}
+Release: 25%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -521,6 +521,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Wed Oct 03 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-25
+- require the latest libldb
+
 * Tue Sep 25 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-24
 - Use mcpath insted of mcachepath macro to be consistent with
   upsteam spec file
