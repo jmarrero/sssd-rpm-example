@@ -15,8 +15,8 @@
 %global ldb_version 1.1.13
 
 Name: sssd
-Version: 1.9.0
-Release: 25%{?dist}
+Version: 1.9.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -211,7 +211,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.9.0
+%setup -q
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -521,7 +521,10 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
-* Wed Oct 03 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-25
+* Sun Oct 07 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.1-1
+- New upstream release 1.9.1
+
+* Wed Oct 03 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-24
 - require the latest libldb
 
 * Tue Sep 25 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.0-24
