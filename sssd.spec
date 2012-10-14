@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.2
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -522,6 +522,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Sun Oct 14 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.2-2
+- Include the 1.9.2 tarball
+
 * Sun Oct 14 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.2-1
 - New upstream release 1.9.2
 
