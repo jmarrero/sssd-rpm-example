@@ -15,7 +15,7 @@
 %global ldb_version 1.1.13
 
 Name: sssd
-Version: 1.9.1
+Version: 1.9.2
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -124,8 +124,11 @@ Requires: sssd = %{version}-%{release}
 Provides userspace tools for manipulating users, groups, and nested groups in
 SSSD when using id_provider = local in /etc/sssd/sssd.conf.
 
-Also provides a userspace tool for generating an obfuscated LDAP password for
-use with ldap_default_authtok_type = obfuscated_password.
+Also provides several other administrative tools:
+    * sss_cache to expire cached entries
+    * sss_debuglevel to change the debug level on the fly
+    * sss_seed which pre-creates a user entry for use in kickstarts
+    * sss_obfuscate for generating an obfuscated LDAP password
 
 %package -n libsss_idmap
 Summary: FreeIPA Idmap library
@@ -135,7 +138,7 @@ Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
 %description -n libsss_idmap
-Utility library to SIDs to Unix uids and gids
+Utility library to convert SIDs to Unix uids and gids
 
 %package -n libsss_idmap-devel
 Summary: FreeIPA Idmap library
@@ -457,13 +460,11 @@ A utility library to allow communication between Autofs and SSSD
 %files -n libsss_sudo
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
-%{_libdir}/libsss_sudo.so.*
+%{_libdir}/libsss_sudo.so*
 
 %files -n libsss_sudo-devel
 %doc libsss_sudo_doc/html
 %{_includedir}/sss_sudo.h
-%{_libdir}/libsss_sudo.so
-%{_libdir}/pkgconfig/libsss_sudo.pc
 
 %files -n libsss_autofs
 %defattr(-,root,root,-)
@@ -521,6 +522,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Sun Oct 14 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.2-1
+- New upstream release 1.9.2
+
 * Sun Oct 07 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.1-1
 - New upstream release 1.9.1
 
