@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.2
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -125,7 +125,6 @@ Provides userspace tools for manipulating users, groups, and nested groups in
 SSSD when using id_provider = local in /etc/sssd/sssd.conf.
 
 Also provides several other administrative tools:
-    * sss_cache to expire cached entries
     * sss_debuglevel to change the debug level on the fly
     * sss_seed which pre-creates a user entry for use in kickstarts
     * sss_obfuscate for generating an obfuscated LDAP password
@@ -289,6 +288,9 @@ for man in `find $RPM_BUILD_ROOT/%{_mandir}/??/man?/ -type f | sed -e "s#$RPM_BU
 do
     lang=`echo $man | cut -c 1-2`
     case `basename $man` in
+        sss_cache*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd.lang
+            ;;
         sss_*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_tools.lang
             ;;
@@ -351,6 +353,7 @@ rm -rf $RPM_BUILD_ROOT
 %{ldb_modulesdir}/memberof.so
 %{_bindir}/sss_ssh_authorizedkeys
 %{_bindir}/sss_ssh_knownhostsproxy
+%{_sbindir}/sss_cache
 
 %dir %{sssdstatedir}
 %dir %{_localstatedir}/cache/krb5rcache
@@ -380,6 +383,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sssd-ad.5*
 %{_mandir}/man5/sssd-sudo.5*
 %{_mandir}/man8/sssd.8*
+%{_mandir}/man8/sss_cache.8*
+
 %{python_sitearch}/pysss.so
 %{python_sitearch}/pysss_murmur.so
 %dir %{python_sitelib}/SSSDConfig
@@ -406,7 +411,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sss_groupmod
 %{_sbindir}/sss_groupshow
 %{_sbindir}/sss_obfuscate
-%{_sbindir}/sss_cache
 %{_sbindir}/sss_debuglevel
 %{_sbindir}/sss_seed
 %{_mandir}/man8/sss_groupadd.8*
@@ -417,7 +421,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sss_userdel.8*
 %{_mandir}/man8/sss_usermod.8*
 %{_mandir}/man8/sss_obfuscate.8*
-%{_mandir}/man8/sss_cache.8*
 %{_mandir}/man8/sss_debuglevel.8*
 %{_mandir}/man8/sss_seed.8*
 
@@ -522,6 +525,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Thu Oct 18 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.2-3
+- Move the sss_cache tool to the main package
+
 * Sun Oct 14 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.2-2
 - Include the 1.9.2 tarball
 
