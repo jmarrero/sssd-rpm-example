@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.2
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -26,6 +26,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001:  0001-LDAP-Check-validity-of-naming_context.patch
+Patch0002:  0002-Fix-two-errors-in-the-nss-responder.patch
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -526,6 +527,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Tue Oct 30 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.2-5
+- Resolve groups from AD correctly
+
 * Tue Oct 30 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.2-4
 - Check the validity of naming context
 
