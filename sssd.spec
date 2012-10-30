@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.2
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,6 +25,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001:  0001-LDAP-Check-validity-of-naming_context.patch
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -525,6 +526,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Tue Oct 30 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.2-4
+- Check the validity of naming context
+
 * Thu Oct 18 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.2-3
 - Move the sss_cache tool to the main package
 

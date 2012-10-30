@@ -1,0 +1,26 @@
+From 78fb6ec085ba14e513361e42ed9285888ac319e3 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 15 Oct 2012 17:39:14 +0200
+Subject: [PATCH] LDAP: Check validity of naming_context
+
+https://fedorahosted.org/sssd/ticket/1581
+
+If the namingContext attribute had no values or multiple values, then
+our code would dereference a NULL pointer.
+
+diff --git a/src/providers/ldap/sdap.c b/src/providers/ldap/sdap.c
+index cdc8b1f18cb38b43a83d734bb5237d5379831b53..f5b1f95f0eaa8e6b5ea9d77c1d7226c05d366104 100644
+--- a/src/providers/ldap/sdap.c
++++ b/src/providers/ldap/sdap.c
+@@ -746,7 +746,7 @@ static char *get_naming_context(TALLOC_CTX *mem_ctx,
+      * a zero-length namingContexts value in some situations. In this
+      * case, we should return it as NULL so things fail gracefully.
+      */
+-    if (naming_context[0] == '\0') {
++    if (naming_context && naming_context[0] == '\0') {
+         talloc_zfree(naming_context);
+     }
+ 
+-- 
+1.7.12.1
+
