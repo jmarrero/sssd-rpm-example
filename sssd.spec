@@ -12,11 +12,11 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.13
+%global ldb_version 1.1.14
 
 Name: sssd
-Version: 1.9.2
-Release: 5%{?dist}
+Version: 1.9.3
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,8 +25,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001:  0001-LDAP-Check-validity-of-naming_context.patch
-Patch0002:  0002-Fix-two-errors-in-the-nss-responder.patch
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -483,7 +481,7 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %preun
-if [ $1 = 0 ]; then
+if [ $1 -eq 0 ]; then
      # Package removal, not upgrade
     /bin/systemctl --no-reload disable sssd.service > /dev/null 2>&1 || :
     /bin/systemctl stop sssd.service > /dev/null 2>&1 || :
@@ -505,8 +503,6 @@ fi
 %postun
 /bin/systemctl daemon-reload >/dev/null 2>&1 || :
 if [ $1 -ge 1 ] ; then
-    # On upgrade, reload init system configuration if we changed unit files
-    /bin/systemctl daemon-reload >/dev/null 2>&1 || :
     /bin/systemctl try-restart sssd.service >/dev/null 2>&1 || :
 fi
 
@@ -527,6 +523,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Thu Dec 06 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.3-1
+- New upstream release 1.9.3
+
 * Tue Oct 30 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.2-5
 - Resolve groups from AD correctly
 
