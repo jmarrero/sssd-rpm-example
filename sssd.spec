@@ -15,7 +15,7 @@
 %global ldb_version 1.1.14
 
 Name: sssd
-Version: 1.9.3
+Version: 1.9.4
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -523,6 +523,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Mon Jan 28 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-1
+- New upstream release 1.9.4
+
 * Thu Dec 06 2012 Jakub Hrozek <jhrozek@redhat.com> - 1.9.3-1
 - New upstream release 1.9.3
 
