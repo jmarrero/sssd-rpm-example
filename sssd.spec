@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.4
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -523,6 +523,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Tue Jan 29 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-2
+- Fix changelog dates to make F19 rpmbuild happy
+
 * Mon Jan 28 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-1
 - New upstream release 1.9.4
 
@@ -616,7 +619,7 @@ fi
 - The shadowLastChange attribute value is now correctly updated with the
   number of days since the Epoch, not seconds
 
-* Fri Jul 16 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-11.beta4
+* Mon Jul 16 2012 Stephen Gallagher <sgallagh@redhat.com> - 1.9.0-11.beta4
 - Fix broken ARM build
 - Add missing DP_OPTION_TERMINATOR in AD provider options
 
@@ -1171,7 +1174,7 @@ fi
 - This impacted the Authconfig UI
 - Ensure that SASL binds to LDAP auto-retry when interrupted by a signal
 
-* Tue Mar 22 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.0-2
+* Tue Mar 23 2010 Stephen Gallagher <sgallagh@redhat.com> - 1.1.0-2
 - Release SSSD 1.1.0 final
 - Fix two potential segfaults
 - Fix memory leak in monitor
