@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.4
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,6 +25,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001:  0001-krb-recreate-ccache-if-it-was-deleted.patch
+
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -523,6 +525,11 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Wed Jan 30 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-3
+- Recreate Kerberos ccache directory if it's missing
+- Resolves: rhbz#853558 - [sssd[krb5_child[PID]]]: Credential cache
+                          directory /run/user/UID/ccdir does not exist
+
 * Tue Jan 29 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-2
 - Fix changelog dates to make F19 rpmbuild happy
 
