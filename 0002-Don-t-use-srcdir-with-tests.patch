@@ -1,0 +1,30 @@
+From 2cdcd10751f2e3f152124f698ae35d7947ca4771 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Thu, 31 Jan 2013 18:52:08 +0100
+Subject: [PATCH] Don't use srcdir with tests
+
+Fixes build with automake 1.13 or newer.
+---
+ Makefile.am | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 8a47af8ddb4eb274d390ec0bf3010736cb23b992..64708216103e48facf780f246de5668c8e0b26a7 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -146,9 +146,9 @@ check_PROGRAMS = \
+ PYTHON_TESTS =
+ 
+ if BUILD_PYTHON_BINDINGS
+-PYTHON_TESTS += $(srcdir)/src/config/SSSDConfigTest.py \
+-                $(srcdir)/src/tests/pyhbac-test.py \
+-                $(srcdir)/src/tests/pysss_murmur-test.py
++PYTHON_TESTS += src/config/SSSDConfigTest.py \
++                src/tests/pyhbac-test.py \
++                src/tests/pysss_murmur-test.py
+ endif
+ 
+ TESTS = \
+-- 
+1.8.1
+

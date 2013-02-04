@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.4
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -26,6 +26,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001:  0001-krb-recreate-ccache-if-it-was-deleted.patch
+Patch0002:  0002-Don-t-use-srcdir-with-tests.patch
 
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
@@ -525,6 +526,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Mon Feb 04 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-4
+- Fix build with new automake versions
+
 * Wed Jan 30 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-3
 - Recreate Kerberos ccache directory if it's missing
 - Resolves: rhbz#853558 - [sssd[krb5_child[PID]]]: Credential cache
