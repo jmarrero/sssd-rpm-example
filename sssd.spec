@@ -12,11 +12,11 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.14
+%global ldb_version 1.1.15
 
 Name: sssd
 Version: 1.9.4
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -526,6 +526,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Thu Feb 07 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-5
+- Rebuild against new libldb
+
 * Mon Feb 04 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-4
 - Fix build with new automake versions
 
