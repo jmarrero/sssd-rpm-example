@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.4
-Release: 7%{?dist}
+Release: 8%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -29,6 +29,7 @@ Patch0001:  0001-krb-recreate-ccache-if-it-was-deleted.patch
 Patch0002:  0002-Don-t-use-srcdir-with-tests.patch
 Patch0003:  0003-krb5-include-backwards-compatible-declaration-of-krb.patch
 Patch0004:  0004-subdomains-replace-invalid-characters-with-underscor.patch
+Patch0005:  0005-Fix-the-krb5-password-expiration-warning.patch
 
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
@@ -528,6 +529,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Thu Feb 14 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-8
+- Fix the Kerberos password expiration warning (#912223)
+
 * Thu Feb 14 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-7
 - Do not write out dots in the domain-realm mapping file (#905650)
 
