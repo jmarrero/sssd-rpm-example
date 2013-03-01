@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.4
-Release: 8%{?dist}
+Release: 9%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -30,6 +30,7 @@ Patch0002:  0002-Don-t-use-srcdir-with-tests.patch
 Patch0003:  0003-krb5-include-backwards-compatible-declaration-of-krb.patch
 Patch0004:  0004-subdomains-replace-invalid-characters-with-underscor.patch
 Patch0005:  0005-Fix-the-krb5-password-expiration-warning.patch
+Patch0006:  0006-BUILD-Build-shared-components-as-an-internal-shared-.patch
 
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
@@ -356,6 +357,14 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/%{name}/libsss_simple.so
 %{_libdir}/%{name}/libsss_ad.so
 
+#Internal shared libraries
+%{_libdir}/%{name}/libsss_child.so
+%{_libdir}/%{name}/libsss_crypt.so
+%{_libdir}/%{name}/libsss_debug.so
+%{_libdir}/%{name}/libsss_krb5_common.so
+%{_libdir}/%{name}/libsss_ldap_common.so
+%{_libdir}/%{name}/libsss_util.so
+
 %{ldb_modulesdir}/memberof.so
 %{_bindir}/sss_ssh_authorizedkeys
 %{_bindir}/sss_ssh_knownhostsproxy
@@ -529,6 +538,10 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Fri Mar 01 2013 Stpehen Gallagher <sgallagh@redhat.com> - 1.9.5-9
+- Split internal helper libraries into a shared object
+- Significantly reduce disk-space usage
+
 * Thu Feb 14 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.4-8
 - Fix the Kerberos password expiration warning (#912223)
 
