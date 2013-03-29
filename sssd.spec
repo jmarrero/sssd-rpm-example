@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.9.4
-Release: 9%{?dist}
+Release: 10%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -538,7 +538,10 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
-* Fri Mar 01 2013 Stpehen Gallagher <sgallagh@redhat.com> - 1.9.5-9
+* Fri Mar 29 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.5-10
+- Add a patch to fix krb5 unit tests
+
+* Fri Mar 01 2013 Stephen Gallagher <sgallagh@redhat.com> - 1.9.4-9
 - Split internal helper libraries into a shared object
 - Significantly reduce disk-space usage
 

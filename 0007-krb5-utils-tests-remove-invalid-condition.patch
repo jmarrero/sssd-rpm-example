@@ -1,0 +1,27 @@
+From ac821fee0289abce3d3afc2878e06341c33ff6b9 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 13 Mar 2013 11:51:18 +0100
+Subject: [PATCH] krb5-utils-tests: remove invalid condition
+
+This condition is invalid because different_realm is not set, when
+EINVAL is returned. It can make the test fail sometimes.
+---
+ src/tests/krb5_utils-tests.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/tests/krb5_utils-tests.c b/src/tests/krb5_utils-tests.c
+index bc1890f0b5becf3f316eca31dfd20f30e25fa4f0..aa2f4ed4b8eb39c3aea8fdf53f27f12e096b9233 100644
+--- a/src/tests/krb5_utils-tests.c
++++ b/src/tests/krb5_utils-tests.c
+@@ -700,8 +700,6 @@ START_TEST(test_compare_principal_realm)
+     ret = compare_principal_realm("userABC", "ABC", &different_realm);
+     fail_unless(ret == EINVAL, "Missing '@' does not cause EINVAL.");
+ 
+-    fail_unless(different_realm == false, "Same realm but " \
+-                                          "different_realm is not false.");
+     ret = compare_principal_realm("user@ABC", "ABC", &different_realm);
+     fail_unless(ret == EOK, "Failure with same realm");
+     fail_unless(different_realm == false, "Same realm but " \
+-- 
+1.8.1.4
+
