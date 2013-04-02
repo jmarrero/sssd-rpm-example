@@ -15,23 +15,16 @@
 %global ldb_version 1.1.15
 
 Name: sssd
-Version: 1.9.4
-Release: 10%{?dist}
+Version: 1.10.0
+Release: 1%{?dist}.alpha1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}alpha1.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001:  0001-krb-recreate-ccache-if-it-was-deleted.patch
-Patch0002:  0002-Don-t-use-srcdir-with-tests.patch
-Patch0003:  0003-krb5-include-backwards-compatible-declaration-of-krb.patch
-Patch0004:  0004-subdomains-replace-invalid-characters-with-underscor.patch
-Patch0005:  0005-Fix-the-krb5-password-expiration-warning.patch
-Patch0006:  0006-BUILD-Build-shared-components-as-an-internal-shared-.patch
-
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -220,7 +213,8 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q
+%setup -q -n %{name}-1.9.91
+
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -538,6 +532,10 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Tue Apr  2 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-1.alpha1
+- New upstream release 1.10 alpha1
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.10.0alpha1
+
 * Fri Mar 29 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.9.5-10
 - Add a patch to fix krb5 unit tests
 
