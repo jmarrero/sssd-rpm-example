@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 1%{?dist}.alpha1
+Release: 2%{?dist}.alpha1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,6 +25,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}alpha1.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001:  0001-Fix-krbcc-dir-creation-issue-with-MIT-krb5-1.11.patch
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -532,6 +533,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Wed Apr 17 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-2.alpha1
+- Add a patch to fix krb5 ccache creation issue with krb5 1.11
+
 * Tue Apr  2 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-1.alpha1
 - New upstream release 1.10 alpha1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.10.0alpha1
