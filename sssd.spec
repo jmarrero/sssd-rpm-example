@@ -16,16 +16,15 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 2%{?dist}.alpha1
+Release: 3%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}alpha1.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001:  0001-Fix-krbcc-dir-creation-issue-with-MIT-krb5-1.11.patch
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -37,6 +36,7 @@ Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: cyrus-sasl-gssapi%{?_isa}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
+Requires: python-sssdconfig = %{version}-%{release}
 Requires: krb5-libs%{?_isa} >= 1.10
 Requires(post): systemd-units initscripts chkconfig
 Requires(preun): systemd-units initscripts chkconfig
@@ -130,6 +130,15 @@ Also provides several other administrative tools:
     * sss_seed which pre-creates a user entry for use in kickstarts
     * sss_obfuscate for generating an obfuscated LDAP password
 
+%package -n python-sssdconfig
+Summary: SSSD and IPA configuration file manipulation classes and functions
+Group: Applications/System
+License: GPLv3+
+BuildArch: noarch
+
+%description -n python-sssdconfig
+Provides python files for manipulation SSSD and IPA configuration files.
+
 %package -n libsss_idmap
 Summary: FreeIPA Idmap library
 Group: Development/Libraries
@@ -178,6 +187,35 @@ Requires: libipa_hbac = %{version}-%{release}
 The libipa_hbac-python contains the bindings so that libipa_hbac can be
 used by Python applications.
 
+%package -n libsss_nss_idmap
+Summary: Library for SID based lookups
+Group: Development/Libraries
+License: LGPLv3+
+Requires(post): /sbin/ldconfig
+Requires(postun): /sbin/ldconfig
+
+%description -n libsss_nss_idmap
+Utility library for SID based lookups
+
+%package -n libsss_nss_idmap-devel
+Summary: Library for SID based lookups
+Group: Development/Libraries
+License: LGPLv3+
+Requires: libsss_nss_idmap = %{version}-%{release}
+
+%description -n libsss_nss_idmap-devel
+Utility library for SID based lookups
+
+%package -n libsss_nss_idmap-python
+Summary: Python bindings for libsss_nss_idmap
+Group: Development/Libraries
+License: LGPLv3+
+Requires: libsss_nss_idmap = %{version}-%{release}
+
+%description -n libsss_nss_idmap-python
+The libsss_nss_idmap-python contains the bindings so that libsss_nss_idmap can
+be used by Python applications.
+
 %package -n libsss_sudo
 Summary: A library to allow communication between SUDO and SSSD
 Group: Development/Libraries
@@ -214,7 +252,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.9.91
+%setup -q -n %{name}-1.9.92
 
 
 for p in %patches ; do
@@ -278,10 +316,10 @@ find $RPM_BUILD_ROOT -name "*.la" -exec rm -f {} \;
 rm -Rf ${RPM_BUILD_ROOT}/%{_docdir}/%{name}
 
 # Older versions of rpmbuild can only handle one -f option
-# So we need to append to the sssd.lang file
+# So we need to append to the sssd*.lang file
 for file in `ls $RPM_BUILD_ROOT/%{python_sitelib}/*.egg-info 2> /dev/null`
 do
-    echo %{python_sitelib}/`basename $file` >> sssd.lang
+    echo %{python_sitelib}/`basename $file` >> python_sssdconfig.lang
 done
 
 touch sssd_tools.lang
@@ -397,8 +435,6 @@ rm -rf $RPM_BUILD_ROOT
 
 %{python_sitearch}/pysss.so
 %{python_sitearch}/pysss_murmur.so
-%dir %{python_sitelib}/SSSDConfig
-%{python_sitelib}/SSSDConfig/*.py*
 
 %files client -f sssd_client.lang
 %defattr(-,root,root,-)
@@ -433,6 +469,11 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sss_obfuscate.8*
 %{_mandir}/man8/sss_debuglevel.8*
 %{_mandir}/man8/sss_seed.8*
+
+%files -n python-sssdconfig -f python_sssdconfig.lang
+%defattr(-,root,root,-)
+%dir %{python_sitelib}/SSSDConfig
+%{python_sitelib}/SSSDConfig/*.py*
 
 %files -n libsss_idmap
 %defattr(-,root,root,-)
@@ -484,6 +525,27 @@ A utility library to allow communication between Autofs and SSSD
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
 %{_libdir}/sssd/modules/libsss_autofs.so*
 
+%files -n libsss_nss_idmap
+%defattr(-,root,root,-)
+%doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
+%{_libdir}/libsss_nss_idmap.so.*
+
+%files -n libsss_nss_idmap-devel
+%defattr(-,root,root,-)
+%if 0%{?fedora}
+%doc nss_idmap_doc/html
+%endif
+%if 0%{?rhel} >= 6
+%doc nss_idmap_doc/html
+%endif
+%{_includedir}/sss_nss_idmap.h
+%{_libdir}/libsss_nss_idmap.so
+%{_libdir}/pkgconfig/sss_nss_idmap.pc
+
+%files -n libsss_nss_idmap-python
+%defattr(-,root,root,-)
+%{python_sitearch}/pysss_nss_idmap.so
+
 %post
 if [ $1 -ge 1 ] ; then
     # Initial installation
@@ -533,6 +595,10 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Fri May  3 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-3.beta1
+- New upstream release 1.10 beta1
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.10.0beta1
+
 * Wed Apr 17 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-2.alpha1
 - Add a patch to fix krb5 ccache creation issue with krb5 1.11
 
