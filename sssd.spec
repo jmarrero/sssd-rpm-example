@@ -76,7 +76,7 @@ BuildRequires: libtdb-devel
 BuildRequires: libldb-devel = %{ldb_version}
 BuildRequires: libdhash-devel >= 0.4.2
 BuildRequires: libcollection-devel
-BuildRequires: libini_config-devel
+BuildRequires: libini_config-devel >= 1.0.0.1
 BuildRequires: dbus-devel
 BuildRequires: dbus-libs
 BuildRequires: openldap-devel
