@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 3%{?dist}.beta1
+Release: 4%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,6 +25,13 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-AD-read-flat-name-and-SID-of-the-AD-domain.patch
+Patch0002: 0002-Actually-use-the-index-parameter-in-resolv_get_socka.patch
+Patch0003: 0003-UTIL-Add-function-sss_names_init_from_args.patch
+Patch0004: 0004-SSH-Fix-parsing-of-names-from-client-requests.patch
+Patch0005: 0005-SSH-Use-separate-field-for-domain-name-in-client-req.patch
+Patch0006: 0006-SSH-Do-not-skip-domains-with-use_fully_qualified_nam.patch
+
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -38,6 +45,7 @@ Requires: libipa_hbac%{?_isa} = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires: python-sssdconfig = %{version}-%{release}
 Requires: krb5-libs%{?_isa} >= 1.10
+Requires: libini_config >= 1.0.0.1
 Requires(post): systemd-units initscripts chkconfig
 Requires(preun): systemd-units initscripts chkconfig
 Requires(postun): systemd-units initscripts chkconfig
@@ -595,6 +603,12 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Tue May  7 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-4.beta1
+- Explicitly Require libini_config >= 1.0.0.1 to work around a SONAME bug
+  in ding-libs
+- Fix SSH integration with fully-qualified domains
+- Add the ability to dynamically discover the NetBIOS name
+
 * Fri May  3 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-3.beta1
 - New upstream release 1.10 beta1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.10.0beta1

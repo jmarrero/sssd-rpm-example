@@ -1,0 +1,702 @@
+From 4cdaf239d4504966bed8ecd5e3fa07def74c7302 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 2 May 2013 20:28:30 +0200
+Subject: [PATCH 1/6] AD: read flat name and SID of the AD domain
+
+For various features either the flat/short/NetBIOS domain name or the
+domain SID is needed. Since the responders already try to do a subdomain
+lookup when and known domain name is encountered I added a subdomain
+lookup to the AD provider which currently only reads the SID from the
+base DN and the NetBIOS name from a reply of a LDAP ping. The results
+are written to the cache to have them available even if SSSD is started
+in offline mode. Looking up trusted domains can be added later.
+
+Since all the needed responder code is already available from the
+corresponding work for the IPA provider this patch fixes
+
+https://fedorahosted.org/sssd/ticket/1468
+---
+ Makefile.am                            |   2 +
+ src/config/etc/sssd.api.d/sssd-ad.conf |   2 +
+ src/man/sssd-ad.5.xml                  |   4 +
+ src/man/sssd.conf.5.xml                |   4 +
+ src/providers/ad/ad_init.c             |  31 ++
+ src/providers/ad/ad_subdomains.c       | 522 +++++++++++++++++++++++++++++++++
+ src/providers/ad/ad_subdomains.h       |  37 +++
+ 7 files changed, 602 insertions(+)
+ create mode 100644 src/providers/ad/ad_subdomains.c
+ create mode 100644 src/providers/ad/ad_subdomains.h
+
+diff --git a/Makefile.am b/Makefile.am
+index 3abea76c18f49df623ff9c38ebc5d604596d2516..b72384a77fe5bb3d2d40229026c463fefabc1387 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1621,6 +1621,8 @@ libsss_ad_la_SOURCES = \
+     src/providers/ad/ad_access.h \
+     src/providers/ad/ad_opts.h \
+     src/providers/ad/ad_srv.c \
++    src/providers/ad/ad_subdomains.c \
++    src/providers/ad/ad_subdomains.h \
+     src/util/find_uid.c \
+     src/util/user_info_msg.c \
+     src/util/sss_krb5.c \
+diff --git a/src/config/etc/sssd.api.d/sssd-ad.conf b/src/config/etc/sssd.api.d/sssd-ad.conf
+index b4b1d0ba11d600a8b9a300f15cc8058be470f422..3be25e8da05ee6b1bbdb947e919421358591cdde 100644
+--- a/src/config/etc/sssd.api.d/sssd-ad.conf
++++ b/src/config/etc/sssd.api.d/sssd-ad.conf
+@@ -126,3 +126,5 @@ krb5_use_enterprise_principal = bool, None, false
+ [provider/ad/chpass]
+ krb5_kpasswd = str, None, false
+ krb5_backup_kpasswd = str, None, false
++
++[provider/ad/subdomains]
+diff --git a/src/man/sssd-ad.5.xml b/src/man/sssd-ad.5.xml
+index c19607715dafd39f167c3066831ae7ad09ffe459..4dcd552d7f1fe3235af9c582c49c553441a014e9 100644
+--- a/src/man/sssd-ad.5.xml
++++ b/src/man/sssd-ad.5.xml
+@@ -95,6 +95,10 @@ ldap_id_mapping = False
+                             specified as the lower-case version of the long
+                             version of the Active Directory domain.
+                         </para>
++                        <para>
++                            The short domain name (also known as the NetBIOS
++                            or the flat name) is autodetected by the SSSD.
++                        </para>
+                     </listitem>
+                 </varlistentry>
+ 
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index 04c699948b093c235762c0d9f8223911a6fd2ada..99337fbba9fb8d39a62eb84313c5b89761ee950d 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -1481,6 +1481,10 @@ override_homedir = /home/%u
+                             Regular expression for this domain that describes
+                             how to parse the string containing user name and
+                             domain into these components.
++                            The "domain" can match either the SSSD
++                            configuration domain name, or, in the case
++                            of IPA trust subdomains and Active Directory
++                            domains, the flat (NetBIOS) name of the domain.
+                         </para>
+                         <para>
+                             Default for the AD and IPA provider:
+diff --git a/src/providers/ad/ad_init.c b/src/providers/ad/ad_init.c
+index 2f5a5da1510b0241a4bee12fc93da174fdd0d116..f90df2a6913222b023704e9e1d1dce9561772e98 100644
+--- a/src/providers/ad/ad_init.c
++++ b/src/providers/ad/ad_init.c
+@@ -37,6 +37,7 @@
+ #include "providers/ad/ad_id.h"
+ #include "providers/ad/ad_srv.h"
+ #include "providers/dp_dyndns.h"
++#include "providers/ad/ad_subdomains.h"
+ 
+ struct ad_options *ad_options = NULL;
+ 
+@@ -361,3 +362,33 @@ ad_shutdown(struct be_req *req)
+     /* TODO: Clean up any internal data */
+     sdap_handler_done(req, DP_ERR_OK, EOK, NULL);
+ }
++
++int sssm_ad_subdomains_init(struct be_ctx *bectx,
++                            struct bet_ops **ops,
++                            void **pvt_data)
++{
++    int ret;
++    struct ad_id_ctx *id_ctx;
++    const char *ad_domain;
++
++    ret = sssm_ad_id_init(bectx, ops, (void **) &id_ctx);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, ("sssm_ad_id_init failed.\n"));
++        return ret;
++    }
++
++    if (ad_options == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, ("Global AD options not available.\n"));
++        return EINVAL;
++    }
++
++    ad_domain = dp_opt_get_string(ad_options->basic, AD_DOMAIN);
++
++    ret = ad_subdom_init(bectx, id_ctx, ad_domain, ops, pvt_data);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, ("ad_subdom_init failed.\n"));
++        return ret;
++    }
++
++    return EOK;
++}
+diff --git a/src/providers/ad/ad_subdomains.c b/src/providers/ad/ad_subdomains.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..1da343f8711b2b99a7afff6a4a398a1aa515a875
+--- /dev/null
++++ b/src/providers/ad/ad_subdomains.c
+@@ -0,0 +1,522 @@
++/*
++    SSSD
++
++    AD Subdomains Module
++
++    Authors:
++        Sumit Bose <sbose@redhat.com>
++
++    Copyright (C) 2013 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "providers/ldap/sdap_async.h"
++#include "providers/ad/ad_subdomains.h"
++#include <ctype.h>
++#include <ndr.h>
++#include <ndr/ndr_nbt.h>
++
++#define AD_AT_OBJECT_SID "objectSID"
++#define AD_AT_DNS_DOMAIN "DnsDomain"
++#define AD_AT_NT_VERSION "NtVer"
++#define AD_AT_NETLOGON "netlogon"
++
++#define MASTER_DOMAIN_SID_FILTER "objectclass=domain"
++
++/* do not refresh more often than every 5 seconds for now */
++#define AD_SUBDOMAIN_REFRESH_LIMIT 5
++
++/* refresh automatically every 4 hours */
++#define AD_SUBDOMAIN_REFRESH_PERIOD (3600 * 4)
++
++struct ad_subdomains_ctx {
++    struct be_ctx *be_ctx;
++    struct sdap_id_ctx *sdap_id_ctx;
++    struct sss_idmap_ctx *idmap_ctx;
++    char *domain_name;
++
++    time_t last_refreshed;
++    struct tevent_timer *timer_event;
++};
++
++struct ad_subdomains_req_ctx {
++    struct be_req *be_req;
++    struct ad_subdomains_ctx *sd_ctx;
++    struct sdap_id_op *sdap_op;
++
++    char *current_filter;
++    size_t base_iter;
++
++    size_t reply_count;
++    struct sysdb_attrs **reply;
++
++    char *master_sid;
++    char *flat_name;
++};
++
++static void ad_subdomains_get_conn_done(struct tevent_req *req);
++static errno_t ad_subdomains_get_master_sid(struct ad_subdomains_req_ctx *ctx);
++static void ad_subdomains_get_master_sid_done(struct tevent_req *req);
++static void ad_subdomains_get_netlogon_done(struct tevent_req *req);
++
++static void ad_subdomains_retrieve(struct ad_subdomains_ctx *ctx,
++                                   struct be_req *be_req)
++{
++    struct ad_subdomains_req_ctx *req_ctx = NULL;
++    struct tevent_req *req;
++    int dp_error = DP_ERR_FATAL;
++    int ret;
++
++    req_ctx = talloc(be_req, struct ad_subdomains_req_ctx);
++    if (req_ctx == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    req_ctx->be_req = be_req;
++    req_ctx->sd_ctx = ctx;
++    req_ctx->current_filter = NULL;
++    req_ctx->base_iter = 0;
++    req_ctx->reply_count = 0;
++    req_ctx->reply = NULL;
++
++    req_ctx->sdap_op = sdap_id_op_create(req_ctx,
++                                         ctx->sdap_id_ctx->conn_cache);
++    if (req_ctx->sdap_op == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, ("sdap_id_op_create failed.\n"));
++        ret = ENOMEM;
++        goto done;
++    }
++
++    req = sdap_id_op_connect_send(req_ctx->sdap_op, req_ctx, &ret);
++    if (req == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, ("sdap_id_op_connect_send failed: %d(%s).\n",
++                                  ret, strerror(ret)));
++        goto done;
++    }
++
++    tevent_req_set_callback(req, ad_subdomains_get_conn_done, req_ctx);
++
++    return;
++
++done:
++    talloc_free(req_ctx);
++    if (ret == EOK) {
++        dp_error = DP_ERR_OK;
++    }
++    be_req_terminate(be_req, dp_error, ret, NULL);
++}
++
++static void ad_subdomains_get_conn_done(struct tevent_req *req)
++{
++    int ret;
++    int dp_error = DP_ERR_FATAL;
++    struct ad_subdomains_req_ctx *ctx;
++
++    ctx = tevent_req_callback_data(req, struct ad_subdomains_req_ctx);
++
++    ret = sdap_id_op_connect_recv(req, &dp_error);
++    talloc_zfree(req);
++    if (ret) {
++        if (dp_error == DP_ERR_OFFLINE) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  ("No AD server is available, cannot get the "
++                   "subdomain list while offline\n"));
++        } else {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  ("Failed to connect to AD server: [%d](%s)\n",
++                   ret, strerror(ret)));
++        }
++
++        goto fail;
++    }
++
++    ret = ad_subdomains_get_master_sid(ctx);
++    if (ret == EAGAIN) {
++        return;
++    } else if (ret != EOK) {
++        goto fail;
++    }
++
++    DEBUG(SSSDBG_OP_FAILURE, ("No search base available.\n"));
++    ret = EINVAL;
++
++fail:
++    be_req_terminate(ctx->be_req, dp_error, ret, NULL);
++}
++
++static errno_t ad_subdomains_get_master_sid(struct ad_subdomains_req_ctx *ctx)
++{
++    struct tevent_req *req;
++    struct sdap_search_base *base;
++    const char *master_sid_attrs[] = {AD_AT_OBJECT_SID, NULL};
++
++
++    base = ctx->sd_ctx->sdap_id_ctx->opts->search_bases[ctx->base_iter];
++    if (base == NULL) {
++        return EOK;
++    }
++
++    req = sdap_get_generic_send(ctx, ctx->sd_ctx->be_ctx->ev,
++                           ctx->sd_ctx->sdap_id_ctx->opts,
++                           sdap_id_op_handle(ctx->sdap_op),
++                           base->basedn, LDAP_SCOPE_BASE,
++                           MASTER_DOMAIN_SID_FILTER, master_sid_attrs,
++                           NULL, 0,
++                           dp_opt_get_int(ctx->sd_ctx->sdap_id_ctx->opts->basic,
++                                          SDAP_SEARCH_TIMEOUT),
++                           false);
++
++    if (req == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, ("sdap_get_generic_send failed.\n"));
++        return ENOMEM;
++    }
++
++    tevent_req_set_callback(req, ad_subdomains_get_master_sid_done, ctx);
++
++    return EAGAIN;
++}
++
++static void ad_subdomains_get_master_sid_done(struct tevent_req *req)
++{
++    int ret;
++    size_t reply_count;
++    struct sysdb_attrs **reply = NULL;
++    struct ad_subdomains_req_ctx *ctx;
++    struct ldb_message_element *el;
++    char *sid_str;
++    enum idmap_error_code err;
++    static const char *attrs[] = {AD_AT_NETLOGON, NULL};
++    char *filter;
++    char *ntver;
++
++    ctx = tevent_req_callback_data(req, struct ad_subdomains_req_ctx);
++
++    ret = sdap_get_generic_recv(req, ctx, &reply_count, &reply);
++    talloc_zfree(req);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, ("sdap_get_generic_send request failed.\n"));
++        goto done;
++    }
++
++    if (reply_count == 0) {
++        ctx->base_iter++;
++        ret = ad_subdomains_get_master_sid(ctx);
++        if (ret == EAGAIN) {
++            return;
++        } else if (ret != EOK) {
++            goto done;
++        }
++    } else if (reply_count == 1) {
++        ret = sysdb_attrs_get_el(reply[0], AD_AT_OBJECT_SID, &el);
++        if (ret != EOK || el->num_values != 1) {
++            DEBUG(SSSDBG_OP_FAILURE, ("sdap_attrs_get_el failed.\n"));
++            goto done;
++        }
++
++        err = sss_idmap_bin_sid_to_sid(ctx->sd_ctx->idmap_ctx,
++                                       el->values[0].data,
++                                       el->values[0].length,
++                                       &sid_str);
++        if (err != IDMAP_SUCCESS) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  ("Could not convert SID: [%s].\n", idmap_error_string(err)));
++            ret = EFAULT;
++            goto done;
++        }
++
++        ctx->master_sid = talloc_steal(ctx, sid_str);
++    } else {
++        DEBUG(SSSDBG_OP_FAILURE,
++              ("More than one result for domain SID found.\n"));
++        ret = EINVAL;
++        goto done;
++    }
++
++    DEBUG(SSSDBG_TRACE_FUNC, ("Found SID [%s].\n", ctx->master_sid));
++
++    ntver = sss_ldap_encode_ndr_uint32(ctx, NETLOGON_NT_VERSION_5EX |
++                                       NETLOGON_NT_VERSION_WITH_CLOSEST_SITE);
++    if (ntver == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, ("sss_ldap_encode_ndr_uint32 failed.\n"));
++        ret = ENOMEM;
++        goto done;
++    }
++
++    filter = talloc_asprintf(ctx, "(&(%s=%s)(%s=%s))",
++                             AD_AT_DNS_DOMAIN, ctx->sd_ctx->domain_name,
++                             AD_AT_NT_VERSION, ntver);
++    if (filter == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, ("talloc_asprintf failed.\n"));
++        ret = ENOMEM;
++        goto done;
++    }
++
++    req = sdap_get_generic_send(ctx, ctx->sd_ctx->be_ctx->ev,
++                           ctx->sd_ctx->sdap_id_ctx->opts,
++                           sdap_id_op_handle(ctx->sdap_op),
++                           "", LDAP_SCOPE_BASE, filter, attrs, NULL, 0,
++                           dp_opt_get_int(ctx->sd_ctx->sdap_id_ctx->opts->basic,
++                                          SDAP_SEARCH_TIMEOUT),
++                           false);
++    if (req == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, ("sdap_get_generic_send failed.\n"));
++        ret = ENOMEM;
++        goto done;
++    }
++
++    tevent_req_set_callback(req, ad_subdomains_get_netlogon_done, ctx);
++    return;
++
++done:
++    be_req_terminate(ctx->be_req, DP_ERR_FATAL, ret, NULL);
++}
++
++static void ad_subdomains_get_netlogon_done(struct tevent_req *req)
++{
++    int ret;
++    size_t reply_count;
++    struct sysdb_attrs **reply = NULL;
++    struct ad_subdomains_req_ctx *ctx;
++    struct ldb_message_element *el;
++    DATA_BLOB blob;
++    enum ndr_err_code ndr_err;
++    struct ndr_pull *ndr_pull = NULL;
++    struct netlogon_samlogon_response response;
++
++    ctx = tevent_req_callback_data(req, struct ad_subdomains_req_ctx);
++
++    ret = sdap_get_generic_recv(req, ctx, &reply_count, &reply);
++    talloc_zfree(req);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, ("sdap_get_generic_send request failed.\n"));
++        goto done;
++    }
++
++    if (reply_count == 0) {
++        DEBUG(SSSDBG_TRACE_FUNC, ("No netlogon data available.\n"));
++    } else if (reply_count > 1) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              ("More than one netlogon info returned.\n"));
++        ret = EINVAL;
++        goto done;
++    }
++
++    ret = sysdb_attrs_get_el(reply[0], AD_AT_NETLOGON, &el);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, ("sysdb_attrs_get_el() failed\n"));
++        goto done;
++    }
++
++    if (el->num_values == 0) {
++        DEBUG(SSSDBG_OP_FAILURE, ("netlogon has no value\n"));
++        ret = ENOENT;
++        goto done;
++    } else if (el->num_values > 1) {
++        DEBUG(SSSDBG_OP_FAILURE, ("More than one netlogon value?\n"));
++        ret = EIO;
++        goto done;
++    }
++
++    blob.data =  el->values[0].data;
++    blob.length = el->values[0].length;
++
++    ndr_pull = ndr_pull_init_blob(&blob, ctx);
++    if (ndr_pull == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, ("ndr_pull_init_blob() failed.\n"));
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ndr_err = ndr_pull_netlogon_samlogon_response(ndr_pull, NDR_SCALARS,
++                                                  &response);
++    if (!NDR_ERR_CODE_IS_SUCCESS(ndr_err)) {
++        DEBUG(SSSDBG_OP_FAILURE, ("ndr_pull_netlogon_samlogon_response() "
++                                  "failed [%d]\n", ndr_err));
++        ret = EBADMSG;
++        goto done;
++    }
++
++    if (!(response.ntver & NETLOGON_NT_VERSION_5EX)) {
++        DEBUG(SSSDBG_OP_FAILURE, ("Wrong version returned [%x]\n",
++                                  response.ntver));
++        ret = EBADMSG;
++        goto done;
++    }
++
++    if (response.data.nt5_ex.domain_name != NULL &&
++        *response.data.nt5_ex.domain_name != '\0') {
++        ctx->flat_name = talloc_strdup(ctx, response.data.nt5_ex.domain_name);
++        if (ctx->flat_name == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, ("talloc_strdup failed.\n"));
++            ret = ENOMEM;
++            goto done;
++        }
++    }
++
++    DEBUG(SSSDBG_TRACE_FUNC, ("Found flat name [%s].\n", ctx->flat_name));
++
++    ret = sysdb_master_domain_add_info(ctx->sd_ctx->be_ctx->domain,
++                                       NULL, ctx->flat_name, ctx->master_sid);
++
++    ret = EOK;
++
++done:
++
++    if (ret == EOK) {
++        ctx->sd_ctx->last_refreshed = time(NULL);
++    }
++    be_req_terminate(ctx->be_req, DP_ERR_FATAL, ret, NULL);
++}
++
++static void ad_subdom_online_cb(void *pvt);
++
++static void ad_subdom_timer_refresh(struct tevent_context *ev,
++                                     struct tevent_timer *te,
++                                     struct timeval current_time,
++                                     void *pvt)
++{
++    ad_subdom_online_cb(pvt);
++}
++
++static void ad_subdom_be_req_callback(struct be_req *be_req,
++                                       int dp_err, int dp_ret,
++                                       const char *errstr)
++{
++    talloc_free(be_req);
++}
++
++static void ad_subdom_online_cb(void *pvt)
++{
++    struct ad_subdomains_ctx *ctx;
++    struct be_req *be_req;
++    struct timeval tv;
++
++    ctx = talloc_get_type(pvt, struct ad_subdomains_ctx);
++    if (!ctx) {
++        DEBUG(SSSDBG_CRIT_FAILURE, ("Bad private pointer\n"));
++        return;
++    }
++
++    be_req = be_req_create(ctx, NULL, ctx->be_ctx,
++                           ad_subdom_be_req_callback, NULL);
++    if (be_req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, ("be_req_create() failed.\n"));
++        return;
++    }
++
++    ad_subdomains_retrieve(ctx, be_req);
++
++    tv = tevent_timeval_current_ofs(AD_SUBDOMAIN_REFRESH_PERIOD, 0);
++    ctx->timer_event = tevent_add_timer(ctx->be_ctx->ev, ctx, tv,
++                                        ad_subdom_timer_refresh, ctx);
++    if (!ctx->timer_event) {
++        DEBUG(SSSDBG_MINOR_FAILURE, ("Failed to add subdom timer event\n"));
++    }
++}
++
++static void ad_subdom_offline_cb(void *pvt)
++{
++    struct ad_subdomains_ctx *ctx;
++
++    ctx = talloc_get_type(pvt, struct ad_subdomains_ctx);
++
++    if (ctx) {
++        talloc_zfree(ctx->timer_event);
++    }
++}
++
++void ad_subdomains_handler(struct be_req *be_req)
++{
++    struct be_ctx *be_ctx = be_req_get_be_ctx(be_req);
++    struct ad_subdomains_ctx *ctx;
++    time_t now;
++
++    ctx = talloc_get_type(be_ctx->bet_info[BET_SUBDOMAINS].pvt_bet_data,
++                          struct ad_subdomains_ctx);
++    if (!ctx) {
++        be_req_terminate(be_req, DP_ERR_FATAL, EINVAL, NULL);
++        return;
++    }
++
++    now = time(NULL);
++
++    if (ctx->last_refreshed > now - AD_SUBDOMAIN_REFRESH_LIMIT) {
++        be_req_terminate(be_req, DP_ERR_OK, EOK, NULL);
++        return;
++    }
++
++    ad_subdomains_retrieve(ctx, be_req);
++}
++
++struct bet_ops ad_subdomains_ops = {
++    .handler = ad_subdomains_handler,
++    .finalize = NULL
++};
++
++static void *idmap_talloc(size_t size, void *pvt)
++{
++    return talloc_size(pvt, size);
++}
++
++static void idmap_free(void *ptr, void *pvt)
++{
++    talloc_free(ptr);
++}
++
++int ad_subdom_init(struct be_ctx *be_ctx,
++                   struct ad_id_ctx *id_ctx,
++                   const char *ad_domain,
++                   struct bet_ops **ops,
++                   void **pvt_data)
++{
++    struct ad_subdomains_ctx *ctx;
++    int ret;
++    enum idmap_error_code err;
++
++    ctx = talloc_zero(id_ctx, struct ad_subdomains_ctx);
++    if (ctx == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, ("talloc_zero failed.\n"));
++        return ENOMEM;
++    }
++
++    ctx->be_ctx = be_ctx;
++    ctx->sdap_id_ctx = id_ctx->sdap_id_ctx;
++    ctx->domain_name = talloc_strdup(ctx, ad_domain);
++    if (ctx->domain_name == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, ("talloc_strdup failed.\n"));
++        return ENOMEM;
++    }
++    *ops = &ad_subdomains_ops;
++    *pvt_data = ctx;
++
++    ret = be_add_online_cb(ctx, be_ctx, ad_subdom_online_cb, ctx, NULL);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE, ("Failed to add subdom online callback"));
++    }
++
++    ret = be_add_offline_cb(ctx, be_ctx, ad_subdom_offline_cb, ctx, NULL);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE, ("Failed to add subdom offline callback"));
++    }
++
++    err = sss_idmap_init(idmap_talloc, ctx, idmap_free, &ctx->idmap_ctx);
++    if (err != IDMAP_SUCCESS) {
++        DEBUG(SSSDBG_CRIT_FAILURE, ("Failed to initialize idmap context.\n"));
++        return EFAULT;
++    }
++
++    return EOK;
++}
+diff --git a/src/providers/ad/ad_subdomains.h b/src/providers/ad/ad_subdomains.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..b1a418f132595c10abd8448f78a5df62402314a8
+--- /dev/null
++++ b/src/providers/ad/ad_subdomains.h
+@@ -0,0 +1,37 @@
++/*
++    SSSD
++
++    AD Subdomains Module
++
++    Authors:
++        Sumit Bose <sbose@redhat.com>
++
++    Copyright (C) 2013 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef _IPA_SUBDOMAINS_H_
++#define _IPA_SUBDOMAINS_H_
++
++#include "providers/dp_backend.h"
++#include "providers/ad/ad_common.h"
++
++int ad_subdom_init(struct be_ctx *be_ctx,
++                   struct ad_id_ctx *id_ctx,
++                   const char *ad_domain,
++                   struct bet_ops **ops,
++                   void **pvt_data);
++
++#endif /* _IPA_SUBDOMAINS_H_ */
+-- 
+1.8.2.1
+

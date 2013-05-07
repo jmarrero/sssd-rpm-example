@@ -1,0 +1,65 @@
+From 7c091610f5b35e8ba89da839322f6591f1e7619b Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 6 May 2013 15:10:22 +0200
+Subject: [PATCH 2/6] Actually use the index parameter in
+ resolv_get_sockaddr_address_index
+
+---
+ src/resolv/async_resolv.c | 11 +++++++----
+ src/resolv/async_resolv.h |  5 +++--
+ 2 files changed, 10 insertions(+), 6 deletions(-)
+
+diff --git a/src/resolv/async_resolv.c b/src/resolv/async_resolv.c
+index 1eb0acf83cb5bb48d92a58b8baf872f4ca4d8278..ad9d58297d0701e2a48ef86179c93c71320654fb 100644
+--- a/src/resolv/async_resolv.c
++++ b/src/resolv/async_resolv.c
+@@ -1453,8 +1453,9 @@ resolv_get_string_ptr_address(TALLOC_CTX *mem_ctx,
+ }
+ 
+ struct sockaddr_storage *
+-resolv_get_sockaddr_address_index(TALLOC_CTX *mem_ctx, struct resolv_hostent *hostent,
+-                                  int port, int index)
++resolv_get_sockaddr_address_index(TALLOC_CTX *mem_ctx,
++                                  struct resolv_hostent *hostent,
++                                  int port, int addrindex)
+ {
+     struct sockaddr_storage *sockaddr;
+ 
+@@ -1470,14 +1471,16 @@ resolv_get_sockaddr_address_index(TALLOC_CTX *mem_ctx, struct resolv_hostent *ho
+         case AF_INET:
+             sockaddr->ss_family = AF_INET;
+             memcpy(&((struct sockaddr_in *) sockaddr)->sin_addr,
+-                   hostent->addr_list[0]->ipaddr, sizeof(struct in_addr));
++                   hostent->addr_list[addrindex]->ipaddr,
++                   sizeof(struct in_addr));
+             ((struct sockaddr_in *) sockaddr)->sin_port = (in_port_t) htons(port);
+ 
+             break;
+         case AF_INET6:
+             sockaddr->ss_family = AF_INET6;
+             memcpy(&((struct sockaddr_in6 *) sockaddr)->sin6_addr,
+-                   hostent->addr_list[0]->ipaddr, sizeof(struct in6_addr));
++                   hostent->addr_list[addrindex]->ipaddr,
++                   sizeof(struct in6_addr));
+             ((struct sockaddr_in6 *) sockaddr)->sin6_port = (in_port_t) htons(port);
+             break;
+         default:
+diff --git a/src/resolv/async_resolv.h b/src/resolv/async_resolv.h
+index 9bf5e0c40e44c385858fa4d85adebe6e022ca006..a8207884c79d7a12af2bc1fc9da9c1304b2c252d 100644
+--- a/src/resolv/async_resolv.h
++++ b/src/resolv/async_resolv.h
+@@ -129,8 +129,9 @@ resolv_get_string_ptr_address(TALLOC_CTX *mem_ctx,
+         resolv_get_string_address_index(mem_ctx, hostent, 0)
+ 
+ struct sockaddr_storage *
+-resolv_get_sockaddr_address_index(TALLOC_CTX *mem_ctx, struct resolv_hostent *hostent,
+-                                  int port, int index);
++resolv_get_sockaddr_address_index(TALLOC_CTX *mem_ctx,
++                                  struct resolv_hostent *hostent,
++                                  int port, int addrindex);
+ 
+ #define resolv_get_sockaddr_address(mem_ctx, rhostent, port) \
+         resolv_get_sockaddr_address_index(mem_ctx, rhostent, port, 0)
+-- 
+1.8.2.1
+

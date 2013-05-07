@@ -1,0 +1,116 @@
+From 728b10c81204929be5669c1e67bd086e09c47c00 Mon Sep 17 00:00:00 2001
+From: Jan Cholasta <jcholast@redhat.com>
+Date: Fri, 26 Apr 2013 09:53:47 +0200
+Subject: [PATCH 4/6] SSH: Fix parsing of names from client requests
+
+Try to parse names in the form user@domain first, as that's what sss_ssh_*
+send in requests when the --domain option is used. Do not parse host names
+using domain-specific regular expression.
+---
+ src/responder/ssh/sshsrv.c         |  8 ++++++++
+ src/responder/ssh/sshsrv_cmd.c     | 23 ++++++++++++++++++++---
+ src/responder/ssh/sshsrv_private.h |  2 ++
+ 3 files changed, 30 insertions(+), 3 deletions(-)
+
+diff --git a/src/responder/ssh/sshsrv.c b/src/responder/ssh/sshsrv.c
+index 8a66f2239ac370218ec48d4cfc003d40dc1b7aec..410e631af43b8e8ef160334bab9a540ea913804c 100644
+--- a/src/responder/ssh/sshsrv.c
++++ b/src/responder/ssh/sshsrv.c
+@@ -118,6 +118,14 @@ int ssh_process_init(TALLOC_CTX *mem_ctx,
+     ssh_ctx->rctx = rctx;
+     ssh_ctx->rctx->pvt_ctx = ssh_ctx;
+ 
++    ret = sss_names_init_from_args(ssh_ctx,
++                                   "(?P<name>[^@]+)@?(?P<domain>[^@]*$)",
++                                   "%1$s@%2$s", &ssh_ctx->snctx);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_FATAL_FAILURE, ("fatal error initializing regex data\n"));
++        goto fail;
++    }
++
+     /* Enable automatic reconnection to the Data Provider */
+     ret = confdb_get_int(ssh_ctx->rctx->cdb,
+                          CONFDB_SSH_CONF_ENTRY,
+diff --git a/src/responder/ssh/sshsrv_cmd.c b/src/responder/ssh/sshsrv_cmd.c
+index 671160ea77904bc5d9a74fee1e351fec8b7cb3fb..374abe6c6ef4ffe1abeeafa2fe94602f5bff3414 100644
+--- a/src/responder/ssh/sshsrv_cmd.c
++++ b/src/responder/ssh/sshsrv_cmd.c
+@@ -55,6 +55,7 @@ sss_ssh_cmd_get_user_pubkeys(struct cli_ctx *cctx)
+         return ENOMEM;
+     }
+     cmd_ctx->cctx = cctx;
++    cmd_ctx->is_user = true;
+ 
+     ret = ssh_cmd_parse_request(cmd_ctx);
+     if (ret != EOK) {
+@@ -101,6 +102,7 @@ sss_ssh_cmd_get_host_pubkeys(struct cli_ctx *cctx)
+         return ENOMEM;
+     }
+     cmd_ctx->cctx = cctx;
++    cmd_ctx->is_user = false;
+ 
+     ret = ssh_cmd_parse_request(cmd_ctx);
+     if (ret != EOK) {
+@@ -673,6 +675,8 @@ static errno_t
+ ssh_cmd_parse_request(struct ssh_cmd_ctx *cmd_ctx)
+ {
+     struct cli_ctx *cctx = cmd_ctx->cctx;
++    struct ssh_ctx *ssh_ctx = talloc_get_type(cctx->rctx->pvt_ctx,
++                                              struct ssh_ctx);
+     errno_t ret;
+     uint8_t *body;
+     size_t body_len;
+@@ -705,14 +709,27 @@ ssh_cmd_parse_request(struct ssh_cmd_ctx *cmd_ctx)
+     }
+     c += name_len;
+ 
+-    ret = sss_parse_name_for_domains(cmd_ctx, cctx->rctx->domains,
+-                                     cctx->rctx->default_domain,name,
+-                                     &cmd_ctx->domname, &cmd_ctx->name);
++    ret = sss_parse_name(cmd_ctx, ssh_ctx->snctx, name,
++                         &cmd_ctx->domname, &cmd_ctx->name);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, ("Invalid name received [%s]\n", name));
+         return ENOENT;
+     }
+ 
++    if (cmd_ctx->is_user && cmd_ctx->domname == NULL) {
++        name = cmd_ctx->name;
++
++        ret = sss_parse_name_for_domains(cmd_ctx, cctx->rctx->domains,
++                                         cctx->rctx->default_domain, name,
++                                         &cmd_ctx->domname,
++                                         &cmd_ctx->name);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  ("Invalid name received [%s]\n", name));
++            return ENOENT;
++        }
++    }
++
+     if (flags & 1) {
+         SAFEALIGN_COPY_UINT32_CHECK(&alias_len, body+c, body_len, &c);
+         if (alias_len == 0 || alias_len > body_len - c) {
+diff --git a/src/responder/ssh/sshsrv_private.h b/src/responder/ssh/sshsrv_private.h
+index 296bd94a2947796198a0559c06d904b389283ade..ebb30ce7cbc982bb29b73592d5873e7d3652228a 100644
+--- a/src/responder/ssh/sshsrv_private.h
++++ b/src/responder/ssh/sshsrv_private.h
+@@ -28,6 +28,7 @@
+ 
+ struct ssh_ctx {
+     struct resp_ctx *rctx;
++    struct sss_names_ctx *snctx;
+ 
+     bool hash_known_hosts;
+     int known_hosts_timeout;
+@@ -38,6 +39,7 @@ struct ssh_cmd_ctx {
+     char *name;
+     char *alias;
+     char *domname;
++    bool is_user;
+ 
+     struct sss_domain_info *domain;
+     bool check_next;
+-- 
+1.8.2.1
+
