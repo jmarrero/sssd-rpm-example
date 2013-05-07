@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 4%{?dist}.beta1
+Release: 5%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -603,6 +603,9 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Tue May  7 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-5.beta1
+- BuildRequire recent libini_config to ensure consistent behaviour
+
 * Tue May  7 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-4.beta1
 - Explicitly Require libini_config >= 1.0.0.1 to work around a SONAME bug
   in ding-libs
