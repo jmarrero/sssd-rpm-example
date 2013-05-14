@@ -1,0 +1,40 @@
+From ad1be6fd04234f61f108773ff39aa7485abda47c Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Thu, 9 May 2013 16:41:47 +0200
+Subject: [PATCH] Enable the AD dynamic DNS updates by default
+
+https://fedorahosted.org/sssd/ticket/1915
+---
+ src/man/sssd-ad.5.xml      | 2 +-
+ src/providers/ad/ad_opts.h | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/man/sssd-ad.5.xml b/src/man/sssd-ad.5.xml
+index 71e8a2075bc83bc814987f2ca738ddb138c14e5a..589dfd0b5f7514a8e17c9f04407476ccf7c33e88 100644
+--- a/src/man/sssd-ad.5.xml
++++ b/src/man/sssd-ad.5.xml
+@@ -170,7 +170,7 @@ ldap_id_mapping = False
+                             realm must be set properly in /etc/krb5.conf
+                         </para>
+                         <para>
+-                            Default: false
++                            Default: true
+                         </para>
+                     </listitem>
+                 </varlistentry>
+diff --git a/src/providers/ad/ad_opts.h b/src/providers/ad/ad_opts.h
+index 32bbe3db2f4048056c7e96619eaf53ce22bf52f8..6e9d843c1f0a619fc3da26ae82bb15fe80eb4420 100644
+--- a/src/providers/ad/ad_opts.h
++++ b/src/providers/ad/ad_opts.h
+@@ -239,7 +239,7 @@ struct sdap_attr_map ad_autofs_entry_map[] = {
+ };
+ 
+ struct dp_option ad_dyndns_opts[] = {
+-    { "dyndns_update", DP_OPT_BOOL, BOOL_FALSE, BOOL_FALSE },
++    { "dyndns_update", DP_OPT_BOOL, BOOL_TRUE, BOOL_FALSE },
+     { "dyndns_refresh_interval", DP_OPT_NUMBER, { .number = 86400 }, NULL_NUMBER },
+     { "dyndns_iface", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "dyndns_ttl", DP_OPT_NUMBER, { .number = 3600 }, NULL_NUMBER },
+-- 
+1.8.2.1
+

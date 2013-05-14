@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 5%{?dist}.beta1
+Release: 6%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -31,6 +31,8 @@ Patch0003: 0003-UTIL-Add-function-sss_names_init_from_args.patch
 Patch0004: 0004-SSH-Fix-parsing-of-names-from-client-requests.patch
 Patch0005: 0005-SSH-Use-separate-field-for-domain-name-in-client-req.patch
 Patch0006: 0006-SSH-Do-not-skip-domains-with-use_fully_qualified_nam.patch
+Patch0007: 0007-Always-update-cached-upn-if-enterprise-principals-ar.patch
+Patch0008: 0008-Enable-the-AD-dynamic-DNS-updates-by-default.patch
 
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
@@ -603,6 +605,14 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Tue May 14 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-6.beta1
+- Resolves: rhbz#961357 - Missing dyndns_update entry in sssd.conf during
+                          realm join
+- Resolves: rhbz#961278 - Login failure: Enterprise Principal enabled by
+                          default for AD Provider
+- Resolves: rhbz#961251 - sssd does not create user's krb5 ccache dir/file
+                          parent directory when logging in
+
 * Tue May  7 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-5.beta1
 - BuildRequire recent libini_config to ensure consistent behaviour
 
