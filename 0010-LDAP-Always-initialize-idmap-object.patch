@@ -1,0 +1,36 @@
+From 392dce02615e446b3c73dfb8b4e0a19ebb86f914 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 13 May 2013 10:15:09 +0200
+Subject: [PATCH] LDAP: Always initialize idmap object
+
+https://fedorahosted.org/sssd/ticket/1922
+
+Since we always store the SID now, we need to always initialize the ID
+mapping object in LDAP provider as well. Some users might want to
+configure the LDAP provider with ID mapping, not the AD provider itself.
+---
+ src/providers/ldap/ldap_init.c | 8 +++-----
+ 1 file changed, 3 insertions(+), 5 deletions(-)
+
+diff --git a/src/providers/ldap/ldap_init.c b/src/providers/ldap/ldap_init.c
+index 2e30c37edb707799baada3d695776ae602c6a7eb..0884a85c7d9db2c7c777caf0baebf59217076982 100644
+--- a/src/providers/ldap/ldap_init.c
++++ b/src/providers/ldap/ldap_init.c
+@@ -155,11 +155,9 @@ int sssm_ldap_id_init(struct be_ctx *bectx,
+         goto done;
+     }
+ 
+-    if (dp_opt_get_bool(ctx->opts->basic, SDAP_ID_MAPPING)) {
+-        /* Set up the ID mapping object */
+-        ret = sdap_idmap_init(ctx, ctx, &ctx->opts->idmap_ctx);
+-        if (ret != EOK) goto done;
+-    }
++    /* Set up the ID mapping object */
++    ret = sdap_idmap_init(ctx, ctx, &ctx->opts->idmap_ctx);
++    if (ret != EOK) goto done;
+ 
+     ret = sdap_id_setup_tasks(ctx);
+     if (ret != EOK) {
+-- 
+1.8.2.1
+

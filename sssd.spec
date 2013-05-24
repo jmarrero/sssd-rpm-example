@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 6%{?dist}.beta1
+Release: 7%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -33,6 +33,9 @@ Patch0005: 0005-SSH-Use-separate-field-for-domain-name-in-client-req.patch
 Patch0006: 0006-SSH-Do-not-skip-domains-with-use_fully_qualified_nam.patch
 Patch0007: 0007-Always-update-cached-upn-if-enterprise-principals-ar.patch
 Patch0008: 0008-Enable-the-AD-dynamic-DNS-updates-by-default.patch
+Patch0009: 0009-Fix-segfault-in-AD-Subdomains-Module.patch
+Patch0010: 0010-LDAP-Always-initialize-idmap-object.patch
+Patch0011: 0011-Re-add-a-useful-DEBUG-message.patch
 
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
@@ -605,6 +608,10 @@ fi
 %postun -n libsss_sudo -p /sbin/ldconfig
 
 %changelog
+* Fri May 24 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-7.beta1
+- Apply a couple of patches from upstream git that resolve crashes when
+  ID mapping object was not initialized properly but needed later
+
 * Tue May 14 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-6.beta1
 - Resolves: rhbz#961357 - Missing dyndns_update entry in sssd.conf during
                           realm join

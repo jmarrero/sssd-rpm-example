@@ -1,0 +1,28 @@
+From 574061e65d3fb687b9cb2c757afa1fe92812245e Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 15 May 2013 10:09:08 +0200
+Subject: [PATCH] Fix segfault in AD Subdomains Module
+
+In function ad_subdomains_get_netlogon_done:
+If variable "reply_count" is zero then variable "reply" will not be
+initialized. Therefore we should not continue.
+---
+ src/providers/ad/ad_subdomains.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/providers/ad/ad_subdomains.c b/src/providers/ad/ad_subdomains.c
+index 1da343f8711b2b99a7afff6a4a398a1aa515a875..2ad318f63a89b2e8894ca07d007cde11867ed290 100644
+--- a/src/providers/ad/ad_subdomains.c
++++ b/src/providers/ad/ad_subdomains.c
+@@ -307,6 +307,8 @@ static void ad_subdomains_get_netlogon_done(struct tevent_req *req)
+ 
+     if (reply_count == 0) {
+         DEBUG(SSSDBG_TRACE_FUNC, ("No netlogon data available.\n"));
++        ret = ENOENT;
++        goto done;
+     } else if (reply_count > 1) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               ("More than one netlogon info returned.\n"));
+-- 
+1.8.2.1
+
