@@ -6,7 +6,7 @@
 # we don't want to provide private python extension libs
 %define __provides_exclude_from %{python_sitearch}/.*\.so$
 
-%if (0%{?fedora} > 15)
+%if (0%{?fedora} > 15 || 0%{?rhel} >= 7)
 %define _hardened_build 1
 %endif
 
@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 7%{?dist}.beta2
+Release: 8%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -712,6 +712,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Wed Jun 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-8.beta1
+- Enable hardened build for RHEL7
+
 * Wed Jun 12 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-8.beta2
 - New upstream release 1.10 beta2
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.10.0beta2
