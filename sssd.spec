@@ -712,7 +712,7 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
-* Wed Jun 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-8.beta1
+* Wed Jun 12 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-8.beta1
 - Enable hardened build for RHEL7
 
 * Wed Jun 12 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-8.beta2
