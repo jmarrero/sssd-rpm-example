@@ -16,44 +16,25 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 7%{?dist}.beta1
+Release: 7%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta2.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-AD-read-flat-name-and-SID-of-the-AD-domain.patch
-Patch0002: 0002-Actually-use-the-index-parameter-in-resolv_get_socka.patch
-Patch0003: 0003-UTIL-Add-function-sss_names_init_from_args.patch
-Patch0004: 0004-SSH-Fix-parsing-of-names-from-client-requests.patch
-Patch0005: 0005-SSH-Use-separate-field-for-domain-name-in-client-req.patch
-Patch0006: 0006-SSH-Do-not-skip-domains-with-use_fully_qualified_nam.patch
-Patch0007: 0007-Always-update-cached-upn-if-enterprise-principals-ar.patch
-Patch0008: 0008-Enable-the-AD-dynamic-DNS-updates-by-default.patch
-Patch0009: 0009-Fix-segfault-in-AD-Subdomains-Module.patch
-Patch0010: 0010-LDAP-Always-initialize-idmap-object.patch
-Patch0011: 0011-Re-add-a-useful-DEBUG-message.patch
-
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
-
-Conflicts: selinux-policy < 3.10.0-46
-Requires: libldb%{?_isa} = %{ldb_version}
-Requires: libtdb%{?_isa} >= 1.1.3
-Requires: sssd-client%{?_isa} = %{version}-%{release}
-Requires: cyrus-sasl-gssapi%{?_isa}
-Requires: libipa_hbac%{?_isa} = %{version}-%{release}
-Requires: libsss_idmap%{?_isa} = %{version}-%{release}
+Requires: sssd-common = %{version}-%{release}
+Requires: sssd-ldap = %{version}-%{release}
+Requires: sssd-krb5 = %{version}-%{release}
+Requires: sssd-ipa = %{version}-%{release}
+Requires: sssd-ad = %{version}-%{release}
+Requires: sssd-proxy = %{version}-%{release}
 Requires: python-sssdconfig = %{version}-%{release}
-Requires: krb5-libs%{?_isa} >= 1.10
-Requires: libini_config >= 1.0.0.1
-Requires(post): systemd-units initscripts chkconfig
-Requires(preun): systemd-units initscripts chkconfig
-Requires(postun): systemd-units initscripts chkconfig
 
 %global servicename sssd
 %global sssdstatedir %{_localstatedir}/lib/sss
@@ -101,7 +82,7 @@ BuildRequires: libselinux-devel
 BuildRequires: libsemanage-devel
 BuildRequires: bind-utils
 BuildRequires: keyutils-libs-devel
-BuildRequires: libnl-devel
+BuildRequires: libnl3-devel
 BuildRequires: gettext-devel
 BuildRequires: pkgconfig
 BuildRequires: glib2-devel
@@ -109,6 +90,7 @@ BuildRequires: diffstat
 BuildRequires: findutils
 BuildRequires: samba4-devel >= samba4-4.0.0-59beta2
 BuildRequires: selinux-policy-targeted
+BuildRequires: libcmocka-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -116,6 +98,39 @@ authentication mechanisms. It provides an NSS and PAM interface toward
 the system and a pluggable backend system to connect to multiple different
 account sources. It is also the basis to provide client auditing and policy
 services for projects like FreeIPA.
+
+The sssd subpackage is a meta-package that contains the deamon as well as all
+the existing back ends.
+
+%package common
+Summary: Common files for the SSSD
+Group: Applications/System
+License: GPLv3+
+# Conflicts
+Conflicts: selinux-policy < 3.10.0-46
+Conflicts: sssd < %{version}-%{release}
+# Requires
+Requires: libldb%{?_isa} = %{ldb_version}
+Requires: libtdb%{?_isa} >= 1.1.3
+Requires: sssd-client%{?_isa} = %{version}-%{release}
+Requires: libini_config >= 1.0.0.1
+Requires(post): systemd-units chkconfig
+Requires(preun): systemd-units chkconfig
+Requires(postun): systemd-units chkconfig
+
+
+### Provides ###
+Provides: libsss_sudo = %{version}-%{release}
+Obsoletes: libsss_sudo <= 1.10.0-7.beta1
+Provides: libsss_sudo-devel = %{version}-%{release}
+Obsoletes: libsss_sudo-devel <= 1.9.93
+Provides: libsss_autofs = %{version}-%{release}
+Obsoletes: libsss_autofs <= 1.10.0-7.beta1
+
+%description common
+Common files for the SSSD. The common package includes all the files needed
+to run a particular back end, however, the back ends are packaged in separate
+subpackages such as sssd-ldap.
 
 %package client
 Summary: SSSD Client libraries for NSS and PAM
@@ -151,6 +166,83 @@ BuildArch: noarch
 
 %description -n python-sssdconfig
 Provides python files for manipulation SSSD and IPA configuration files.
+
+%package ldap
+Summary: The LDAP back end of the SSSD
+Group: Applications/System
+License: GPLv3+
+Conflicts: sssd < %{version}-%{release}
+Requires: sssd-common = %{version}-%{release}
+Requires: libsss_idmap%{?_isa} = %{version}-%{release}
+Requires: sssd-krb5-common = %{version}-%{release}
+
+%description ldap
+Provides the LDAP back end that the SSSD can utilize to fetch identity data
+from and authenticate against an LDAP server.
+
+%package krb5-common
+Summary: SSSD helpers needed for Kerberos and GSSAPI authentication
+Group: Applications/System
+License: GPLv3+
+Conflicts: sssd < %{version}-%{release}
+Requires: cyrus-sasl-gssapi%{?_isa}
+Requires: sssd-common = %{version}-%{release}
+
+%description krb5-common
+Provides helper processes that the LDAP and Kerberos back ends can use for
+Kerberos user or host authentication.
+
+%package krb5
+Summary: The Kerberos authentication back end for the SSSD
+Group: Applications/System
+License: GPLv3+
+Conflicts: sssd < %{version}-%{release}
+Requires: sssd-common = %{version}-%{release}
+Requires: sssd-krb5-common = %{version}-%{release}
+
+%description krb5
+Provides the Kerberos back end that the SSSD can utilize authenticate
+against a Kerberos server.
+
+%package ipa
+Summary: The IPA back end of the SSSD
+Group: Applications/System
+License: GPLv3+
+Conflicts: sssd < %{version}-%{release}
+Requires: sssd-common = %{version}-%{release}
+Requires: sssd-krb5-common = %{version}-%{release}
+Requires: libipa_hbac{?_isa} = %{version}-%{release}
+Requires: libsss_idmap{?_isa} = %{version}-%{release}
+Requires: bind-utils
+
+%description ipa
+Provides the IPA back end that the SSSD can utilize to fetch identity data
+from and authenticate against an IPA server.
+
+%package ad
+Summary: The AD back end of the SSSD
+Group: Applications/System
+License: GPLv3+
+Conflicts: sssd < %{version}-%{release}
+Requires: sssd-common = %{version}-%{release}
+Requires: sssd-krb5-common = %{version}-%{release}
+Requires: libsss_idmap{?_isa} = %{version}-%{release}
+Requires: bind-utils
+
+%description ad
+Provides the Active Directory back end that the SSSD can utilize to fetch
+identity data from and authenticate against an Active Directory server.
+
+%package proxy
+Summary: The proxy back end of the SSSD
+Group: Applications/System
+License: GPLv3+
+Conflicts: sssd < %{version}-%{release}
+Requires: sssd-common = %{version}-%{release}
+
+%description proxy
+Provides the proxy back end which can be used to wrap an existing NSS and/or
+PAM modules to leverage SSSD caching.
 
 %package -n libsss_idmap
 Summary: FreeIPA Idmap library
@@ -229,26 +321,6 @@ Requires: libsss_nss_idmap = %{version}-%{release}
 The libsss_nss_idmap-python contains the bindings so that libsss_nss_idmap can
 be used by Python applications.
 
-%package -n libsss_sudo
-Summary: A library to allow communication between SUDO and SSSD
-Group: Development/Libraries
-License: LGPLv3+
-Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
-Requires: sssd = %{version}-%{release}
-
-%description -n libsss_sudo
-A utility library to allow communication between SUDO and SSSD
-
-%package -n libsss_sudo-devel
-Summary: A library to allow communication between SUDO and SSSD
-Group: Development/Libraries
-License: LGPLv3+
-Requires: libsss_sudo = %{version}-%{release}
-
-%description -n libsss_sudo-devel
-A utility library to allow communication between SUDO and SSSD
-
 %prep
 # Update timestamps on the files touched by a patch, to avoid non-equal
 # .pyc/.pyo files across the multilib peers within a build, where "Level"
@@ -265,7 +337,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.9.92
+%setup -q -n %{name}-1.9.94
 
 
 for p in %patches ; do
@@ -337,6 +409,11 @@ done
 
 touch sssd_tools.lang
 touch sssd_client.lang
+for provider in ldap krb5 ipa ad proxy
+do
+    touch sssd_$provider.lang
+done
+
 for man in `find $RPM_BUILD_ROOT/%{_mandir}/??/man?/ -type f | sed -e "s#$RPM_BUILD_ROOT/%{_mandir}/##"`
 do
     lang=`echo $man | cut -c 1-2`
@@ -353,8 +430,20 @@ do
         pam_sss*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_client.lang
             ;;
-        sssd_krb5_locator_plugin*)
-            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_client.lang
+        sssd-ldap*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_ldap.lang
+            ;;
+        sssd-krb5*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_krb5.lang
+            ;;
+        sssd-ipa*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_ipa.lang
+            ;;
+        sssd-ad*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_ad.lang
+            ;;
+        sssd-proxy*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_proxy.lang
             ;;
         *)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd.lang
@@ -372,11 +461,21 @@ cat sssd_client.lang
 echo "sssd_tools.lang:"
 cat sssd_tools.lang
 
+for provider in ldap krb5 ipa ad proxy
+do
+    echo "sssd_$provider.lang:"
+    cat sssd_$provider.lang
+done
+
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
-%files -f sssd.lang
+%files
+%defattr(-,root,root,-)
+%doc COPYING
+
+%files common -f sssd.lang
 %defattr(-,root,root,-)
 %doc COPYING
 %doc src/examples/sssd-example.conf
@@ -384,32 +483,26 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sssd
 
 %dir %{_libexecdir}/%{servicename}
-%{_libexecdir}/%{servicename}/krb5_child
-%{_libexecdir}/%{servicename}/ldap_child
-%{_libexecdir}/%{servicename}/proxy_child
 %{_libexecdir}/%{servicename}/sssd_be
 %{_libexecdir}/%{servicename}/sssd_nss
 %{_libexecdir}/%{servicename}/sssd_pam
 %{_libexecdir}/%{servicename}/sssd_autofs
 %{_libexecdir}/%{servicename}/sssd_ssh
 %{_libexecdir}/%{servicename}/sssd_sudo
-%{_libexecdir}/%{servicename}/sssd_pac
 
 %dir %{_libdir}/%{name}
-%{_libdir}/%{name}/libsss_ipa.so
-%{_libdir}/%{name}/libsss_krb5.so
-%{_libdir}/%{name}/libsss_ldap.so
-%{_libdir}/%{name}/libsss_proxy.so
 %{_libdir}/%{name}/libsss_simple.so
-%{_libdir}/%{name}/libsss_ad.so
 
 #Internal shared libraries
 %{_libdir}/%{name}/libsss_child.so
 %{_libdir}/%{name}/libsss_crypt.so
 %{_libdir}/%{name}/libsss_debug.so
-%{_libdir}/%{name}/libsss_krb5_common.so
 %{_libdir}/%{name}/libsss_ldap_common.so
 %{_libdir}/%{name}/libsss_util.so
+
+# 3rd party application libraries
+%{_libdir}/sssd/modules/libsss_autofs.so
+%{_libdir}/libsss_sudo.so
 
 %{ldb_modulesdir}/memberof.so
 %{_bindir}/sss_ssh_authorizedkeys
@@ -424,7 +517,6 @@ rm -rf $RPM_BUILD_ROOT
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/group
 %attr(755,root,root) %dir %{pipepath}
 %attr(755,root,root) %dir %{pubconfpath}
-%attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
 %attr(700,root,root) %dir %{pipepath}/private
 %attr(750,root,root) %dir %{_var}/log/%{name}
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
@@ -437,17 +529,55 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man1/sss_ssh_authorizedkeys.1*
 %{_mandir}/man1/sss_ssh_knownhostsproxy.1*
 %{_mandir}/man5/sssd.conf.5*
-%{_mandir}/man5/sssd-ipa.5*
-%{_mandir}/man5/sssd-krb5.5*
-%{_mandir}/man5/sssd-ldap.5*
 %{_mandir}/man5/sssd-simple.5*
-%{_mandir}/man5/sssd-ad.5*
 %{_mandir}/man5/sssd-sudo.5*
 %{_mandir}/man8/sssd.8*
 %{_mandir}/man8/sss_cache.8*
-
 %{python_sitearch}/pysss.so
 %{python_sitearch}/pysss_murmur.so
+
+%files ldap -f sssd_ldap.lang
+%defattr(-,root,root,-)
+%doc COPYING
+%{_libdir}/%{name}/libsss_ldap.so
+%{_mandir}/man5/sssd-ldap.5*
+
+%files krb5-common
+%defattr(-,root,root,-)
+%doc COPYING
+%{_libdir}/%{name}/libsss_krb5_common.so
+%{_libexecdir}/%{servicename}/ldap_child
+%{_libexecdir}/%{servicename}/krb5_child
+
+%files krb5 -f sssd_krb5.lang
+%defattr(-,root,root,-)
+%doc COPYING
+%{_libdir}/%{name}/libsss_krb5.so
+%{_mandir}/man5/sssd-krb5.5*
+
+%files ipa -f sssd_ipa.lang
+%defattr(-,root,root,-)
+%doc COPYING
+# RHEL 5 is too old to support the PAC responder
+%if !0%{?is_rhel5}
+%{_libexecdir}/%{servicename}/sssd_pac
+%endif
+
+%attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
+%{_libdir}/%{name}/libsss_ipa.so
+%{_mandir}/man5/sssd-ipa.5*
+
+%files ad -f sssd_ad.lang
+%defattr(-,root,root,-)
+%doc COPYING
+%{_libdir}/%{name}/libsss_ad.so
+%{_mandir}/man5/sssd-ad.5*
+
+%files proxy
+%defattr(-,root,root,-)
+%doc COPYING
+%{_libexecdir}/%{servicename}/proxy_child
+%{_libdir}/%{name}/libsss_proxy.so
 
 %files client -f sssd_client.lang
 %defattr(-,root,root,-)
@@ -516,28 +646,6 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %{python_sitearch}/pyhbac.so
 
-%package -n libsss_autofs
-Summary: A library to allow communication between Autofs and SSSD
-Group: Development/Libraries
-License: LGPLv3+
-
-%description -n libsss_autofs
-A utility library to allow communication between Autofs and SSSD
-
-%files -n libsss_sudo
-%defattr(-,root,root,-)
-%doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
-%{_libdir}/libsss_sudo.so*
-
-%files -n libsss_sudo-devel
-%doc libsss_sudo_doc/html
-%{_includedir}/sss_sudo.h
-
-%files -n libsss_autofs
-%defattr(-,root,root,-)
-%doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
-%{_libdir}/sssd/modules/libsss_autofs.so*
-
 %files -n libsss_nss_idmap
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
@@ -603,11 +711,16 @@ fi
 
 %postun -n libsss_idmap -p /sbin/ldconfig
 
-%post -n libsss_sudo -p /sbin/ldconfig
-
-%postun -n libsss_sudo -p /sbin/ldconfig
-
 %changelog
+* Wed Jun 12 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-8.beta2
+- New upstream release 1.10 beta2
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.10.0beta2
+- BuildRequire libcmocka-devel in order to run all upstream tests during build
+- BuildRequire libnl3 instead of libnl1
+- No longer BuildRequire initscripts, we no longer use /sbin/service
+- Remove explicit krb5-libs >= 1.10 requires; this platform doensn't carry any
+  older krb5-libs version
+
 * Fri May 24 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-7.beta1
 - Apply a couple of patches from upstream git that resolve crashes when
   ID mapping object was not initialized properly but needed later
