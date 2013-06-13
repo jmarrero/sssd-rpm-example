@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 8%{?dist}.beta2
+Release: 9%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -108,7 +108,7 @@ Group: Applications/System
 License: GPLv3+
 # Conflicts
 Conflicts: selinux-policy < 3.10.0-46
-Conflicts: sssd < %{version}-%{release}
+Conflicts: sssd < 1.10.0-8.beta2
 # Requires
 Requires: libldb%{?_isa} = %{ldb_version}
 Requires: libtdb%{?_isa} >= 1.1.3
@@ -123,7 +123,7 @@ Requires(postun): systemd-units chkconfig
 Provides: libsss_sudo = %{version}-%{release}
 Obsoletes: libsss_sudo <= 1.10.0-7.beta1
 Provides: libsss_sudo-devel = %{version}-%{release}
-Obsoletes: libsss_sudo-devel <= 1.9.93
+Obsoletes: libsss_sudo-devel <= 1.10.0-7.beta1
 Provides: libsss_autofs = %{version}-%{release}
 Obsoletes: libsss_autofs <= 1.10.0-7.beta1
 
@@ -171,7 +171,7 @@ Provides python files for manipulation SSSD and IPA configuration files.
 Summary: The LDAP back end of the SSSD
 Group: Applications/System
 License: GPLv3+
-Conflicts: sssd < %{version}-%{release}
+Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
@@ -184,7 +184,7 @@ from and authenticate against an LDAP server.
 Summary: SSSD helpers needed for Kerberos and GSSAPI authentication
 Group: Applications/System
 License: GPLv3+
-Conflicts: sssd < %{version}-%{release}
+Conflicts: sssd < 1.10.0-8.beta2
 Requires: cyrus-sasl-gssapi%{?_isa}
 Requires: sssd-common = %{version}-%{release}
 
@@ -196,7 +196,7 @@ Kerberos user or host authentication.
 Summary: The Kerberos authentication back end for the SSSD
 Group: Applications/System
 License: GPLv3+
-Conflicts: sssd < %{version}-%{release}
+Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
 
@@ -208,11 +208,11 @@ against a Kerberos server.
 Summary: The IPA back end of the SSSD
 Group: Applications/System
 License: GPLv3+
-Conflicts: sssd < %{version}-%{release}
+Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
-Requires: libipa_hbac{?_isa} = %{version}-%{release}
-Requires: libsss_idmap{?_isa} = %{version}-%{release}
+Requires: libipa_hbac%{?_isa} = %{version}-%{release}
+Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires: bind-utils
 
 %description ipa
@@ -223,10 +223,10 @@ from and authenticate against an IPA server.
 Summary: The AD back end of the SSSD
 Group: Applications/System
 License: GPLv3+
-Conflicts: sssd < %{version}-%{release}
+Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
-Requires: libsss_idmap{?_isa} = %{version}-%{release}
+Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires: bind-utils
 
 %description ad
@@ -237,7 +237,7 @@ identity data from and authenticate against an Active Directory server.
 Summary: The proxy back end of the SSSD
 Group: Applications/System
 License: GPLv3+
-Conflicts: sssd < %{version}-%{release}
+Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 
 %description proxy
@@ -712,6 +712,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Thu Jun 12 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-9.beta2
+- Fix typo in Requires that prevented an upgrade (#973916)
+- Use a hardcoded version in Conflicts, not less-than-current
+
 * Wed Jun 12 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-8.beta1
 - Enable hardened build for RHEL7
 
