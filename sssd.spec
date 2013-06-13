@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 9%{?dist}.beta2
+Release: 10%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -90,7 +90,9 @@ BuildRequires: diffstat
 BuildRequires: findutils
 BuildRequires: samba4-devel >= samba4-4.0.0-59beta2
 BuildRequires: selinux-policy-targeted
+%if (0%{?fedora} > 18)
 BuildRequires: libcmocka-devel
+%endif
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -712,7 +714,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
-* Thu Jun 12 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-9.beta2
+* Thu Jun 13 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-10.beta2
+- Only BuildRequire libcmocka on Fedora
+
+* Thu Jun 13 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-9.beta2
 - Fix typo in Requires that prevented an upgrade (#973916)
 - Use a hardcoded version in Conflicts, not less-than-current
 
