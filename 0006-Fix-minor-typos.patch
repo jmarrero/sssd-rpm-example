@@ -1,0 +1,90 @@
+From 1091c0ae2f1596ceb161e5b765a91c23c413b369 Mon Sep 17 00:00:00 2001
+From: Yuri Chornoivan <yurchor@ukr.net>
+Date: Tue, 11 Jun 2013 19:12:41 +0300
+Subject: [PATCH 06/12] Fix minor typos
+
+---
+ src/man/sssd-krb5.5.xml      | 2 +-
+ src/man/sssd-ldap.5.xml      | 2 +-
+ src/man/sssd.conf.5.xml      | 4 ++--
+ src/providers/ipa/ipa_hbac.h | 2 +-
+ src/tools/tools_mc_util.c    | 2 +-
+ 5 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/man/sssd-krb5.5.xml b/src/man/sssd-krb5.5.xml
+index 906aee096d9815bcf32b992260a7f5254b93b947..df124b4d20f7f3b553d2eac554eaf5411c3c8436 100644
+--- a/src/man/sssd-krb5.5.xml
++++ b/src/man/sssd-krb5.5.xml
+@@ -455,7 +455,7 @@
+                     <term>krb5_use_kdcinfo (boolean)</term>
+                     <listitem>
+                         <para>
+-                            Specifies if the SSSD should be instructing the Kerberos
++                            Specifies if the SSSD should instruct the Kerberos
+                             libraries what realm and which KDCs to use. This option
+                             is on by default, if you disable it, you need to configure
+                             the Kerberos library using the
+diff --git a/src/man/sssd-ldap.5.xml b/src/man/sssd-ldap.5.xml
+index 9cd594c7bdcf682b8fd355e8e566229afcb18a43..fd29650e94db917b0afb3f3a73e4082773d1340f 100644
+--- a/src/man/sssd-ldap.5.xml
++++ b/src/man/sssd-ldap.5.xml
+@@ -1592,7 +1592,7 @@
+                     <term>krb5_use_kdcinfo (boolean)</term>
+                     <listitem>
+                         <para>
+-                            Specifies if the SSSD should be instructing the Kerberos
++                            Specifies if the SSSD should instruct the Kerberos
+                             libraries what realm and which KDCs to use. This option
+                             is on by default, if you disable it, you need to configure
+                             the Kerberos library using the
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index d3e393c83e3ba130bab35a4d2153560710e16ba6..8df2bd97c4edb793e74a698b9531b3e7ab7c1abe 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -172,7 +172,7 @@
+                                             <para>
+                                                 domain flat name. Mostly usable
+                                                 for Active Directory domains, both
+-                                                directly configured or disovered
++                                                directly configured or discovered
+                                                 via IPA trusts.
+                                             </para>
+                                         </listitem>
+@@ -1605,7 +1605,7 @@ override_homedir = /home/%u
+                                         <para>
+                                             domain flat name. Mostly usable
+                                             for Active Directory domains, both
+-                                            directly configured or disovered
++                                            directly configured or discovered
+                                             via IPA trusts.
+                                         </para>
+                                     </listitem>
+diff --git a/src/providers/ipa/ipa_hbac.h b/src/providers/ipa/ipa_hbac.h
+index 02077e37ebeebd99ba06a9d27311c0885c4e2b7f..8bc2c4f90f32a83d14240abb4979ae265913ae6a 100644
+--- a/src/providers/ipa/ipa_hbac.h
++++ b/src/providers/ipa/ipa_hbac.h
+@@ -212,7 +212,7 @@ enum hbac_error_code {
+     /** Unexpected error */
+     HBAC_ERROR_UNKNOWN = -1,
+ 
+-    /** Succesful evaluation */
++    /** Successful evaluation */
+     HBAC_SUCCESS,
+ 
+     /** Function is not yet implemented */
+diff --git a/src/tools/tools_mc_util.c b/src/tools/tools_mc_util.c
+index 33d5d26dbefaa547da3a5c49947793b485896e83..5d4300fbe4c0fc8fd678d619277f1d8be18f0912 100644
+--- a/src/tools/tools_mc_util.c
++++ b/src/tools/tools_mc_util.c
+@@ -111,7 +111,7 @@ done:
+         /* Closing the file also releases the lock */
+         close(mc_fd);
+ 
+-        /* Only unlink the file if invalidation was succesful */
++        /* Only unlink the file if invalidation was successful */
+         if (ret == EOK) {
+             pret = unlink(mc_filename);
+             if (pret == -1) {
+-- 
+1.8.2.1
+

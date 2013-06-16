@@ -1,0 +1,23 @@
+From 376e39bc7a7f49f08fd51b1a00aa5d2a456b2314 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 11 Jun 2013 17:44:04 +0200
+Subject: [PATCH 01/12] Bumping the version for the 1.10 final release
+
+---
+ version.m4 | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/version.m4 b/version.m4
+index 1435f6999f6d4ffb06ad0dfd4261b03357fd0cfa..4066d317aae67fee317d13a67abec0dae3ce14aa 100644
+--- a/version.m4
++++ b/version.m4
+@@ -1,5 +1,5 @@
+ # Primary version number
+-m4_define([VERSION_NUMBER], [1.9.94])
++m4_define([VERSION_NUMBER], [1.9.95])
+ 
+ # If the PRERELEASE_VERSION_NUMBER is set, we'll append
+ # it to the release tag when creating an RPM or SRPM
+-- 
+1.8.2.1
+

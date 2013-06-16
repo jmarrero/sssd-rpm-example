@@ -1,0 +1,39 @@
+From 47d19d62aaabb9e7f09353ecad9f48aa4054e3b1 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 12 Jun 2013 14:14:41 +0200
+Subject: [PATCH 12/12] rpm: couple of small fixes
+
+* Include localized pam_sss manpages in sssd-client
+* Call ldconfig after libsss_nss_idmap is installed or removed
+---
+ contrib/sssd.spec.in | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index b9f852201dd9b9d53876c4dcd1c280bb5a31c73c..bee939092a135f5d7d97f9e361c3b4b8583a630c 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -471,6 +471,9 @@ do
+         sssd_krb5_*)
+             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_client.lang
+             ;;
++        pam_sss*)
++            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_client.lang
++            ;;
+         sssd-ldap*)
+             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_ldap.lang
+             ;;
+@@ -775,6 +778,10 @@ fi
+ 
+ %postun -n libsss_idmap -p /sbin/ldconfig
+ 
++%post -n libsss_nss_idmap -p /sbin/ldconfig
++
++%postun -n libsss_nss_idmap -p /sbin/ldconfig
++
+ %changelog
+ * Mon Mar 15 2010 Stephen Gallagher <sgallagh@redhat.com> - @PACKAGE_VERSION@-0@PRERELEASE_VERSION@
+ - Automated build of the SSSD
+-- 
+1.8.2.1
+

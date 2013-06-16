@@ -1,0 +1,31 @@
+From fd98a28d6e94080e52bbedc789b06606a6019b10 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 12 Jun 2013 13:24:12 +0200
+Subject: [PATCH 02/12] Change order of libraries in linking process.
+
+It seems that some linkers have problem with wrong order of libraries.
+This commit only change order.
+---
+ Makefile.am | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 93e3a6fc0ce063cb3c874bd90e0b1773fe053386..88e29fff4f6f1f3686c02ca23b5a6f4725f22797 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -577,10 +577,10 @@ endif
+ libsss_util_la_LDFLAGS = -avoid-version
+ 
+ SSSD_INTERNAL_LTLIBS = \
++    libsss_util.la \
+     libsss_crypt.la \
+     libsss_debug.la \
+-    libsss_child.la \
+-    libsss_util.la
++    libsss_child.la
+ 
+ lib_LTLIBRARIES = libipa_hbac.la libsss_idmap.la libsss_nss_idmap.la
+ dist_pkgconfig_DATA += src/providers/ipa/ipa_hbac.pc
+-- 
+1.8.2.1
+

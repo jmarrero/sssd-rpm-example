@@ -1,0 +1,76 @@
+From 22a21e910fd216ec1468fe769dcc29f1621a52a4 Mon Sep 17 00:00:00 2001
+From: Ondrej Kos <okos@redhat.com>
+Date: Thu, 13 Jun 2013 15:28:23 +0200
+Subject: [PATCH 08/12] KRB: Handle preauthentication error correctly
+
+https://fedorahosted.org/sssd/ticket/1873
+
+KRB preauthentication error was later mishandled like authentication error.
+---
+ src/providers/krb5/krb5_auth.c  | 6 ++++++
+ src/providers/krb5/krb5_child.c | 4 +++-
+ src/util/util_errors.c          | 1 +
+ src/util/util_errors.h          | 1 +
+ 4 files changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/krb5/krb5_auth.c b/src/providers/krb5/krb5_auth.c
+index f65e5993d54a5a265e4217e7f23d9549915c6b32..f6acfb4891cf5e99878ccfa7994ffeddf5447e2c 100644
+--- a/src/providers/krb5/krb5_auth.c
++++ b/src/providers/krb5/krb5_auth.c
+@@ -1026,6 +1026,12 @@ static void krb5_auth_done(struct tevent_req *subreq)
+         ret = EOK;
+         goto done;
+ 
++    case ERR_CREDS_INVALID:
++        state->pam_status = PAM_CRED_ERR;
++        state->dp_err = DP_ERR_OK;
++        ret = EOK;
++        goto done;
++
+     case ERR_NO_CREDS:
+         state->pam_status = PAM_CRED_UNAVAIL;
+         state->dp_err = DP_ERR_OK;
+diff --git a/src/providers/krb5/krb5_child.c b/src/providers/krb5/krb5_child.c
+index 8f746a8db561928349ffed8b7434db2a113a1f86..74d730aaa2e84af111982a450dafd524d411f472 100644
+--- a/src/providers/krb5/krb5_child.c
++++ b/src/providers/krb5/krb5_child.c
+@@ -1172,9 +1172,11 @@ static errno_t map_krb5_error(krb5_error_code kerr)
+         return ERR_CREDS_EXPIRED;
+ 
+     case KRB5KRB_AP_ERR_BAD_INTEGRITY:
++        return ERR_AUTH_FAILED;
++
+     case KRB5_PREAUTH_FAILED:
+     case KRB5KDC_ERR_PREAUTH_FAILED:
+-        return ERR_AUTH_FAILED;
++        return ERR_CREDS_INVALID;
+ 
+     default:
+         return ERR_INTERNAL;
+diff --git a/src/util/util_errors.c b/src/util/util_errors.c
+index b617f540691a245d1132469a1f019bcb0eb6e775..22a3045a6f9656d9ab8fe66673301a508e444771 100644
+--- a/src/util/util_errors.c
++++ b/src/util/util_errors.c
+@@ -31,6 +31,7 @@ struct err_string error_to_str[] = {
+     { "Invalid credential type" },  /* ERR_INVALID_CRED_TYPE */
+     { "No credentials available" }, /* ERR_NO_CREDS */
+     { "Credentials are expired" }, /* ERR_CREDS_EXPIRED */
++    { "Failure setting user credentials"}, /* ERR_CREDS_INVALID */
+     { "No cached credentials available" }, /* ERR_NO_CACHED_CREDS */
+     { "Cached credentials are expired" }, /* ERR_CACHED_CREDS_EXPIRED */
+     { "Authentication Denied" }, /* ERR_AUTH_DENIED */
+diff --git a/src/util/util_errors.h b/src/util/util_errors.h
+index a602a6ea92f72a51f5e21342940b2072bbe9296d..65d37aedb544bb303d7540fc59e1a802aee11898 100644
+--- a/src/util/util_errors.h
++++ b/src/util/util_errors.h
+@@ -53,6 +53,7 @@ enum sssd_errors {
+     ERR_INVALID_CRED_TYPE,
+     ERR_NO_CREDS,
+     ERR_CREDS_EXPIRED,
++    ERR_CREDS_INVALID,
+     ERR_NO_CACHED_CREDS,
+     ERR_CACHED_CREDS_EXPIRED,
+     ERR_AUTH_DENIED,
+-- 
+1.8.2.1
+

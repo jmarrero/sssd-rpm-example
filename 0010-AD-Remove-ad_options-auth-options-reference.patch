@@ -1,0 +1,26 @@
+From 9f1106573a4fca41b99a468d06fa392486faf43c Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 14 Jun 2013 14:19:25 +0200
+Subject: [PATCH 10/12] AD: Remove ad_options->auth options reference
+
+The options are stored in ad_options->auth_ctx->opts, this member was
+completely unused and confusing.
+---
+ src/providers/ad/ad_common.h | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/providers/ad/ad_common.h b/src/providers/ad/ad_common.h
+index 801815528c30ef05956eb51dce7cc6f8b161ffa8..1503059e87d60c90d33c00cdd3ebb55b4f4530f0 100644
+--- a/src/providers/ad/ad_common.h
++++ b/src/providers/ad/ad_common.h
+@@ -67,7 +67,6 @@ struct ad_options {
+     struct ad_id_ctx *id_ctx;
+ 
+     /* Auth and chpass Provider */
+-    struct dp_option *auth;
+     struct krb5_ctx *auth_ctx;
+ 
+     /* Dynamic DNS updates */
+-- 
+1.8.2.1
+

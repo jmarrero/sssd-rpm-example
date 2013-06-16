@@ -1,0 +1,25 @@
+From bb4172259e04925ffc3a92e4450029634d295134 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 14 Jun 2013 14:05:24 +0200
+Subject: [PATCH 09/12] AD: Fix segfault in DEBUG message
+
+---
+ src/providers/ad/ad_common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ad/ad_common.c b/src/providers/ad/ad_common.c
+index 1aad85de337870ede08114490398dfbde32bf62f..d53acf9ee03a88c78bca58e664121142a7331ade 100644
+--- a/src/providers/ad/ad_common.c
++++ b/src/providers/ad/ad_common.c
+@@ -854,7 +854,7 @@ ad_get_auth_options(TALLOC_CTX *mem_ctx,
+     ad_opts->service->krb5_service->write_kdcinfo = \
+         dp_opt_get_bool(krb5_options, KRB5_USE_KDCINFO);
+     DEBUG(SSSDBG_CONF_SETTINGS, ("Option %s set to %s\n",
+-          ad_opts->auth[KRB5_USE_KDCINFO].opt_name,
++          krb5_options[KRB5_USE_KDCINFO].opt_name,
+           ad_opts->service->krb5_service->write_kdcinfo ? "true" : "false"));
+ 
+     *_opts = talloc_steal(mem_ctx, krb5_options);
+-- 
+1.8.2.1
+

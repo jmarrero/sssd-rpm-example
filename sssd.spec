@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 10%{?dist}.beta2
+Release: 11%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -25,6 +25,20 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta2.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-Bumping-the-version-for-the-1.10-final-release.patch
+Patch0002: 0002-Change-order-of-libraries-in-linking-process.patch
+Patch0003: 0003-be_ptask-send-and-recv-shadow-a-global-declaration.patch
+Patch0004: 0004-be_refresh-send-and-recv-shadow-a-global-declaration.patch
+Patch0005: 0005-Use-the-correct-talloc-context-when-creating-AD-subd.patch
+Patch0006: 0006-Fix-minor-typos.patch
+Patch0007: 0007-failover-set-state-out-when-meta-server-remains-in-S.patch
+Patch0008: 0008-KRB-Handle-preauthentication-error-correctly.patch
+Patch0009: 0009-AD-Fix-segfault-in-DEBUG-message.patch
+Patch0010: 0010-AD-Remove-ad_options-auth-options-reference.patch
+Patch0011: 0011-subdomains-touch-krb5.conf-when-creating-new-domain-.patch
+Patch0012: 0012-rpm-couple-of-small-fixes.patch
+Patch0013: 0013-nested-groups-allocate-more-space-if-deref-returns-m.patch
+
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -714,6 +728,13 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Sun Jun 16 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-11.beta2
+- Apply a number of patches from upstream to fix issues found post-beta,
+  in particular:
+  -- segfault with a high DEBUG level
+  -- Fix IPA password migration (upstream #1873)
+  -- Fix fail over when retrying SRV resolution (upstream #1886)
+
 * Thu Jun 13 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-10.beta2
 - Only BuildRequire libcmocka on Fedora
 
