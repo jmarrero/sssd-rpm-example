@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 11%{?dist}.beta2
+Release: 12%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -105,7 +105,9 @@ BuildRequires: findutils
 BuildRequires: samba4-devel >= samba4-4.0.0-59beta2
 BuildRequires: selinux-policy-targeted
 %if (0%{?fedora} > 18)
+%ifarch %{ix86} x86_64 %{arm}
 BuildRequires: libcmocka-devel
+%endif
 %endif
 
 %description
@@ -728,6 +730,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Mon Jun 17 2013 Dan Horák <dan[at]danny.cz> - 1.10.0-12.beta2
+- the cmocka toolkit exists only on selected arches
+
 * Sun Jun 16 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-11.beta2
 - Apply a number of patches from upstream to fix issues found post-beta,
   in particular:
