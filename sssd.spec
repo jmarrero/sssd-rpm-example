@@ -16,29 +16,15 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 12%{?dist}.beta2
+Release: 13%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta2.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-Bumping-the-version-for-the-1.10-final-release.patch
-Patch0002: 0002-Change-order-of-libraries-in-linking-process.patch
-Patch0003: 0003-be_ptask-send-and-recv-shadow-a-global-declaration.patch
-Patch0004: 0004-be_refresh-send-and-recv-shadow-a-global-declaration.patch
-Patch0005: 0005-Use-the-correct-talloc-context-when-creating-AD-subd.patch
-Patch0006: 0006-Fix-minor-typos.patch
-Patch0007: 0007-failover-set-state-out-when-meta-server-remains-in-S.patch
-Patch0008: 0008-KRB-Handle-preauthentication-error-correctly.patch
-Patch0009: 0009-AD-Fix-segfault-in-DEBUG-message.patch
-Patch0010: 0010-AD-Remove-ad_options-auth-options-reference.patch
-Patch0011: 0011-subdomains-touch-krb5.conf-when-creating-new-domain-.patch
-Patch0012: 0012-rpm-couple-of-small-fixes.patch
-Patch0013: 0013-nested-groups-allocate-more-space-if-deref-returns-m.patch
-
 Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
@@ -355,8 +341,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.9.94
-
+%setup -q
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -730,6 +715,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Thu Jun 27 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-13
+- New upstream release 1.10
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.10.0
+
 * Mon Jun 17 2013 Dan Horák <dan[at]danny.cz> - 1.10.0-12.beta2
 - the cmocka toolkit exists only on selected arches
 
