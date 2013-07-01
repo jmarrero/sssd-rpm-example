@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 13%{?dist}
+Release: 14%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -112,7 +112,7 @@ Group: Applications/System
 License: GPLv3+
 # Conflicts
 Conflicts: selinux-policy < 3.10.0-46
-Conflicts: sssd < 1.10.0-8.beta2
+Conflicts: sssd < 1.10.0-8%{?dist}.beta2
 # Requires
 Requires: libldb%{?_isa} = %{ldb_version}
 Requires: libtdb%{?_isa} >= 1.1.3
@@ -125,11 +125,11 @@ Requires(postun): systemd-units chkconfig
 
 ### Provides ###
 Provides: libsss_sudo = %{version}-%{release}
-Obsoletes: libsss_sudo <= 1.10.0-7.beta1
+Obsoletes: libsss_sudo <= 1.10.0-7%{?dist}.beta1
 Provides: libsss_sudo-devel = %{version}-%{release}
-Obsoletes: libsss_sudo-devel <= 1.10.0-7.beta1
+Obsoletes: libsss_sudo-devel <= 1.10.0-7%{?dist}.beta1
 Provides: libsss_autofs = %{version}-%{release}
-Obsoletes: libsss_autofs <= 1.10.0-7.beta1
+Obsoletes: libsss_autofs <= 1.10.0-7%{?dist}.beta1
 
 %description common
 Common files for the SSSD. The common package includes all the files needed
@@ -670,33 +670,20 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %{python_sitearch}/pysss_nss_idmap.so
 
-%post
+%post common
 if [ $1 -ge 1 ] ; then
     # Initial installation
     /bin/systemctl daemon-reload >/dev/null 2>&1 || :
 fi
 
-%preun
+%preun common
 if [ $1 -eq 0 ]; then
      # Package removal, not upgrade
     /bin/systemctl --no-reload disable sssd.service > /dev/null 2>&1 || :
     /bin/systemctl stop sssd.service > /dev/null 2>&1 || :
 fi
 
-%triggerun -- sssd < %{version}-%{release}
-if /sbin/chkconfig --level 3 sssd ; then
-        /bin/systemctl --no-reload enable sssd.service >/dev/null 2>&1 || :
-fi
-
-if /sbin/chkconfig --level 5 sssd ; then
-        /bin/systemctl --no-reload enable sssd.service >/dev/null 2>&1 || :
-fi
-
-/sbin/chkconfig --del sssd >/dev/null 2>&1 || :
-
-
-
-%postun
+%postun common
 /bin/systemctl daemon-reload >/dev/null 2>&1 || :
 if [ $1 -ge 1 ] ; then
     /bin/systemctl try-restart sssd.service >/dev/null 2>&1 || :
@@ -715,6 +702,11 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Mon Jul 01 2013 Stephen Gallagher <sgallagh@redhat.com> - 1.10.0-14
+- Fix Obsoletes: to account for dist tag
+- Convert post and pre scripts to run on the sssd-common subpackage
+- Remove old conversion from SYSV
+
 * Thu Jun 27 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-13
 - New upstream release 1.10
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.10.0
