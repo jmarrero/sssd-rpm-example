@@ -1,22 +1,14 @@
-%if ! (0%{?fedora} > 12 || 0%{?rhel} > 5)
-%{!?python_sitelib: %global python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
-%{!?python_sitearch: %global python_sitearch %(%{__python} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
-%endif
-
 # we don't want to provide private python extension libs
 %define __provides_exclude_from %{python_sitearch}/.*\.so$
-
-%if (0%{?fedora} > 15 || 0%{?rhel} >= 7)
 %define _hardened_build 1
-%endif
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.15
+%global ldb_version 1.1.16
 
 Name: sssd
 Version: 1.10.0
-Release: 15%{?dist}
+Release: 16%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -49,13 +41,7 @@ BuildRequires: autoconf
 BuildRequires: automake
 BuildRequires: libtool
 BuildRequires: m4
-%{?fedora:BuildRequires: popt-devel}
-%if 0%{?rhel} <= 5
-BuildRequires: popt
-%endif
-%if 0%{?rhel} >= 6
 BuildRequires: popt-devel
-%endif
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
 BuildRequires: libtdb-devel
@@ -90,10 +76,8 @@ BuildRequires: diffstat
 BuildRequires: findutils
 BuildRequires: samba4-devel >= samba4-4.0.0-59beta2
 BuildRequires: selinux-policy-targeted
-%if (0%{?fedora} > 18)
 %ifarch %{ix86} x86_64 %{arm}
 BuildRequires: libcmocka-devel
-%endif
 %endif
 
 %description
@@ -361,6 +345,7 @@ autoreconf -ivf
     --with-default-ccname-template=DIR:%d/krb5cc \
     --enable-nsslibdir=/%{_lib} \
     --enable-pammoddir=/%{_lib}/security \
+    --enable-ldb-version-check \
     --disable-static \
     --disable-rpath \
     --with-test-dir=/dev/shm
@@ -551,10 +536,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/%{name}/libsss_krb5_common.so
 %{_libexecdir}/%{servicename}/ldap_child
 %{_libexecdir}/%{servicename}/krb5_child
-# RHEL 5 is too old to support the PAC responder
-%if !0%{?is_rhel5}
-%{_libexecdir}/%{servicename}/sssd_pac
-%endif
 
 %files krb5 -f sssd_krb5.lang
 %defattr(-,root,root,-)
@@ -565,16 +546,17 @@ rm -rf $RPM_BUILD_ROOT
 %files ipa -f sssd_ipa.lang
 %defattr(-,root,root,-)
 %doc COPYING
-
 %attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
 %{_libdir}/%{name}/libsss_ipa.so
 %{_mandir}/man5/sssd-ipa.5*
+%{_libexecdir}/%{servicename}/sssd_pac
 
 %files ad -f sssd_ad.lang
 %defattr(-,root,root,-)
 %doc COPYING
 %{_libdir}/%{name}/libsss_ad.so
 %{_mandir}/man5/sssd-ad.5*
+%{_libexecdir}/%{servicename}/sssd_pac
 
 %files proxy
 %defattr(-,root,root,-)
@@ -656,12 +638,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files -n libsss_nss_idmap-devel
 %defattr(-,root,root,-)
-%if 0%{?fedora}
 %doc nss_idmap_doc/html
-%endif
-%if 0%{?rhel} >= 6
-%doc nss_idmap_doc/html
-%endif
 %{_includedir}/sss_nss_idmap.h
 %{_libdir}/libsss_nss_idmap.so
 %{_libdir}/pkgconfig/sss_nss_idmap.pc
@@ -702,6 +679,13 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Tue Jul 02 2013 Stephen Gallagher <sgallagh@redhat.com> - 1.10.0-16
+- Move sssd_pac to the sssd-ipa and sssd-ad subpackages
+- Trim out RHEL5-specific macros since we don't build on RHEL 5
+- Trim out macros for Fedora older than F18
+- Update libldb requirement to 1.1.16
+- Trim RPM changelog down to the last year
+
 * Tue Jul 02 2013 Stephen Gallagher <sgallagh@redhat.com> - 1.10.0-15
 - Move sssd_pac to the sssd-krb5 subpackage
 
