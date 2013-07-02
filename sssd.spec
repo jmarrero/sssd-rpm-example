@@ -16,7 +16,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 14%{?dist}
+Release: 15%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -551,6 +551,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/%{name}/libsss_krb5_common.so
 %{_libexecdir}/%{servicename}/ldap_child
 %{_libexecdir}/%{servicename}/krb5_child
+# RHEL 5 is too old to support the PAC responder
+%if !0%{?is_rhel5}
+%{_libexecdir}/%{servicename}/sssd_pac
+%endif
 
 %files krb5 -f sssd_krb5.lang
 %defattr(-,root,root,-)
@@ -561,10 +565,6 @@ rm -rf $RPM_BUILD_ROOT
 %files ipa -f sssd_ipa.lang
 %defattr(-,root,root,-)
 %doc COPYING
-# RHEL 5 is too old to support the PAC responder
-%if !0%{?is_rhel5}
-%{_libexecdir}/%{servicename}/sssd_pac
-%endif
 
 %attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
 %{_libdir}/%{name}/libsss_ipa.so
@@ -702,6 +702,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Tue Jul 02 2013 Stephen Gallagher <sgallagh@redhat.com> - 1.10.0-15
+- Move sssd_pac to the sssd-krb5 subpackage
+
 * Mon Jul 01 2013 Stephen Gallagher <sgallagh@redhat.com> - 1.10.0-14
 - Fix Obsoletes: to account for dist tag
 - Convert post and pre scripts to run on the sssd-common subpackage
