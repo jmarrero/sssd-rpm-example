@@ -8,7 +8,7 @@
 
 Name: sssd
 Version: 1.10.0
-Release: 16%{?dist}
+Release: 17%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -135,7 +135,7 @@ service.
 Summary: Userspace tools for use with the SSSD
 Group: Applications/System
 License: GPLv3+
-Requires: sssd = %{version}-%{release}
+Requires: sssd-common = %{version}-%{release}
 
 %description tools
 Provides userspace tools for manipulating users, groups, and nested groups in
@@ -679,6 +679,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Mon Jul 08 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-17
+- sssd-tools should require sssd-common, not sssd
+
 * Tue Jul 02 2013 Stephen Gallagher <sgallagh@redhat.com> - 1.10.0-16
 - Move sssd_pac to the sssd-ipa and sssd-ad subpackages
 - Trim out RHEL5-specific macros since we don't build on RHEL 5
