@@ -7,8 +7,8 @@
 %global ldb_version 1.1.16
 
 Name: sssd
-Version: 1.10.0
-Release: 17%{?dist}
+Version: 1.10.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -101,6 +101,7 @@ Conflicts: sssd < 1.10.0-8%{?dist}.beta2
 Requires: libldb%{?_isa} = %{ldb_version}
 Requires: libtdb%{?_isa} >= 1.1.3
 Requires: sssd-client%{?_isa} = %{version}-%{release}
+Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires: libini_config >= 1.0.0.1
 Requires(post): systemd-units chkconfig
 Requires(preun): systemd-units chkconfig
@@ -161,7 +162,6 @@ Group: Applications/System
 License: GPLv3+
 Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
-Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
 
 %description ldap
@@ -200,7 +200,6 @@ Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
-Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires: bind-utils
 
 %description ipa
@@ -214,7 +213,6 @@ License: GPLv3+
 Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
-Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires: bind-utils
 
 %description ad
@@ -679,6 +677,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Thu Jul 18 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.1-1
+- New upstream release 1.10.1
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.10.1
+
 * Mon Jul 08 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-17
 - sssd-tools should require sssd-common, not sssd
 
