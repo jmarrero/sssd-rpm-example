@@ -7,13 +7,13 @@
 %global ldb_version 1.1.16
 
 Name: sssd
-Version: 1.10.1
-Release: 1%{?dist}
+Version: 1.11.0
+Release: 0.1.beta2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta2.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -323,7 +323,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q
+%setup -q -n %{name}-1.10.92
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -677,6 +677,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Wed Jul 24 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0beta2
+- New upstream release 1.11 beta 2
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.11.0beta2
+
 * Thu Jul 18 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.10.1-1
 - New upstream release 1.10.1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.10.1
