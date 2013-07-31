@@ -8,7 +8,7 @@
 
 Name: sssd
 Version: 1.11.0
-Release: 0.1.beta2%{?dist}
+Release: 0.2.beta2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -341,8 +341,8 @@ autoreconf -ivf
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
     --with-default-ccache-dir=/run/user/%U \
     --with-default-ccname-template=DIR:%d/krb5cc \
-    --enable-nsslibdir=/%{_lib} \
-    --enable-pammoddir=/%{_lib}/security \
+    --enable-nsslibdir=/%{_libdir} \
+    --enable-pammoddir=/%{_libdir}/security \
     --enable-ldb-version-check \
     --disable-static \
     --disable-rpath \
@@ -565,8 +565,8 @@ rm -rf $RPM_BUILD_ROOT
 %files client -f sssd_client.lang
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
-/%{_lib}/libnss_sss.so.2
-/%{_lib}/security/pam_sss.so
+/%{_libdir}/libnss_sss.so.2
+/%{_libdir}/security/pam_sss.so
 %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
 %{_libdir}/krb5/plugins/authdata/sssd_pac_plugin.so
 %{_mandir}/man8/pam_sss.8*
@@ -677,7 +677,11 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
-* Wed Jul 24 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0beta2
+* Wed Jul 31 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0.2beta2
+- Resolves: #906427 - Do not use %{_lib} in specfile for the nss and
+                      pam libraries
+
+* Wed Jul 24 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0.1beta2
 - New upstream release 1.11 beta 2
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.11.0beta2
 
