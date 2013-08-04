@@ -8,7 +8,7 @@
 
 Name: sssd
 Version: 1.11.0
-Release: 0.2.beta2%{?dist}
+Release: 0.3.beta2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -677,6 +677,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Sun Aug 04 2013 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.11.0-0.3.beta2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_20_Mass_Rebuild
+
 * Wed Jul 31 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0.2beta2
 - Resolves: #906427 - Do not use %{_lib} in specfile for the nss and
                       pam libraries
