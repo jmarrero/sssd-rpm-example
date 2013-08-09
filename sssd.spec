@@ -341,8 +341,8 @@ autoreconf -ivf
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
     --with-default-ccache-dir=/run/user/%U \
     --with-default-ccname-template=DIR:%d/krb5cc \
-    --enable-nsslibdir=/%{_libdir} \
-    --enable-pammoddir=/%{_libdir}/security \
+    --enable-nsslibdir=%{_libdir} \
+    --enable-pammoddir=%{_libdir}/security \
     --enable-ldb-version-check \
     --disable-static \
     --disable-rpath \
@@ -565,8 +565,8 @@ rm -rf $RPM_BUILD_ROOT
 %files client -f sssd_client.lang
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
-/%{_libdir}/libnss_sss.so.2
-/%{_libdir}/security/pam_sss.so
+%{_libdir}/libnss_sss.so.2
+%{_libdir}/security/pam_sss.so
 %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
 %{_libdir}/krb5/plugins/authdata/sssd_pac_plugin.so
 %{_mandir}/man8/pam_sss.8*
