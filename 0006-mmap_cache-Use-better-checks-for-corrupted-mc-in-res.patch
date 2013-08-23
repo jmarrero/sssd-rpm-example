@@ -1,0 +1,118 @@
+From 441e6050f4b67134d15862e401b4c4e8546d7387 Mon Sep 17 00:00:00 2001
+From: Michal Zidek <mzidek@redhat.com>
+Date: Thu, 15 Aug 2013 16:08:17 +0200
+Subject: [PATCH 4/4] mmap_cache: Use better checks for corrupted mc in
+ responder
+
+We introduced new way to check integrity of memcache in the
+client code. We should use similiar checks in the responder.
+---
+ src/responder/nss/nsssrv_mmap_cache.c | 56 +++++++++++++++++++++++++++++++++--
+ src/util/mmap_cache.h                 |  2 --
+ 2 files changed, 53 insertions(+), 5 deletions(-)
+
+diff --git a/src/responder/nss/nsssrv_mmap_cache.c b/src/responder/nss/nsssrv_mmap_cache.c
+index a1bab0c8d877a354451ad5c31ec5e86b294837e9..95a7fe9dc7dd527cab6261f68d1dd0ab2f738d2a 100644
+--- a/src/responder/nss/nsssrv_mmap_cache.c
++++ b/src/responder/nss/nsssrv_mmap_cache.c
+@@ -356,6 +356,39 @@ static errno_t sss_mc_find_free_slots(struct sss_mc_ctx *mcc,
+     return EOK;
+ }
+ 
++static errno_t sss_mc_get_strs_offset(struct sss_mc_ctx *mcc,
++                                      size_t *_offset)
++{
++    switch (mcc->type) {
++    case SSS_MC_PASSWD:
++        *_offset = offsetof(struct sss_mc_pwd_data, strs);
++        return EOK;
++    case SSS_MC_GROUP:
++        *_offset = offsetof(struct sss_mc_grp_data, strs);
++        return EOK;
++    default:
++        DEBUG(SSSDBG_FATAL_FAILURE, ("Unknown memory cache type.\n"));
++        return EINVAL;
++    }
++}
++
++static errno_t sss_mc_get_strs_len(struct sss_mc_ctx *mcc,
++                                   struct sss_mc_rec *rec,
++                                   size_t *_len)
++{
++    switch (mcc->type) {
++    case SSS_MC_PASSWD:
++        *_len = ((struct sss_mc_pwd_data *)&rec->data)->strs_len;
++        return EOK;
++    case SSS_MC_GROUP:
++        *_len = ((struct sss_mc_grp_data *)&rec->data)->strs_len;
++        return EOK;
++    default:
++        DEBUG(SSSDBG_FATAL_FAILURE, ("Unknown memory cache type.\n"));
++        return EINVAL;
++    }
++}
++
+ static struct sss_mc_rec *sss_mc_find_record(struct sss_mc_ctx *mcc,
+                                              struct sized_string *key)
+ {
+@@ -364,6 +397,10 @@ static struct sss_mc_rec *sss_mc_find_record(struct sss_mc_ctx *mcc,
+     uint32_t slot;
+     rel_ptr_t name_ptr;
+     char *t_key;
++    size_t strs_offset;
++    size_t strs_len;
++    uint8_t *max_addr;
++    errno_t ret;
+ 
+     hash = sss_mc_hash(mcc, key->str, key->len);
+ 
+@@ -372,6 +409,14 @@ static struct sss_mc_rec *sss_mc_find_record(struct sss_mc_ctx *mcc,
+         return NULL;
+     }
+ 
++    /* Get max address of data table. */
++    max_addr = mcc->data_table + mcc->dt_size;
++
++    ret = sss_mc_get_strs_offset(mcc, &strs_offset);
++    if (ret != EOK) {
++        return NULL;
++    }
++
+     while (slot != MC_INVALID_VAL) {
+         if (!MC_SLOT_WITHIN_BOUNDS(slot, mcc->dt_size)) {
+             DEBUG(SSSDBG_FATAL_FAILURE,
+@@ -381,10 +426,15 @@ static struct sss_mc_rec *sss_mc_find_record(struct sss_mc_ctx *mcc,
+         }
+ 
+         rec = MC_SLOT_TO_PTR(mcc->data_table, slot, struct sss_mc_rec);
++        ret = sss_mc_get_strs_len(mcc, rec, &strs_len);
++        if (ret != EOK) {
++            return NULL;
++        }
++
+         name_ptr = *((rel_ptr_t *)rec->data);
+-        /* FIXME: This check relies on fact that offset of member strs
+-         * is the same in structures sss_mc_pwd_data and sss_mc_group_data. */
+-        if (name_ptr != offsetof(struct sss_mc_pwd_data, strs)) {
++        if (key->len > strs_len
++            || (name_ptr + key->len) > (strs_offset + strs_len)
++            || (uint8_t *)rec->data + strs_offset + strs_len > max_addr) {
+             DEBUG(SSSDBG_FATAL_FAILURE,
+                   ("Corrupted fastcache. name_ptr value is %u.\n", name_ptr));
+             sss_mmap_cache_reset(mcc);
+diff --git a/src/util/mmap_cache.h b/src/util/mmap_cache.h
+index abf8cac49dda1c53cf7aa2a428eefa49c42c4d8e..7c6693ac8151ac488fc5f4d2384749784eb98c7d 100644
+--- a/src/util/mmap_cache.h
++++ b/src/util/mmap_cache.h
+@@ -113,8 +113,6 @@ struct sss_mc_rec {
+     char data[0];
+ };
+ 
+-/* FIXME: Function sss_mc_find_record currently relies on fact that
+- * offset of strs is the same in both sss_mc_pwd_data and sss_mc_grp_data. */
+ struct sss_mc_pwd_data {
+     rel_ptr_t name;         /* ptr to name string, rel. to struct base addr */
+     uint32_t uid;
+-- 
+1.8.3.1
+

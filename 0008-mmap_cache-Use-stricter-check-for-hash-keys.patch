@@ -1,0 +1,41 @@
+From 6a6f9c3a48fbfd7c61cd0c6d0aa9b4bf7bdb5fd6 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 19 Aug 2013 07:24:46 +0200
+Subject: [PATCH 2/2] mmap_cache: Use stricter check for hash keys.
+
+ht_size is size of hash_table in bytes, but hash keys have type uint32_t
+---
+ src/responder/nss/nsssrv_mmap_cache.c | 10 ++++++----
+ 1 file changed, 6 insertions(+), 4 deletions(-)
+
+diff --git a/src/responder/nss/nsssrv_mmap_cache.c b/src/responder/nss/nsssrv_mmap_cache.c
+index 522e6fa57640261ff4cc17bf554776d7d905bf7a..c34997b8034d05796687ff7d380b367d5c7bba06 100644
+--- a/src/responder/nss/nsssrv_mmap_cache.c
++++ b/src/responder/nss/nsssrv_mmap_cache.c
+@@ -168,7 +168,7 @@ static void sss_mc_add_rec_to_chain(struct sss_mc_ctx *mcc,
+     struct sss_mc_rec *cur;
+     uint32_t slot;
+ 
+-    if (hash > mcc->ht_size) {
++    if (hash > MC_HT_ELEMS(mcc->ht_size)) {
+         /* Invalid hash. This should never happen, but better
+          * return than trying to access out of bounds memory */
+         return;
+@@ -225,9 +225,11 @@ static void sss_mc_rm_rec_from_chain(struct sss_mc_ctx *mcc,
+     struct sss_mc_rec *cur = NULL;
+     uint32_t slot;
+ 
+-    if (hash > mcc->ht_size) {
+-        /* Invalid hash. This should never happen, but better
+-         * return than trying to access out of bounds memory */
++    if (hash > MC_HT_ELEMS(mcc->ht_size)) {
++        /* It can happen if rec->hash1 and rec->has2 was the same.
++         * or it is invalid hash. It is better to return
++         * than trying to access out of bounds memory
++         */
+         return;
+     }
+ 
+-- 
+1.8.3.1
+

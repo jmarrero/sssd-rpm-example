@@ -1,0 +1,162 @@
+From 13df7b9e400211c717284fb841c849ba034ed348 Mon Sep 17 00:00:00 2001
+From: Michal Zidek <mzidek@redhat.com>
+Date: Wed, 14 Aug 2013 18:22:06 +0200
+Subject: [PATCH 3/4] mmap_cache: Off by one error.
+
+Removes off by one error when using macro MC_SIZE_TO_SLOTS
+and adds new macro MC_SLOT_WITHIN_BOUNDS.
+---
+ src/responder/nss/nsssrv_mmap_cache.c | 12 ++++++------
+ src/sss_client/nss_mc_group.c         |  8 ++++----
+ src/sss_client/nss_mc_passwd.c        |  8 ++++----
+ src/util/mmap_cache.h                 |  3 +++
+ 4 files changed, 17 insertions(+), 14 deletions(-)
+
+diff --git a/src/responder/nss/nsssrv_mmap_cache.c b/src/responder/nss/nsssrv_mmap_cache.c
+index cd5a6436e005b4c7f5622eaff2f259de3bbe5d29..a1bab0c8d877a354451ad5c31ec5e86b294837e9 100644
+--- a/src/responder/nss/nsssrv_mmap_cache.c
++++ b/src/responder/nss/nsssrv_mmap_cache.c
+@@ -368,12 +368,12 @@ static struct sss_mc_rec *sss_mc_find_record(struct sss_mc_ctx *mcc,
+     hash = sss_mc_hash(mcc, key->str, key->len);
+ 
+     slot = mcc->hash_table[hash];
+-    if (slot > MC_SIZE_TO_SLOTS(mcc->dt_size)) {
++    if (!MC_SLOT_WITHIN_BOUNDS(slot, mcc->dt_size)) {
+         return NULL;
+     }
+ 
+     while (slot != MC_INVALID_VAL) {
+-        if (slot > MC_SIZE_TO_SLOTS(mcc->dt_size)) {
++        if (!MC_SLOT_WITHIN_BOUNDS(slot, mcc->dt_size)) {
+             DEBUG(SSSDBG_FATAL_FAILURE,
+                   ("Corrupted fastcache. Slot number too big.\n"));
+             sss_mmap_cache_reset(mcc);
+@@ -617,13 +617,13 @@ errno_t sss_mmap_cache_pw_invalidate_uid(struct sss_mc_ctx *mcc, uid_t uid)
+     hash = sss_mc_hash(mcc, uidstr, strlen(uidstr) + 1);
+ 
+     slot = mcc->hash_table[hash];
+-    if (slot > MC_SIZE_TO_SLOTS(mcc->dt_size)) {
++    if (!MC_SLOT_WITHIN_BOUNDS(slot, mcc->dt_size)) {
+         ret = ENOENT;
+         goto done;
+     }
+ 
+     while (slot != MC_INVALID_VAL) {
+-        if (slot > MC_SIZE_TO_SLOTS(mcc->dt_size)) {
++        if (!MC_SLOT_WITHIN_BOUNDS(slot, mcc->dt_size)) {
+             DEBUG(SSSDBG_FATAL_FAILURE, ("Corrupted fastcache.\n"));
+             sss_mmap_cache_reset(mcc);
+             ret = ENOENT;
+@@ -755,13 +755,13 @@ errno_t sss_mmap_cache_gr_invalidate_gid(struct sss_mc_ctx *mcc, gid_t gid)
+     hash = sss_mc_hash(mcc, gidstr, strlen(gidstr) + 1);
+ 
+     slot = mcc->hash_table[hash];
+-    if (slot > MC_SIZE_TO_SLOTS(mcc->dt_size)) {
++    if (!MC_SLOT_WITHIN_BOUNDS(slot, mcc->dt_size)) {
+         ret = ENOENT;
+         goto done;
+     }
+ 
+     while (slot != MC_INVALID_VAL) {
+-        if (slot > MC_SIZE_TO_SLOTS(mcc->dt_size)) {
++        if (!MC_SLOT_WITHIN_BOUNDS(slot, mcc->dt_size)) {
+             DEBUG(SSSDBG_FATAL_FAILURE, ("Corrupted fastcache.\n"));
+             sss_mmap_cache_reset(mcc);
+             ret = ENOENT;
+diff --git a/src/sss_client/nss_mc_group.c b/src/sss_client/nss_mc_group.c
+index 9fe72a60e58e0c94f0c38f243276060b70f28aa9..4e3d9fb0dfffc2194a6d1e2035ed5782af528fce 100644
+--- a/src/sss_client/nss_mc_group.c
++++ b/src/sss_client/nss_mc_group.c
+@@ -121,7 +121,7 @@ errno_t sss_nss_mc_getgrnam(const char *name, size_t name_len,
+     /* If slot is not within the bounds of mmaped region and
+      * it's value is not MC_INVALID_VAL, then the cache is
+      * probbably corrupted. */
+-    while (slot < MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
++    while (MC_SLOT_WITHIN_BOUNDS(slot, gr_mc_ctx.dt_size)) {
+         ret = sss_nss_mc_get_record(&gr_mc_ctx, slot, &rec);
+         if (ret) {
+             goto done;
+@@ -155,7 +155,7 @@ errno_t sss_nss_mc_getgrnam(const char *name, size_t name_len,
+         slot = rec->next;
+     }
+ 
+-    if (slot >= MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
++    if (!MC_SLOT_WITHIN_BOUNDS(slot, gr_mc_ctx.dt_size)) {
+         ret = ENOENT;
+         goto done;
+     }
+@@ -196,7 +196,7 @@ errno_t sss_nss_mc_getgrgid(gid_t gid,
+     /* If slot is not within the bounds of mmaped region and
+      * it's value is not MC_INVALID_VAL, then the cache is
+      * probbably corrupted. */
+-    while (slot < MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
++    while (MC_SLOT_WITHIN_BOUNDS(slot, gr_mc_ctx.dt_size)) {
+         ret = sss_nss_mc_get_record(&gr_mc_ctx, slot, &rec);
+         if (ret) {
+             goto done;
+@@ -217,7 +217,7 @@ errno_t sss_nss_mc_getgrgid(gid_t gid,
+         slot = rec->next;
+     }
+ 
+-    if (slot >= MC_SIZE_TO_SLOTS(gr_mc_ctx.dt_size)) {
++    if (!MC_SLOT_WITHIN_BOUNDS(slot, gr_mc_ctx.dt_size)) {
+         ret = ENOENT;
+         goto done;
+     }
+diff --git a/src/sss_client/nss_mc_passwd.c b/src/sss_client/nss_mc_passwd.c
+index 7aca4a04b6b19b50b883960229083b688639ee4f..a0a8d87f7475d8fea1bc32409a2d5c6af8f7896f 100644
+--- a/src/sss_client/nss_mc_passwd.c
++++ b/src/sss_client/nss_mc_passwd.c
+@@ -122,7 +122,7 @@ errno_t sss_nss_mc_getpwnam(const char *name, size_t name_len,
+     /* If slot is not within the bounds of mmaped region and
+      * it's value is not MC_INVALID_VAL, then the cache is
+      * probbably corrupted. */
+-    while (slot < MC_SIZE_TO_SLOTS(pw_mc_ctx.dt_size)) {
++    while (MC_SLOT_WITHIN_BOUNDS(slot, pw_mc_ctx.dt_size)) {
+         ret = sss_nss_mc_get_record(&pw_mc_ctx, slot, &rec);
+         if (ret) {
+             goto done;
+@@ -157,7 +157,7 @@ errno_t sss_nss_mc_getpwnam(const char *name, size_t name_len,
+         slot = rec->next;
+     }
+ 
+-    if (slot >= MC_SIZE_TO_SLOTS(pw_mc_ctx.dt_size)) {
++    if (!MC_SLOT_WITHIN_BOUNDS(slot, pw_mc_ctx.dt_size)) {
+         ret = ENOENT;
+         goto done;
+     }
+@@ -198,7 +198,7 @@ errno_t sss_nss_mc_getpwuid(uid_t uid,
+     /* If slot is not within the bounds of mmaped region and
+      * it's value is not MC_INVALID_VAL, then the cache is
+      * probbably corrupted. */
+-    while (slot < MC_SIZE_TO_SLOTS(pw_mc_ctx.dt_size)) {
++    while (MC_SLOT_WITHIN_BOUNDS(slot, pw_mc_ctx.dt_size)) {
+         ret = sss_nss_mc_get_record(&pw_mc_ctx, slot, &rec);
+         if (ret) {
+             goto done;
+@@ -219,7 +219,7 @@ errno_t sss_nss_mc_getpwuid(uid_t uid,
+         slot = rec->next;
+     }
+ 
+-    if (slot >= MC_SIZE_TO_SLOTS(pw_mc_ctx.dt_size)) {
++    if (!MC_SLOT_WITHIN_BOUNDS(slot, pw_mc_ctx.dt_size)) {
+         ret = ENOENT;
+         goto done;
+     }
+diff --git a/src/util/mmap_cache.h b/src/util/mmap_cache.h
+index 6c223df6c79b5ac10786903eecd1cb8c8a3999a5..abf8cac49dda1c53cf7aa2a428eefa49c42c4d8e 100644
+--- a/src/util/mmap_cache.h
++++ b/src/util/mmap_cache.h
+@@ -67,6 +67,9 @@ typedef uint32_t rel_ptr_t;
+ #define MC_SLOT_TO_PTR(base, slot, type) \
+                                 (type *)((base) + ((slot) * MC_SLOT_SIZE))
+ 
++#define MC_SLOT_WITHIN_BOUNDS(slot, dt_size) \
++    ((slot) < ((dt_size) / MC_SLOT_SIZE))
++
+ #define MC_VALID_BARRIER(val) (((val) & 0xff000000) == 0xf0000000)
+ 
+ #define MC_CHECK_RECORD_LENGTH(mc_ctx, rec) \
+-- 
+1.8.3.1
+

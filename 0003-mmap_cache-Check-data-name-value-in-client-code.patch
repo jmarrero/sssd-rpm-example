@@ -1,0 +1,119 @@
+From 8a5931bcc8e9034e4beb92fc9addf3f7fcf83fd6 Mon Sep 17 00:00:00 2001
+From: Michal Zidek <mzidek@redhat.com>
+Date: Mon, 12 Aug 2013 19:29:56 +0200
+Subject: [PATCH 1/4] mmap_cache: Check data->name value in client code
+
+data->name value must be checked to prevent segfaults in
+case of corrupted memory cache.
+
+resolves:
+https://fedorahosted.org/sssd/ticket/2018
+---
+ src/sss_client/nss_mc_group.c  | 18 ++++++++++++++++++
+ src/sss_client/nss_mc_passwd.c | 19 +++++++++++++++++++
+ 2 files changed, 37 insertions(+)
+
+diff --git a/src/sss_client/nss_mc_group.c b/src/sss_client/nss_mc_group.c
+index 2d69be93b76587a7e474c1db55430930ca850321..da5da0411e556c30c4a3db6faf80139d65ae817c 100644
+--- a/src/sss_client/nss_mc_group.c
++++ b/src/sss_client/nss_mc_group.c
+@@ -23,6 +23,7 @@
+ #include <stdio.h>
+ #include <string.h>
+ #include <stdlib.h>
++#include <stddef.h>
+ #include <sys/mman.h>
+ #include <time.h>
+ #include "nss_mc.h"
+@@ -102,12 +103,17 @@ errno_t sss_nss_mc_getgrnam(const char *name, size_t name_len,
+     uint32_t hash;
+     uint32_t slot;
+     int ret;
++    size_t strs_offset;
++    uint8_t *max_addr;
+ 
+     ret = sss_nss_mc_get_ctx("group", &gr_mc_ctx);
+     if (ret) {
+         return ret;
+     }
+ 
++    /* Get max address of data table. */
++    max_addr = gr_mc_ctx.data_table + gr_mc_ctx.dt_size;
++
+     /* hashes are calculated including the NULL terminator */
+     hash = sss_nss_mc_hash(&gr_mc_ctx, name, name_len + 1);
+     slot = gr_mc_ctx.hash_table[hash];
+@@ -133,7 +139,19 @@ errno_t sss_nss_mc_getgrnam(const char *name, size_t name_len,
+             continue;
+         }
+ 
++        strs_offset = offsetof(struct sss_mc_grp_data, strs);
+         data = (struct sss_mc_grp_data *)rec->data;
++        /* Integrity check
++         * - name_len cannot be longer than all strings
++         * - data->name cannot point outside strings
++         * - all strings must be within data_table */
++        if (name_len > data->strs_len
++            || (data->name + name_len) > (strs_offset + data->strs_len)
++            || (uint8_t *)data->strs + data->strs_len > max_addr) {
++            ret = ENOENT;
++            goto done;
++        }
++
+         rec_name = (char *)data + data->name;
+         if (strcmp(name, rec_name) == 0) {
+             break;
+diff --git a/src/sss_client/nss_mc_passwd.c b/src/sss_client/nss_mc_passwd.c
+index fa21bd2896a1de868735cd6d22d09159fd3d8ed2..4b08766857d5013e6f13c3dbe574c5a88fa915b0 100644
+--- a/src/sss_client/nss_mc_passwd.c
++++ b/src/sss_client/nss_mc_passwd.c
+@@ -23,6 +23,7 @@
+ #include <stdio.h>
+ #include <string.h>
+ #include <stdlib.h>
++#include <stddef.h>
+ #include <sys/mman.h>
+ #include <time.h>
+ #include "nss_mc.h"
+@@ -103,12 +104,17 @@ errno_t sss_nss_mc_getpwnam(const char *name, size_t name_len,
+     uint32_t hash;
+     uint32_t slot;
+     int ret;
++    size_t strs_offset;
++    uint8_t *max_addr;
+ 
+     ret = sss_nss_mc_get_ctx("passwd", &pw_mc_ctx);
+     if (ret) {
+         return ret;
+     }
+ 
++    /* Get max address of data table. */
++    max_addr = pw_mc_ctx.data_table + pw_mc_ctx.dt_size;
++
+     /* hashes are calculated including the NULL terminator */
+     hash = sss_nss_mc_hash(&pw_mc_ctx, name, name_len + 1);
+     slot = pw_mc_ctx.hash_table[hash];
+@@ -134,7 +140,20 @@ errno_t sss_nss_mc_getpwnam(const char *name, size_t name_len,
+             continue;
+         }
+ 
++        strs_offset = offsetof(struct sss_mc_pwd_data, strs);
++
+         data = (struct sss_mc_pwd_data *)rec->data;
++        /* Integrity check
++         * - name_len cannot be longer than all strings
++         * - data->name cannot point outside strings
++         * - all strings must be within data_table */
++        if (name_len > data->strs_len
++            || (data->name + name_len) > (strs_offset + data->strs_len)
++            || (uint8_t *)data->strs + data->strs_len > max_addr) {
++            ret = ENOENT;
++            goto done;
++        }
++
+         rec_name = (char *)data + data->name;
+         if (strcmp(name, rec_name) == 0) {
+             break;
+-- 
+1.8.3.1
+
