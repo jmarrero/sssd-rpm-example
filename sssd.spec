@@ -8,25 +8,15 @@
 
 Name: sssd
 Version: 1.11.0
-Release: 0.4.beta2%{?dist}
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta2.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001:  0001-proxy-Alocate-auth-tokens-in-struct-authtok_conv.patch
-Patch0002:  0002-mmap_cache-Check-if-slot-and-name_ptr-are-not-invali.patch
-Patch0003:  0003-mmap_cache-Check-data-name-value-in-client-code.patch
-Patch0004:  0004-mmap_cache-Remove-triple-checks-in-client-code.patch
-Patch0005:  0005-mmap_cache-Off-by-one-error.patch
-Patch0006:  0006-mmap_cache-Use-better-checks-for-corrupted-mc-in-res.patch
-Patch0007:  0007-mmap_cache-Skip-records-which-doesn-t-have-same-hash.patch
-Patch0008:  0008-mmap_cache-Use-stricter-check-for-hash-keys.patch
-
-Patch0501:  0501-FEDORA-Switch-the-default-ccache-location.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -332,7 +322,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.10.92
+%setup -q
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -686,6 +676,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Wed Aug 28 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0-1
+- New upstream release 1.11.0
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.11.0
+
 * Fri Aug 23 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0-0.4.beta2
 - Resolves: #967012 - [abrt] sssd-1.9.5-1.fc18: sss_mmap_cache_gr_invalidate_gid:
                       Process /usr/libexec/sssd/sssd_nss was killed by
