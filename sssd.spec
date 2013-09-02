@@ -44,7 +44,7 @@ BuildRequires: popt-devel
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
 BuildRequires: libtdb-devel
-BuildRequires: libldb-devel = %{ldb_version}
+BuildRequires: libldb-devel >= %{ldb_version}
 BuildRequires: libdhash-devel >= 0.4.2
 BuildRequires: libcollection-devel
 BuildRequires: libini_config-devel >= 1.0.0.1
@@ -97,7 +97,7 @@ License: GPLv3+
 Conflicts: selinux-policy < 3.10.0-46
 Conflicts: sssd < 1.10.0-8%{?dist}.beta2
 # Requires
-Requires: libldb%{?_isa} = %{ldb_version}
+Requires: libldb%{?_isa} >= %{ldb_version}
 Requires: libtdb%{?_isa} >= 1.1.3
 Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
