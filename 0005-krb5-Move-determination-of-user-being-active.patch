@@ -1,0 +1,220 @@
+From bfd32c9e8f302d7722838a68572c6801f5640657 Mon Sep 17 00:00:00 2001
+From: Simo Sorce <simo@redhat.com>
+Date: Fri, 30 Aug 2013 11:31:23 -0400
+Subject: [PATCH 05/14] krb5: Move determination of user being active
+
+The way a user is checked for being active does not depend on the ccache
+type so move that check out of the ccache specific functions.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2061
+---
+ src/providers/krb5/krb5_auth.c  | 10 +++++++--
+ src/providers/krb5/krb5_utils.c | 47 +++++++----------------------------------
+ src/providers/krb5/krb5_utils.h |  3 +--
+ 3 files changed, 17 insertions(+), 43 deletions(-)
+
+diff --git a/src/providers/krb5/krb5_auth.c b/src/providers/krb5/krb5_auth.c
+index 976fdec097a06ae5b211a5a93dcb13b9548031ef..178f18a3c5dec4772a59c6d6cfbcdc419c20d48c 100644
+--- a/src/providers/krb5/krb5_auth.c
++++ b/src/providers/krb5/krb5_auth.c
+@@ -76,7 +76,7 @@ check_old_ccache(const char *old_ccache, struct krb5child_req *kr,
+     cc_template = dp_opt_get_cstring(kr->krb5_ctx->opts, KRB5_CCNAME_TMPL);
+ 
+     ret = old_cc_ops->check_existing(old_ccache, kr->uid, realm, kr->upn,
+-                                     cc_template, active, valid);
++                                     cc_template, valid);
+     if (ret == ENOENT) {
+         DEBUG(SSSDBG_TRACE_FUNC,
+               ("Saved ccache %s doesn't exist.\n", old_ccache));
+@@ -84,11 +84,17 @@ check_old_ccache(const char *old_ccache, struct krb5child_req *kr,
+     }
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+-              ("Cannot check if saved ccache %s is active and valid\n",
++              ("Cannot check if saved ccache %s is valid\n",
+                old_ccache));
+         return ret;
+     }
+ 
++    ret = check_if_uid_is_active(kr->uid, active);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, ("check_if_uid_is_active failed.\n"));
++        return ret;
++    }
++
+     return EOK;
+ }
+ 
+diff --git a/src/providers/krb5/krb5_utils.c b/src/providers/krb5/krb5_utils.c
+index ce3cab60d71a8b3329eeedbd82bec6ecb750948c..7f2ca2d5ba570e3467ec7dc4060f58f38b1f3428 100644
+--- a/src/providers/krb5/krb5_utils.c
++++ b/src/providers/krb5/krb5_utils.c
+@@ -1066,14 +1066,11 @@ cc_file_create(const char *location, pcre *illegal_re,
+ }
+ 
+ static errno_t
+-cc_residual_is_used(uid_t uid, const char *ccname,
+-                    enum sss_krb5_cc_type type, bool *result)
++cc_residual_exists(uid_t uid, const char *ccname,
++                   enum sss_krb5_cc_type type)
+ {
+     int ret;
+     struct stat stat_buf;
+-    bool active;
+-
+-    *result = false;
+ 
+     if (ccname == NULL || *ccname == '\0') {
+         return EINVAL;
+@@ -1086,7 +1083,6 @@ cc_residual_is_used(uid_t uid, const char *ccname,
+         if (ret == ENOENT) {
+             DEBUG(SSSDBG_FUNC_DATA, ("Cache file [%s] does not exist, "
+                                      "it will be recreated\n", ccname));
+-            *result = false;
+             return ENOENT;
+         }
+ 
+@@ -1123,20 +1119,6 @@ cc_residual_is_used(uid_t uid, const char *ccname,
+         return EINVAL;
+     }
+ 
+-    ret = check_if_uid_is_active(uid, &active);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_OP_FAILURE, ("check_if_uid_is_active failed.\n"));
+-        return ret;
+-    }
+-
+-    if (!active) {
+-        DEBUG(SSSDBG_TRACE_FUNC, ("User [%d] is not active\n", uid));
+-    } else {
+-        DEBUG(SSSDBG_TRACE_LIBS,
+-              ("User [%d] is still active, reusing ccache [%s].\n",
+-              uid, ccname));
+-        *result = true;
+-    }
+     return EOK;
+ }
+ 
+@@ -1157,10 +1139,9 @@ cc_check_template(const char *cc_template)
+ errno_t
+ cc_file_check_existing(const char *location, uid_t uid,
+                        const char *realm, const char *princ,
+-                       const char *cc_template, bool *_active, bool *_valid)
++                       const char *cc_template, bool *_valid)
+ {
+     errno_t ret;
+-    bool active;
+     bool valid;
+     const char *filename;
+ 
+@@ -1175,14 +1156,13 @@ cc_file_check_existing(const char *location, uid_t uid,
+         return EINVAL;
+     }
+ 
+-    ret = cc_residual_is_used(uid, filename, SSS_KRB5_TYPE_FILE, &active);
++    ret = cc_residual_exists(uid, filename, SSS_KRB5_TYPE_FILE);
+     if (ret != EOK) {
+         if (ret != ENOENT) {
+             DEBUG(SSSDBG_OP_FAILURE,
+                   ("Could not check if ccache is active.\n"));
+         }
+         cc_check_template(cc_template);
+-        active = false;
+         return ret;
+     }
+ 
+@@ -1191,7 +1171,6 @@ cc_file_check_existing(const char *location, uid_t uid,
+         return ret;
+     }
+ 
+-    *_active = active;
+     *_valid = valid;
+     return EOK;
+ }
+@@ -1222,10 +1201,8 @@ cc_dir_create(const char *location, pcre *illegal_re,
+ errno_t
+ cc_dir_check_existing(const char *location, uid_t uid,
+                       const char *realm, const char *princ,
+-                      const char *cc_template, bool *_active, bool *_valid)
++                      const char *cc_template, bool *_valid)
+ {
+-    bool active;
+-    bool active_primary = false;
+     bool valid;
+     enum sss_krb5_cc_type type;
+     const char *filename;
+@@ -1279,7 +1256,7 @@ cc_dir_check_existing(const char *location, uid_t uid,
+         dir = tmp;
+     }
+ 
+-    ret = cc_residual_is_used(uid, dir, SSS_KRB5_TYPE_DIR, &active);
++    ret = cc_residual_exists(uid, dir, SSS_KRB5_TYPE_DIR);
+     if (ret != EOK) {
+         if (ret != ENOENT) {
+             DEBUG(SSSDBG_OP_FAILURE,
+@@ -1298,8 +1275,7 @@ cc_dir_check_existing(const char *location, uid_t uid,
+         ret = ENOMEM;
+         goto done;
+     }
+-    ret = cc_residual_is_used(uid, primary_file, SSS_KRB5_TYPE_FILE,
+-                              &active_primary);
++    ret = cc_residual_exists(uid, primary_file, SSS_KRB5_TYPE_FILE);
+     if (ret != EOK && ret != ENOENT) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               ("Could not check if file 'primary' [%s] in dir ccache"
+@@ -1312,7 +1288,6 @@ cc_dir_check_existing(const char *location, uid_t uid,
+         goto done;
+     }
+ 
+-    *_active = active;
+     *_valid = valid;
+     ret = EOK;
+ 
+@@ -1351,11 +1326,9 @@ cc_keyring_create(const char *location, pcre *illegal_re,
+ errno_t
+ cc_keyring_check_existing(const char *location, uid_t uid,
+                           const char *realm, const char *princ,
+-                          const char *cc_template, bool *_active,
+-                          bool *_valid)
++                          const char *cc_template, bool *_valid)
+ {
+     errno_t ret;
+-    bool active;
+     bool valid;
+     const char *residual;
+ 
+@@ -1366,16 +1339,12 @@ cc_keyring_check_existing(const char *location, uid_t uid,
+         return EINVAL;
+     }
+ 
+-    /* The keyring cache is always active */
+-    active = true;
+-
+     /* Check if any user is actively using this cache */
+     ret = check_cc_validity(location, realm, princ, &valid);
+     if (ret != EOK) {
+         return ret;
+     }
+ 
+-    *_active = active;
+     *_valid = valid;
+     return EOK;
+ }
+diff --git a/src/providers/krb5/krb5_utils.h b/src/providers/krb5/krb5_utils.h
+index a73098d4090199c5a49bdf0adf5115e9120eeb5b..ca33205817cbb726a75b809f71d1fb1589744e15 100644
+--- a/src/providers/krb5/krb5_utils.h
++++ b/src/providers/krb5/krb5_utils.h
+@@ -47,8 +47,7 @@ typedef errno_t (*cc_be_create_fn)(const char *location, pcre *illegal_re,
+                                    uid_t uid, gid_t gid, bool private_path);
+ typedef errno_t (*cc_be_check_existing)(const char *location, uid_t uid,
+                                         const char *realm, const char *princ,
+-                                        const char *cc_template, bool *active,
+-                                        bool *valid);
++                                        const char *cc_template, bool *valid);
+ 
+ /* A ccache back end */
+ struct sss_krb5_cc_be {
+-- 
+1.8.3.1
+

@@ -1,0 +1,154 @@
+From 04c49a183f49c28f9ef900bdbc4eb30f23278e17 Mon Sep 17 00:00:00 2001
+From: Simo Sorce <simo@redhat.com>
+Date: Wed, 28 Aug 2013 22:12:07 -0400
+Subject: [PATCH 02/14] krb5: Add helper to destroy ccache as user
+
+This function safely destroy a ccache given a cache name and user crdentials.
+It becomes the user so no possible races can compromise the system, then
+uses libkrb5 functions to properly destroy a ccache, independently of the
+cache type.
+Finally restores the original credentials after closing the ccache handlers.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2061
+---
+ src/providers/krb5/krb5_utils.c | 109 ++++++++++++++++++++++++++++++++++++++++
+ src/providers/krb5/krb5_utils.h |   2 +
+ 2 files changed, 111 insertions(+)
+
+diff --git a/src/providers/krb5/krb5_utils.c b/src/providers/krb5/krb5_utils.c
+index 6bf1cf610dd20afc7a600e9505c4bae2ff675fcc..1141f3fc839a78927dab5f50267c52d5b44b46ba 100644
+--- a/src/providers/krb5/krb5_utils.c
++++ b/src/providers/krb5/krb5_utils.c
+@@ -818,6 +818,115 @@ done:
+ }
+ 
+ 
++struct sss_krb5_ccache {
++    struct sss_creds *creds;
++    krb5_context context;
++    krb5_ccache ccache;
++};
++
++static int sss_free_krb5_ccache(void *mem)
++{
++    struct sss_krb5_ccache *cc = talloc_get_type(mem, struct sss_krb5_ccache);
++
++    if (cc->ccache) {
++        krb5_cc_close(cc->context, cc->ccache);
++    }
++    krb5_free_context(cc->context);
++    restore_creds(cc->creds);
++    return 0;
++}
++
++static errno_t sss_open_ccache_as_user(TALLOC_CTX *mem_ctx,
++                                       const char *ccname,
++                                       uid_t uid, gid_t gid,
++                                       struct sss_krb5_ccache **ccache)
++{
++    struct sss_krb5_ccache *cc;
++    krb5_error_code kerr;
++    errno_t ret;
++
++    cc = talloc_zero(mem_ctx, struct sss_krb5_ccache);
++    if (!cc) {
++        return ENOMEM;
++    }
++    talloc_set_destructor((TALLOC_CTX *)cc, sss_free_krb5_ccache);
++
++    ret = switch_creds(cc, uid, gid, 0, NULL, &cc->creds);
++    if (ret) {
++        goto done;
++    }
++
++    kerr = krb5_init_context(&cc->context);
++    if (kerr) {
++        ret = EIO;
++        goto done;
++    }
++
++    kerr = krb5_cc_resolve(cc->context, ccname, &cc->ccache);
++    if (kerr == KRB5_FCC_NOFILE || cc->ccache == NULL) {
++        DEBUG(SSSDBG_TRACE_FUNC, ("ccache %s is missing or empty\n", ccname));
++        ret = ERR_NOT_FOUND;
++        goto done;
++    } else if (kerr != 0) {
++        KRB5_DEBUG(SSSDBG_OP_FAILURE, cc->context, kerr);
++        DEBUG(SSSDBG_CRIT_FAILURE, ("krb5_cc_resolve failed.\n"));
++        ret = ERR_INTERNAL;
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    if (ret) {
++        talloc_free(cc);
++    } else {
++        *ccache = cc;
++    }
++    return ret;
++}
++
++static errno_t sss_destroy_ccache(struct sss_krb5_ccache *cc)
++{
++    krb5_error_code kerr;
++    errno_t ret;
++
++    kerr = krb5_cc_destroy(cc->context, cc->ccache);
++    if (kerr) {
++        KRB5_DEBUG(SSSDBG_OP_FAILURE, cc->context, kerr);
++        DEBUG(SSSDBG_CRIT_FAILURE, ("krb5_cc_destroy failed.\n"));
++        ret = EIO;
++    }
++
++    /* krb5_cc_destroy frees cc->ccache in all events */
++    cc->ccache = NULL;
++
++    return ret;
++}
++
++errno_t sss_krb5_cc_destroy(const char *ccname, uid_t uid, gid_t gid)
++{
++    struct sss_krb5_ccache *cc = NULL;
++    TALLOC_CTX *tmp_ctx;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, ("talloc_new failed.\n"));
++        return ENOMEM;
++    }
++
++    ret = sss_open_ccache_as_user(tmp_ctx, ccname, uid, gid, &cc);
++    if (ret) {
++        goto done;
++    }
++
++    ret = sss_destroy_ccache(cc);
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
+ 
+ /*======== ccache back end utilities ========*/
+ struct sss_krb5_cc_be *
+diff --git a/src/providers/krb5/krb5_utils.h b/src/providers/krb5/krb5_utils.h
+index aac3ec72ec7e1664ae96cc4e53d368e22448f5f1..ebcfe938af913f107b8816c3209b690ac90e797e 100644
+--- a/src/providers/krb5/krb5_utils.h
++++ b/src/providers/krb5/krb5_utils.h
+@@ -87,6 +87,8 @@ errno_t switch_creds(TALLOC_CTX *mem_ctx,
+                      struct sss_creds **saved_creds);
+ errno_t restore_creds(struct sss_creds *saved_creds);
+ 
++errno_t sss_krb5_cc_destroy(const char *ccname, uid_t uid, gid_t gid);
++
+ errno_t get_ccache_file_data(const char *ccache_file, const char *client_name,
+                              struct tgt_times *tgtt);
+ 
+-- 
+1.8.3.1
+

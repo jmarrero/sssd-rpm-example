@@ -1,0 +1,97 @@
+From 14050f35224360883e20ebd810d3eb40f39267cf Mon Sep 17 00:00:00 2001
+From: Simo Sorce <simo@redhat.com>
+Date: Sat, 31 Aug 2013 14:21:22 -0400
+Subject: [PATCH 12/14] krb5: Add file/dir path precheck
+
+Add a precheck on the actual existence at all of the file/dir ccname
+targeted (for FILE/DIR types), and bail early if nothing is available.
+
+While testing I found out that without this check, the krb5_cc_resolve()
+function we call as user to check old paths would try to create the
+directory if it didn't exist.
+
+With a ccname of DIR:/tmp/ccdir_1000 saved in the user entry this would
+cause two undesirable side effects:
+
+First it would actually create a directory with the old name, when it
+should not.
+
+Second, because for some reason the umask is set to 0127 in sssd_be, it
+would create the directory with permission 600 (missing the 'x' traverse
+bit on the directory. If the new ccache has the same name it would cause
+the krb5_child process to fal to store the credential cache in it.
+
+Related:
+https://fedorahosted.org/sssd/ticket/2061
+---
+ src/providers/krb5/krb5_auth.c  |  1 +
+ src/providers/krb5/krb5_utils.c | 34 ++++++++++++++++++++++++++++++++++
+ 2 files changed, 35 insertions(+)
+
+diff --git a/src/providers/krb5/krb5_auth.c b/src/providers/krb5/krb5_auth.c
+index 1585f709655853827f2778010452a58657add5d0..7cfa3e943c15c0f515f3372079cee18dd7978c92 100644
+--- a/src/providers/krb5/krb5_auth.c
++++ b/src/providers/krb5/krb5_auth.c
+@@ -69,6 +69,7 @@ check_old_ccache(const char *old_ccache, struct krb5child_req *kr,
+                                     realm, kr->upn);
+     switch (ret) {
+     case ERR_NOT_FOUND:
++    case ENOENT:
+         DEBUG(SSSDBG_TRACE_FUNC,
+               ("Saved ccache %s doesn't exist.\n", old_ccache));
+         return ENOENT;
+diff --git a/src/providers/krb5/krb5_utils.c b/src/providers/krb5/krb5_utils.c
+index d0ccd2d7e03bcabe07113b5abb43d9119b35321c..bb933d7f722cbef90b73f4a721382165572c69b9 100644
+--- a/src/providers/krb5/krb5_utils.c
++++ b/src/providers/krb5/krb5_utils.c
+@@ -967,6 +967,30 @@ done:
+     return ret;
+ }
+ 
++static errno_t sss_low_level_path_check(const char *ccname)
++{
++    const char *filename;
++    struct stat buf;
++    int ret;
++
++    if (ccname[0] == '/') {
++        filename = ccname;
++    } else if (strncmp(ccname, "FILE:", 5) == 0) {
++        filename = ccname + 5;
++    } else if (strncmp(ccname, "DIR:", 4) == 0) {
++        filename = ccname + 4;
++        if (filename[0] == ':') filename += 1;
++    } else {
++        /* only FILE and DIR types need file checks so far, we ignore any
++         * other type */
++        return EOK;
++    }
++
++    ret = stat(filename, &buf);
++    if (ret == -1) return errno;
++    return EOK;
++}
++
+ errno_t sss_krb5_cc_verify_ccache(const char *ccname, uid_t uid, gid_t gid,
+                                   const char *realm, const char *principal)
+ {
+@@ -980,6 +1004,16 @@ errno_t sss_krb5_cc_verify_ccache(const char *ccname, uid_t uid, gid_t gid,
+     krb5_error_code kerr;
+     errno_t ret;
+ 
++    /* first of all verify if the old ccache file/dir exists as we may be
++     * trying to verify if an old ccache exists at all. If no file/dir
++     * exists bail out immediately otherwise a following krb5_cc_resolve()
++     * call may actually create paths and files we do not want to have
++     * around */
++    ret = sss_low_level_path_check(ccname);
++    if (ret) {
++        return ret;
++    }
++
+     tmp_ctx = talloc_new(NULL);
+     if (tmp_ctx == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE, ("talloc_new failed.\n"));
+-- 
+1.8.3.1
+

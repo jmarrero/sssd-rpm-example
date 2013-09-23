@@ -1,0 +1,127 @@
+From 077fa994f62641a13665b6a07d38b3d5a903dcdc Mon Sep 17 00:00:00 2001
+From: Simo Sorce <simo@redhat.com>
+Date: Tue, 3 Sep 2013 20:57:58 -0400
+Subject: [PATCH 14/14] krb5: Remove unused helper functions
+
+these functions are not needed anymore.
+
+Related:
+https://fedorahosted.org/sssd/ticket/2061
+---
+ src/util/sss_krb5.c | 80 -----------------------------------------------------
+ src/util/sss_krb5.h |  8 ------
+ 2 files changed, 88 deletions(-)
+
+diff --git a/src/util/sss_krb5.c b/src/util/sss_krb5.c
+index d4fee42a0297d5bb46135669a5fc12857ea95936..f8a7e6f9be15c7b2dfee9906af914533bd8ac4cd 100644
+--- a/src/util/sss_krb5.c
++++ b/src/util/sss_krb5.c
+@@ -854,86 +854,6 @@ sss_krb5_free_keytab_entry_contents(krb5_context context,
+ }
+ #endif
+ 
+-#define SSS_KRB5_FILE   "FILE:"
+-#define SSS_KRB5_DIR    "DIR:"
+-#define SSS_KRB5_KEYRING "KEYRING:"
+-
+-enum sss_krb5_cc_type
+-sss_krb5_get_type(const char *full_location)
+-{
+-    if (!full_location) {
+-        return SSS_KRB5_TYPE_UNKNOWN;
+-    }
+-
+-    if (strncmp(full_location, SSS_KRB5_FILE,
+-                sizeof(SSS_KRB5_FILE)-1) == 0) {
+-        return SSS_KRB5_TYPE_FILE;
+-    }
+-#ifdef HAVE_KRB5_CC_COLLECTION
+-    else if (strncmp(full_location, SSS_KRB5_DIR,
+-               sizeof(SSS_KRB5_DIR)-1) == 0) {
+-        return SSS_KRB5_TYPE_DIR;
+-    }
+-    else if (strncmp(full_location, SSS_KRB5_KEYRING,
+-               sizeof(SSS_KRB5_KEYRING)-1) == 0) {
+-        return SSS_KRB5_TYPE_KEYRING;
+-    }
+-#endif /* HAVE_KRB5_CC_COLLECTION */
+-
+-    else if (full_location[0] == '/') {
+-        return SSS_KRB5_TYPE_FILE;
+-    }
+-
+-    return SSS_KRB5_TYPE_UNKNOWN;
+-}
+-
+-const char *
+-sss_krb5_residual_by_type(const char *full_location,
+-                          enum sss_krb5_cc_type type)
+-{
+-    size_t offset;
+-
+-    if (full_location == NULL) return NULL;
+-
+-    switch (type) {
+-        case SSS_KRB5_TYPE_FILE:
+-            if (full_location[0] == '/') {
+-                offset = 0;
+-            } else {
+-                offset = sizeof(SSS_KRB5_FILE)-1;
+-            }
+-            break;
+-#ifdef HAVE_KRB5_CC_COLLECTION
+-        case SSS_KRB5_TYPE_DIR:
+-            offset = sizeof(SSS_KRB5_DIR)-1;
+-            break;
+-
+-        case SSS_KRB5_TYPE_KEYRING:
+-            offset = sizeof(SSS_KRB5_KEYRING)-1;
+-            break;
+-#endif /* HAVE_KRB5_CC_COLLECTION */
+-
+-        default:
+-            return NULL;
+-    }
+-
+-    return full_location + offset;
+-}
+-
+-const char *
+-sss_krb5_residual_check_type(const char *full_location,
+-                             enum sss_krb5_cc_type expected_type)
+-{
+-    enum sss_krb5_cc_type type;
+-
+-    type = sss_krb5_get_type(full_location);
+-    if (type != expected_type) {
+-        DEBUG(SSSDBG_OP_FAILURE, ("Unexpected ccache type\n"));
+-        return NULL;
+-    }
+-
+-    return sss_krb5_residual_by_type(full_location, type);
+-}
+ 
+ #ifdef HAVE_KRB5_SET_TRACE_CALLBACK
+ 
+diff --git a/src/util/sss_krb5.h b/src/util/sss_krb5.h
+index efde48b62170a142ebfca907013c3558ec47f428..db47e0a6b61fc706cdadc74ad1d4c1e9e7ef3589 100644
+--- a/src/util/sss_krb5.h
++++ b/src/util/sss_krb5.h
+@@ -149,14 +149,6 @@ enum sss_krb5_cc_type {
+     SSS_KRB5_TYPE_UNKNOWN
+ };
+ 
+-enum sss_krb5_cc_type
+-sss_krb5_get_type(const char *full_location);
+-const char *
+-sss_krb5_residual_by_type(const char *full_location, enum sss_krb5_cc_type type);
+-const char *
+-sss_krb5_residual_check_type(const char *full_location,
+-                             enum sss_krb5_cc_type expected_type);
+-
+ /* === Compatibility routines for the Heimdal Kerberos implementation === */
+ 
+ void sss_krb5_princ_realm(krb5_context context, krb5_const_principal princ,
+-- 
+1.8.3.1
+
