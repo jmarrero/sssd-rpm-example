@@ -1,0 +1,57 @@
+From a9b2c8fb47fc334c7ba9b229cde18d168059c096 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Thu, 12 Sep 2013 18:45:54 +0200
+Subject: [PATCH] Convert IN_MULTICAST parameter to host order
+
+https://fedorahosted.org/sssd/ticket/2087
+
+IN_MULTICAST accepts address in the host order, but network order was
+supplied.
+---
+ src/monitor/monitor_netlink.c                 | 2 +-
+ src/providers/dp_dyndns.c                     | 2 +-
+ src/providers/ldap/sdap_async_sudo_hostinfo.c | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/monitor/monitor_netlink.c b/src/monitor/monitor_netlink.c
+index c013423780f318f2a0f12dd5fa50babe12cdcd18..6baf13652b3c42ad92669272f262ac8b59450efe 100644
+--- a/src/monitor/monitor_netlink.c
++++ b/src/monitor/monitor_netlink.c
+@@ -610,7 +610,7 @@ static bool route_is_multicast(struct rtnl_route *route_obj)
+             return false;
+         }
+ 
+-        return IN_MULTICAST(addr4->s_addr);
++        return IN_MULTICAST(ntohl(addr4->s_addr));
+     } else if (nl_addr_get_family(nl) == AF_INET6) {
+         addr6 = nl_addr_get_binary_addr(nl);
+         if (!addr6) {
+diff --git a/src/providers/dp_dyndns.c b/src/providers/dp_dyndns.c
+index 7a342d1edd14a023322d0f9ac92fcf6bea728571..cd11431324112eb16a249fabd29721a650142456 100644
+--- a/src/providers/dp_dyndns.c
++++ b/src/providers/dp_dyndns.c
+@@ -184,7 +184,7 @@ ok_for_dns(struct sockaddr *sa)
+         } else if (inet_netof(*addr) == IN_LOOPBACKNET) {
+             DEBUG(SSSDBG_FUNC_DATA, ("Loopback IPv4 address %s\n", straddr));
+             return false;
+-        } else if ((addr->s_addr & 0xffff0000) == 0xa9fe0000) {
++        } else if ((addr->s_addr & htonl(0xffff0000)) == htonl(0xa9fe0000)) {
+             /* 169.254.0.0/16 */
+             DEBUG(SSSDBG_FUNC_DATA, ("Link-local IPv4 address %s\n", straddr));
+             return false;
+diff --git a/src/providers/ldap/sdap_async_sudo_hostinfo.c b/src/providers/ldap/sdap_async_sudo_hostinfo.c
+index 4e33babd505dd218ddfd37af21e62fb0bcbe451c..f0c728108f19d965c4b1f07f1067d6862fd0c371 100644
+--- a/src/providers/ldap/sdap_async_sudo_hostinfo.c
++++ b/src/providers/ldap/sdap_async_sudo_hostinfo.c
+@@ -239,7 +239,7 @@ static int sdap_sudo_get_ip_addresses(TALLOC_CTX *mem_ctx,
+             }
+ 
+             /* ignore multicast */
+-            if (IN_MULTICAST(ip4_addr->sin_addr.s_addr)) {
++            if (IN_MULTICAST(ntohl(ip4_addr->sin_addr.s_addr))) {
+                 continue;
+             }
+ 
+-- 
+1.8.3.1
+

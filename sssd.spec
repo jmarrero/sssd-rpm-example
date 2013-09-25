@@ -8,7 +8,7 @@
 
 Name: sssd
 Version: 1.11.0
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -31,6 +31,7 @@ Patch0011: 0011-krb5-Remove-unused-function.patch
 Patch0012: 0012-krb5-Add-file-dir-path-precheck.patch
 Patch0013: 0013-krb5_child-Simplify-ccache-creation.patch
 Patch0014: 0014-krb5-Remove-unused-helper-functions.patch
+Patch0015: 0015-Convert-IN_MULTICAST-parameter-to-host-order.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -690,6 +691,11 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Thu Sep 26 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0-3
+- Fix multicast checks in the SSSD
+- Resolves: rhbz#1007475 - The multicast check is wrong in the sudo source
+                           code getting the host info
+
 * Wed Aug 28 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0-2
 - Backport simplification of ccache management from 1.11.1
 - Resolves: rhbz#1010553 - sssd setting KRB5CCNAME=(null) on login
