@@ -7,8 +7,8 @@
 %global ldb_version 1.1.16
 
 Name: sssd
-Version: 1.11.0
-Release: 3%{?dist}
+Version: 1.11.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -17,21 +17,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-krb5-Add-calls-to-change-and-restore-credentials.patch
-Patch0002: 0002-krb5-Add-helper-to-destroy-ccache-as-user.patch
-Patch0003: 0003-krb5-Use-krb5_cc_destroy-to-remove-old-ccaches.patch
-Patch0004: 0004-krb5-Replace-type-specific-ccache-principal-check.patch
-Patch0005: 0005-krb5-Move-determination-of-user-being-active.patch
-Patch0006: 0006-krb5-move-template-check-to-initializzation.patch
-Patch0007: 0007-krb5-Make-check_for_valid_tgt-static.patch
-Patch0008: 0008-krb5-Use-new-function-to-validate-ccaches.patch
-Patch0009: 0009-krb5-Unify-function-to-create-ccache-files.patch
-Patch0010: 0010-krb5-Remove-unused-ccache-backend-infrastructure.patch
-Patch0011: 0011-krb5-Remove-unused-function.patch
-Patch0012: 0012-krb5-Add-file-dir-path-precheck.patch
-Patch0013: 0013-krb5_child-Simplify-ccache-creation.patch
-Patch0014: 0014-krb5-Remove-unused-helper-functions.patch
-Patch0015: 0015-Convert-IN_MULTICAST-parameter-to-host-order.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -691,6 +676,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Fri Sep 27 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.1-1
+- New upstream release 1.11.1
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.11.1
+
 * Thu Sep 26 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0-3
 - Fix multicast checks in the SSSD
 - Resolves: rhbz#1007475 - The multicast check is wrong in the sudo source
