@@ -23,6 +23,7 @@ Requires: sssd-common = %{version}-%{release}
 Requires: sssd-ldap = %{version}-%{release}
 Requires: sssd-krb5 = %{version}-%{release}
 Requires: sssd-ipa = %{version}-%{release}
+Requires: sssd-common-pac = %{version}-%{release}
 Requires: sssd-ad = %{version}-%{release}
 Requires: sssd-proxy = %{version}-%{release}
 Requires: python-sssdconfig = %{version}-%{release}
@@ -191,6 +192,19 @@ Requires: sssd-krb5-common = %{version}-%{release}
 Provides the Kerberos back end that the SSSD can utilize authenticate
 against a Kerberos server.
 
+# RHEL 5 is too old to support the PAC responder
+%if !0%{?is_rhel5}
+%package common-pac
+Summary: Common files needed for supporting PAC processing
+Group: Applications/System
+License: GPLv3+
+Requires: sssd-common = %{version}-%{release}
+
+%description common-pac
+Provides common files needed by SSSD providers such as IPA and Active Directory
+for handling Kerberos PACs.
+%endif #is_rhel5
+
 %package ipa
 Summary: The IPA back end of the SSSD
 Group: Applications/System
@@ -200,6 +214,10 @@ Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
 Requires: bind-utils
+# RHEL 5 is too old to support the PAC responder
+%if !0%{?is_rhel5}
+Requires: sssd-common-pac = %{version}-%{release}
+%endif
 
 %description ipa
 Provides the IPA back end that the SSSD can utilize to fetch identity data
@@ -213,6 +231,10 @@ Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
 Requires: bind-utils
+# RHEL 5 is too old to support the PAC responder
+%if !0%{?is_rhel5}
+Requires: sssd-common-pac = %{version}-%{release}
+%endif
 
 %description ad
 Provides the Active Directory back end that the SSSD can utilize to fetch
@@ -540,20 +562,26 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/%{name}/libsss_krb5.so
 %{_mandir}/man5/sssd-krb5.5*
 
+# RHEL 5 is too old to support the PAC responder
+%if !0%{?is_rhel5}
+%files common-pac
+%defattr(-,root,root,-)
+%doc COPYING
+%{_libexecdir}/%{servicename}/sssd_pac
+%endif
+
 %files ipa -f sssd_ipa.lang
 %defattr(-,root,root,-)
 %doc COPYING
 %attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
 %{_libdir}/%{name}/libsss_ipa.so
 %{_mandir}/man5/sssd-ipa.5*
-%{_libexecdir}/%{servicename}/sssd_pac
 
 %files ad -f sssd_ad.lang
 %defattr(-,root,root,-)
 %doc COPYING
 %{_libdir}/%{name}/libsss_ad.so
 %{_mandir}/man5/sssd-ad.5*
-%{_libexecdir}/%{servicename}/sssd_pac
 
 %files proxy
 %defattr(-,root,root,-)
