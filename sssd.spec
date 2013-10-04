@@ -8,7 +8,7 @@
 
 Name: sssd
 Version: 1.11.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -17,6 +17,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-krb5-Remove-ability-to-create-public-directories.patch
+Patch0002: 0002-krb5-Fix-unit-tests.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -704,6 +706,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Fri Oct 04 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.1-1
+- Remove the ability to create public ccachedir (#1015089)
+
 * Fri Sep 27 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.1-1
 - New upstream release 1.11.1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.11.1
