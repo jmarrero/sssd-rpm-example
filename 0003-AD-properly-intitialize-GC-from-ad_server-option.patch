@@ -1,0 +1,25 @@
+From 9a9a813906472ffff3911b6006d023e1c6cbff8a Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 2 Oct 2013 18:21:42 +0200
+Subject: [PATCH] AD: properly intitialize GC from ad_server option
+
+---
+ src/providers/ad/ad_common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ad/ad_common.c b/src/providers/ad/ad_common.c
+index 700ac033f42ac700b4e255a74350d774a3340358..ab62d64a943a726724698d1b7eb9f15bc40b389e 100644
+--- a/src/providers/ad/ad_common.c
++++ b/src/providers/ad/ad_common.c
+@@ -441,7 +441,7 @@ _ad_servers_init(TALLOC_CTX *mem_ctx,
+         }
+         sdata->gc = true;
+ 
+-        ret = be_fo_add_server(bectx, fo_service, list[i], 0, sdata, primary);
++        ret = be_fo_add_server(bectx, fo_gc_service, list[i], 0, sdata, primary);
+         if (ret && ret != EEXIST) {
+             DEBUG(SSSDBG_FATAL_FAILURE, ("Failed to add server\n"));
+             goto done;
+-- 
+1.8.3.1
+

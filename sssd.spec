@@ -8,7 +8,7 @@
 
 Name: sssd
 Version: 1.11.1
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -19,6 +19,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 ### Patches ###
 Patch0001: 0001-krb5-Remove-ability-to-create-public-directories.patch
 Patch0002: 0002-krb5-Fix-unit-tests.patch
+Patch0003: 0003-AD-properly-intitialize-GC-from-ad_server-option.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -706,7 +707,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
-* Fri Oct 04 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.1-1
+* Tue Oct 08 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.1-3
+- Fix failover from Global Catalog to LDAP in case GC is not available
+
+* Fri Oct 04 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.1-2
 - Remove the ability to create public ccachedir (#1015089)
 
 * Fri Sep 27 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.1-1
