@@ -2,13 +2,19 @@
 %define __provides_exclude_from %{python_sitearch}/.*\.so$
 %define _hardened_build 1
 
+%if (0%{?fedora} >= 17 || 0%{?rhel} >= 7)
+    %global with_cifs_utils_plugin 1
+%else
+    %global with_cifs_utils_plugin_option --disable-cifs-idmap-plugin
+%endif
+
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
 %global ldb_version 1.1.16
 
 Name: sssd
 Version: 1.11.1
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -20,6 +26,9 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 Patch0001: 0001-krb5-Remove-ability-to-create-public-directories.patch
 Patch0002: 0002-krb5-Fix-unit-tests.patch
 Patch0003: 0003-AD-properly-intitialize-GC-from-ad_server-option.patch
+
+Patch0601:  0601-FEDORA-LDAP-handle-SID-requests-if-noexist_delete-is-set.patch
+Patch0602:  0602-FEDORA-Add-CIFS-idmap-plugin.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -82,6 +91,9 @@ BuildRequires: selinux-policy-targeted
 %ifarch %{ix86} x86_64 %{arm}
 BuildRequires: libcmocka-devel
 %endif
+%if (0%{?with_cifs_utils_plugin} == 1)
+BuildRequires: cifs-utils-devel
+%endif
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -130,6 +142,8 @@ Group: Applications/System
 License: LGPLv3+
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
+Requires(post):  /usr/sbin/alternatives
+Requires(preun): /usr/sbin/alternatives
 
 %description client
 Provides the libraries needed by the PAM and NSS stacks to connect to the SSSD
@@ -370,7 +384,8 @@ autoreconf -ivf
     --enable-ldb-version-check \
     --disable-static \
     --disable-rpath \
-    --with-test-dir=/dev/shm
+    --with-test-dir=/dev/shm \
+    %{?with_cifs_utils_plugin_option}
 
 make %{?_smp_mflags} all docs
 
@@ -599,6 +614,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/security/pam_sss.so
 %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
 %{_libdir}/krb5/plugins/authdata/sssd_pac_plugin.so
+%if (0%{?with_cifs_utils_plugin} == 1)
+%{_libdir}/cifs-utils/cifs_idmap_sss.so
+%ghost %{_sysconfdir}/cifs-utils/idmap-plugin
+%endif
 %{_mandir}/man8/pam_sss.8*
 %{_mandir}/man8/sssd_krb5_locator_plugin.8*
 
@@ -694,7 +713,18 @@ if [ $1 -ge 1 ] ; then
     /bin/systemctl try-restart sssd.service >/dev/null 2>&1 || :
 fi
 
+%if (0%{?with_cifs_utils_plugin} == 1)
+%post client
+/sbin/ldconfig
+/usr/sbin/alternatives --install /etc/cifs-utils/idmap-plugin cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so 20
+
+%preun client
+if [ $1 -eq 0 ]; then
+        /usr/sbin/alternatives --remove cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so
+fi
+%else
 %post client -p /sbin/ldconfig
+%endif
 
 %postun client -p /sbin/ldconfig
 
@@ -707,6 +737,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Mon Oct 14 2013 Sumit Bose <sbose@redhat.com> - 1.11.1-4
+- Add plugin for cifs-utils
+- Resolves: rhbz#998544
+
 * Tue Oct 08 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.1-3
 - Fix failover from Global Catalog to LDAP in case GC is not available
 
