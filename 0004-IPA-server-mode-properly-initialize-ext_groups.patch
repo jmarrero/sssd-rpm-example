@@ -1,0 +1,32 @@
+From 3d6fb8fcaa650d1da60a2e575847bd6fcfa08c72 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 16 Oct 2013 10:45:52 +0200
+Subject: [PATCH] IPA server mode: properly initialize ext_groups
+
+---
+ src/providers/ipa/ipa_subdomains.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_subdomains.c b/src/providers/ipa/ipa_subdomains.c
+index bfbdabf..ea55f70 100644
+--- a/src/providers/ipa/ipa_subdomains.c
++++ b/src/providers/ipa/ipa_subdomains.c
+@@ -1305,13 +1305,14 @@ int ipa_ad_subdom_init(struct be_ctx *be_ctx,
+         return EINVAL;
+     }
+ 
+-    id_ctx->server_mode = talloc(id_ctx, struct ipa_server_mode_ctx);
++    id_ctx->server_mode = talloc_zero(id_ctx, struct ipa_server_mode_ctx);
+     if (id_ctx->server_mode == NULL) {
+         return ENOMEM;
+     }
+     id_ctx->server_mode->realm = realm;
+     id_ctx->server_mode->hostname = hostname;
+     id_ctx->server_mode->trusts = NULL;
++    id_ctx->server_mode->ext_groups = NULL;
+ 
+     return EOK;
+ }
+-- 
+1.8.3.1
+
