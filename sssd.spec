@@ -378,8 +378,6 @@ autoreconf -ivf
     --with-mcache-path=%{mcpath} \
     --with-init-dir=%{_initrddir} \
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
-    --with-default-ccache-dir=/run/user/%U \
-    --with-default-ccname-template=DIR:%d/krb5cc \
     --enable-nsslibdir=%{_libdir} \
     --enable-pammoddir=%{_libdir}/security \
     --enable-ldb-version-check \
