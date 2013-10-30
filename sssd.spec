@@ -13,8 +13,8 @@
 %global ldb_version 1.1.16
 
 Name: sssd
-Version: 1.11.1
-Release: 5%{?dist}
+Version: 1.11.2
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -23,12 +23,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-krb5-Remove-ability-to-create-public-directories.patch
-Patch0002: 0002-krb5-Fix-unit-tests.patch
-Patch0003: 0003-AD-properly-intitialize-GC-from-ad_server-option.patch
-Patch0004: 0004-IPA-server-mode-properly-initialize-ext_groups.patch
-
-Patch0601:  0601-FEDORA-LDAP-handle-SID-requests-if-noexist_delete-is-set.patch
 Patch0602:  0602-FEDORA-Add-CIFS-idmap-plugin.patch
 
 ### Dependencies ###
@@ -736,6 +730,11 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Wed Oct 30 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.2-1
+- New upstream release 1.11.2
+- Remove upstreamed patches
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.11.2
+
 * Wed Oct 16 2013 Sumit Bose <sbose@redhat.com> - 1.11.1-5
 - Fix potential crash with external groups in trusted IPA-AD setup
 
