@@ -13,7 +13,7 @@
 %global ldb_version 1.1.16
 
 Name: sssd
-Version: 1.11.2
+Version: 1.11.3
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -730,6 +730,11 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Wed Oct 30 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.3-1
+- New upstream release 1.11.3
+- Remove upstreamed patches
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.11.3
+
 * Wed Oct 30 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.2-1
 - New upstream release 1.11.2
 - Remove upstreamed patches
