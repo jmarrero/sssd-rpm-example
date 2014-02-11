@@ -14,7 +14,7 @@
 
 Name: sssd
 Version: 1.11.3
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -23,6 +23,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001:  0001-FAST-when-parsing-krb5_child-response-make-sure-to-n.patch
 Patch0602:  0602-FEDORA-Add-CIFS-idmap-plugin.patch
 
 ### Dependencies ###
@@ -730,6 +731,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Tue Feb 11 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.3-2
+- Handle OTP response from FreeIPA server gracefully
+
 * Wed Oct 30 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.3-1
 - New upstream release 1.11.3
 - Remove upstreamed patches

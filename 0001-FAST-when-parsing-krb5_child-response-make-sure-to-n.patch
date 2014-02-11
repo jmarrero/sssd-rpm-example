@@ -1,0 +1,46 @@
+From 153efc74ff188c12c03e9578c6fb1d39c69ef5d7 Mon Sep 17 00:00:00 2001
+From: Alexander Bokovoy <ab@samba.org>
+Date: Tue, 24 Dec 2013 13:01:46 +0200
+Subject: [PATCH] FAST: when parsing krb5_child response, make sure to not miss
+ OTP message if it was last one
+
+The last message in the stream might be with empty payload which means we get
+only message type and message length (0) returned, i.e. 8 bytes left remaining
+in the stream after processing preceding message. This makes our calculation at
+the end of a message processing loop incorrect -- p+2*sizeof(int32_t) can be
+equal to len, after all.
+
+Fixes FAST processing for FreeIPA native OTP case:
+https://fedorahosted.org/sssd/ticket/2186
+---
+ src/providers/krb5/krb5_child_handler.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/providers/krb5/krb5_child_handler.c b/src/providers/krb5/krb5_child_handler.c
+index 92dec0d2afb1627b61c3dd1037e91546a7ee08d6..d6c1dc1f9707444a82e433a375839cadf73f1259 100644
+--- a/src/providers/krb5/krb5_child_handler.c
++++ b/src/providers/krb5/krb5_child_handler.c
+@@ -548,8 +548,9 @@ parse_krb5_child_response(TALLOC_CTX *mem_ctx, uint8_t *buf, ssize_t len,
+          * CCACHE_ENV_NAME"=". pref_len also counts the trailing '=' because
+          * sizeof() counts the trailing '\0' of a string. */
+         pref_len = sizeof(CCACHE_ENV_NAME);
+-        if (msg_len > pref_len &&
+-            strncmp((const char *) &buf[p], CCACHE_ENV_NAME"=", pref_len) == 0) {
++        if ((msg_type == SSS_PAM_ENV_ITEM) &&
++            (msg_len > pref_len) &&
++            (strncmp((const char *) &buf[p], CCACHE_ENV_NAME"=", pref_len) == 0)) {
+             ccname = (char *) &buf[p+pref_len];
+             ccname_len = msg_len-pref_len;
+         }
+@@ -600,7 +601,7 @@ parse_krb5_child_response(TALLOC_CTX *mem_ctx, uint8_t *buf, ssize_t len,
+ 
+         p += msg_len;
+ 
+-        if ((p < len) && (p + 2*sizeof(int32_t) >= len)) {
++        if ((p < len) && (p + 2*sizeof(int32_t) > len)) {
+             DEBUG(SSSDBG_CRIT_FAILURE,
+                   ("The remainder of the message is too short.\n"));
+             return EINVAL;
+-- 
+1.8.5.3
+
