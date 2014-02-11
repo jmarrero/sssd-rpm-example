@@ -731,7 +731,7 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
-* Tue Feb 11 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.3-2
+* Tue Feb 11 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.11.3-2
 - Handle OTP response from FreeIPA server gracefully
 
 * Wed Oct 30 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.3-1
