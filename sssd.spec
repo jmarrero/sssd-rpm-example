@@ -82,7 +82,7 @@ BuildRequires: pkgconfig
 BuildRequires: glib2-devel
 BuildRequires: diffstat
 BuildRequires: findutils
-BuildRequires: samba4-devel >= samba4-4.0.0-59beta2
+BuildRequires: samba4-devel >= 4.0.0-59beta2
 BuildRequires: selinux-policy-targeted
 %ifarch %{ix86} x86_64 %{arm}
 BuildRequires: libcmocka-devel
