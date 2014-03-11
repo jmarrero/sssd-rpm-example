@@ -1,0 +1,27 @@
+From 22926e00fdfb838e9bb9c5b32b16b499cd2ee5f3 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 19 Feb 2014 15:34:34 +0100
+Subject: [PATCH 2/6] IPA: Don't fail if apply_subdomain_homedir returns ENOENT
+
+Reviewed-by: Pavel Reichl <preichl@redhat.com>
+(cherry picked from commit 26786da26706aeedbda4caea0383c143ed4e59dc)
+---
+ src/providers/ipa/ipa_subdomains_id.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_subdomains_id.c b/src/providers/ipa/ipa_subdomains_id.c
+index c15bdaa703835ab07a9b3b21d1304220a01eac10..637dd61f9f272eb4ac4ecb8368d2210801bb0373 100644
+--- a/src/providers/ipa/ipa_subdomains_id.c
++++ b/src/providers/ipa/ipa_subdomains_id.c
+@@ -550,7 +550,7 @@ ipa_get_ad_acct_ad_part_done(struct tevent_req *subreq)
+     ret = apply_subdomain_homedir(state, state->user_dom,
+                                   state->ar->filter_type,
+                                   state->ar->filter_value);
+-    if (ret != EOK) {
++    if (ret != EOK && ret != ENOENT) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               ("apply_subdomain_homedir failed: [%d]: [%s].\n",
+                ret, sss_strerror(ret)));
+-- 
+1.8.5.3
+

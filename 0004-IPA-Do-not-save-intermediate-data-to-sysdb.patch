@@ -1,0 +1,101 @@
+From e9383f540242084b9c61161642c1a62304607be5 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 4 Mar 2014 13:48:36 +0100
+Subject: [PATCH 4/6] IPA: Do not save intermediate data to sysdb
+
+https://fedorahosted.org/sssd/ticket/2264
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/providers/ipa/ipa_selinux.c | 68 ++++++++++++++++++++---------------------
+ 1 file changed, 34 insertions(+), 34 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_selinux.c b/src/providers/ipa/ipa_selinux.c
+index c227db937a84228c0f3945dbe11ba904c7ad9744..2209ca188654d8c79ee402ba71beeadab2904093 100644
+--- a/src/providers/ipa/ipa_selinux.c
++++ b/src/providers/ipa/ipa_selinux.c
+@@ -251,6 +251,40 @@ static void ipa_selinux_handler_done(struct tevent_req *req)
+         goto fail;
+     }
+ 
++    ret = sysdb_transaction_start(sysdb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, ("Failed to start transaction\n"));
++        goto fail;
++    }
++    in_transaction = true;
++
++    ret = sysdb_delete_usermaps(op_ctx->domain->sysdb, op_ctx->domain);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              ("Cannot delete existing maps from sysdb\n"));
++        goto fail;
++    }
++
++    ret = sysdb_store_selinux_config(sysdb, op_ctx->domain,
++                                     default_user, map_order);
++    if (ret != EOK) {
++        goto fail;
++    }
++
++    if (map_count > 0 && maps != NULL) {
++        ret = ipa_save_user_maps(sysdb, op_ctx->domain, map_count, maps);
++        if (ret != EOK) {
++            goto fail;
++        }
++    }
++
++    ret = sysdb_transaction_commit(sysdb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, ("Could not commit transaction\n"));
++        goto fail;
++    }
++    in_transaction = false;
++
+     /* Process the maps and return list of best matches (maps with
+      * highest priority). The input maps are also parent memory
+      * context for the output list of best matches. The best match
+@@ -279,40 +313,6 @@ static void ipa_selinux_handler_done(struct tevent_req *req)
+         goto fail;
+     }
+ 
+-    ret = sysdb_transaction_start(sysdb);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, ("Failed to start transaction\n"));
+-        goto fail;
+-    }
+-    in_transaction = true;
+-
+-    ret = sysdb_delete_usermaps(op_ctx->domain->sysdb, op_ctx->domain);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE,
+-              ("Cannot delete existing maps from sysdb\n"));
+-        goto fail;
+-    }
+-
+-    ret = sysdb_store_selinux_config(sysdb, op_ctx->domain,
+-                                     default_user, map_order);
+-    if (ret != EOK) {
+-        goto fail;
+-    }
+-
+-    if (map_count > 0 && maps != NULL) {
+-        ret = ipa_save_user_maps(sysdb, op_ctx->domain, map_count, maps);
+-        if (ret != EOK) {
+-            goto fail;
+-        }
+-    }
+-
+-    ret = sysdb_transaction_commit(sysdb);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_OP_FAILURE, ("Could not commit transaction\n"));
+-        goto fail;
+-    }
+-    in_transaction = false;
+-
+     /* If we got here in online mode, set last_update to current time */
+     if (!be_is_offline(be_ctx)) {
+         op_ctx->selinux_ctx->last_update = time(NULL);
+-- 
+1.8.5.3
+

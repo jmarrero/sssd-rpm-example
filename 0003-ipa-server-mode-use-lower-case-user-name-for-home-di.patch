@@ -1,0 +1,50 @@
+From 8ad066fb0ca6e543bd99b93bdd52866eddfceb12 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 3 Mar 2014 12:40:43 +0100
+Subject: [PATCH 3/6] ipa-server-mode: use lower-case user name for home dir
+
+In older IPA server versions where the AD users where looked up by
+winbind the user name component of the home directory path was always
+lower case.  This still holds for IPA clients as well. To avoid
+regression this patch makes the user name component lower case as well.
+
+Fixes https://fedorahosted.org/sssd/ticket/2263
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 48b1db73639135dd4a15ee153f958c912836c621)
+---
+ src/providers/ipa/ipa_subdomains_id.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_subdomains_id.c b/src/providers/ipa/ipa_subdomains_id.c
+index 637dd61f9f272eb4ac4ecb8368d2210801bb0373..00993c496c1d100b37a780828c81492c2fac6157 100644
+--- a/src/providers/ipa/ipa_subdomains_id.c
++++ b/src/providers/ipa/ipa_subdomains_id.c
+@@ -358,6 +358,7 @@ get_subdomain_homedir_of_user(TALLOC_CTX *mem_ctx, struct sss_domain_info *dom,
+ {
+     errno_t ret;
+     char *name;
++    char *lc_name;
+     const char *homedir;
+     TALLOC_CTX *tmp_ctx;
+ 
+@@ -372,7 +373,15 @@ get_subdomain_homedir_of_user(TALLOC_CTX *mem_ctx, struct sss_domain_info *dom,
+         goto done;
+     }
+ 
+-    homedir = expand_homedir_template(tmp_ctx, dom->subdomain_homedir, name,
++    /* To be compatible with the old winbind based user lookups and IPA
++     * clients the user name in the home directory path will be lower-case. */
++    lc_name = sss_tc_utf8_str_tolower(tmp_ctx, name);
++    if (lc_name == NULL) {
++        ret =ENOMEM;
++        goto done;
++    }
++
++    homedir = expand_homedir_template(tmp_ctx, dom->subdomain_homedir, lc_name,
+                                       uid, NULL, dom->name, dom->flat_name);
+ 
+     if (homedir == NULL) {
+-- 
+1.8.5.3
+

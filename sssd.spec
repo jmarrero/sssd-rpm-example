@@ -14,7 +14,7 @@
 
 Name: sssd
 Version: 1.11.4
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -23,6 +23,13 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-IPA-Don-t-call-tevent_req_post-outside-_send.patch
+Patch0002: 0002-IPA-Don-t-fail-if-apply_subdomain_homedir-returns-EN.patch
+Patch0003: 0003-ipa-server-mode-use-lower-case-user-name-for-home-di.patch
+Patch0004: 0004-IPA-Do-not-save-intermediate-data-to-sysdb.patch
+Patch0005: 0005-Fix-krb5-changepw-when-FAST-only-preauth-methods-are.patch
+Patch0006: 0006-IPA-Use-GC-for-AD-initgroup-requests.patch
+
 Patch0602:  0602-FEDORA-Add-CIFS-idmap-plugin.patch
 
 ### Dependencies ###
@@ -730,6 +737,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Mon Mar 11 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.11.4-2
+- Include couple of patches from upstream 1.11 branch
+
 * Mon Feb 17 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.11.4-1
 - New upstream release 1.11.4
 - Remove upstreamed patch
