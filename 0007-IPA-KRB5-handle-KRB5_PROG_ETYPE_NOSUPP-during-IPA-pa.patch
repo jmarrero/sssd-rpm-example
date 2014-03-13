@@ -1,0 +1,31 @@
+From 63bf0b7697d5a51b5338070d0e2652d49a4728ce Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 11 Mar 2014 13:16:14 +0100
+Subject: [PATCH] IPA/KRB5: handle KRB5_PROG_ETYPE_NOSUPP during IPA password
+ migration
+
+Fixes https://fedorahosted.org/sssd/ticket/2279
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/krb5/krb5_child.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/providers/krb5/krb5_child.c b/src/providers/krb5/krb5_child.c
+index 1a677b8..1bff0e9 100644
+--- a/src/providers/krb5/krb5_child.c
++++ b/src/providers/krb5/krb5_child.c
+@@ -990,6 +990,10 @@ static errno_t map_krb5_error(krb5_error_code kerr)
+     case KRB5KRB_AP_ERR_BAD_INTEGRITY:
+         return ERR_AUTH_FAILED;
+ 
++    /* ERR_CREDS_INVALID is used to indicate to the IPA provider that trying
++     * password migration would make sense. All Kerberos error codes which can
++     * be seen while migrating LDAP users to IPA should be added here. */
++    case KRB5_PROG_ETYPE_NOSUPP:
+     case KRB5_PREAUTH_FAILED:
+     case KRB5KDC_ERR_PREAUTH_FAILED:
+         return ERR_CREDS_INVALID;
+-- 
+1.8.3.1
+
