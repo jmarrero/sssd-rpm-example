@@ -14,7 +14,7 @@
 
 Name: sssd
 Version: 1.11.5
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -380,7 +380,9 @@ autoreconf -ivf
     --with-test-dir=/dev/shm \
     %{?with_cifs_utils_plugin_option}
 
-make %{?_smp_mflags} all docs
+rm -f src/sysv/systemd/sssd.service
+
+make %{?_smp_mflags} all docs src/sysv/systemd/sssd.service
 
 %check
 export CK_TIMEOUT_MULTIPLIER=10
@@ -730,6 +732,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Thu Apr 10 2014 Stephen Gallagher <sgallagh@redhat.com> 1.11.5-2
+- Fix bug in generation of systemd unit file
+
 * Tue Apr 08 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.11.5-1
 - New upstream release 1.11.5
 - Remove upstreamed patch
