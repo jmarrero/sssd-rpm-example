@@ -13,8 +13,8 @@
 %global ldb_version 1.1.16
 
 Name: sssd
-Version: 1.11.5
-Release: 2%{?dist}
+Version: 1.11.5.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -377,12 +377,11 @@ autoreconf -ivf
     --enable-ldb-version-check \
     --disable-static \
     --disable-rpath \
+    --with-initscript=systemd \
     --with-test-dir=/dev/shm \
     %{?with_cifs_utils_plugin_option}
 
-rm -f src/sysv/systemd/sssd.service
-
-make %{?_smp_mflags} all docs src/sysv/systemd/sssd.service
+make %{?_smp_mflags} all docs
 
 %check
 export CK_TIMEOUT_MULTIPLIER=10
@@ -732,6 +731,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Fri Apr 11 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.11.5.1-1
+- New upstream release 1.11.5.1
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.11.5.1
+
 * Thu Apr 10 2014 Stephen Gallagher <sgallagh@redhat.com> 1.11.5-2
 - Fix bug in generation of systemd unit file
 
