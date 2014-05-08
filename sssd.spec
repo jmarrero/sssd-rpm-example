@@ -10,11 +10,11 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.16
+%global ldb_version 1.1.17
 
 Name: sssd
 Version: 1.11.5.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -731,6 +731,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Thu May 08 2014 Stephen Gallagher <sgallagh@redhat.com> - 1.11.5.1-2
+- Rebuild against new libldb
+
 * Fri Apr 11 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.11.5.1-1
 - New upstream release 1.11.5.1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.11.5.1
