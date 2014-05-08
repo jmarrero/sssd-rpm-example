@@ -14,7 +14,7 @@
 
 Name: sssd
 Version: 1.11.5.1
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -52,7 +52,9 @@ BuildRequires: popt-devel
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
 BuildRequires: libtdb-devel
-BuildRequires: libldb-devel >= %{ldb_version}
+
+# LDB needs a strict version match to build
+BuildRequires: libldb-devel = %{ldb_version}
 BuildRequires: libdhash-devel >= 0.4.2
 BuildRequires: libcollection-devel
 BuildRequires: libini_config-devel >= 1.0.0.1
@@ -108,7 +110,12 @@ License: GPLv3+
 Conflicts: selinux-policy < 3.10.0-46
 Conflicts: sssd < 1.10.0-8%{?dist}.beta2
 # Requires
-Requires: libldb%{?_isa} >= %{ldb_version}
+
+# LDB needs a strict version match to run
+# This protects against
+# "sssd[XXX]: ldb: module version mismatch in src/ldb_modules/memberof.c"
+Requires: libldb%{?_isa} = %{ldb_version}
+
 Requires: libtdb%{?_isa} >= 1.1.3
 Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
@@ -731,6 +738,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Thu May 08 2014 Stephen Gallagher <sgallagh@redhat.com> - 1.11.5.1-3
+- Make LDB dependency a strict equivalency
+
 * Thu May 08 2014 Stephen Gallagher <sgallagh@redhat.com> - 1.11.5.1-2
 - Rebuild against new libldb
 
