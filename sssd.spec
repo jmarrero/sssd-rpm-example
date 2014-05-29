@@ -14,7 +14,7 @@
 
 Name: sssd
 Version: 1.11.5.1
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -738,6 +738,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Thu May 29 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.11.5.1-4
+- Rebuild against new ding-libs
+
 * Thu May 08 2014 Stephen Gallagher <sgallagh@redhat.com> - 1.11.5.1-3
 - Make LDB dependency a strict equivalency
 
