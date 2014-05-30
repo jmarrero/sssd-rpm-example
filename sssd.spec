@@ -13,17 +13,16 @@
 %global ldb_version 1.1.17
 
 Name: sssd
-Version: 1.11.5.1
-Release: 4%{?dist}
+Version: 1.12.0
+Release: 1%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0602:  0602-FEDORA-Add-CIFS-idmap-plugin.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -85,6 +84,8 @@ BuildRequires: diffstat
 BuildRequires: findutils
 BuildRequires: samba4-devel >= 4.0.0-59beta2
 BuildRequires: selinux-policy-targeted
+BuildRequires: systemd-devel
+BuildRequires: libsmbclient-devel
 %ifarch %{ix86} x86_64 %{arm}
 BuildRequires: libcmocka-devel
 %endif
@@ -347,6 +348,38 @@ Requires: libsss_nss_idmap = %{version}-%{release}
 The libsss_nss_idmap-python contains the bindings so that libsss_nss_idmap can
 be used by Python applications.
 
+%package dbus
+Summary: The D-Bus responder of the SSSD
+Group: Applications/System
+License: GPLv3+
+BuildRequires: augeas-devel
+Requires: sssd-common = %{version}-%{release}
+
+%description dbus
+Provides the D-Bus responder of the SSSD, called the InfoPipe, that allows
+the information from the SSSD to be transmitted over the system bus.
+
+%package -n libsss_simpleifp
+Summary: The SSSD D-Bus responder helper library
+Group: Development/Libraries
+License: GPLv3+
+Requires: dbus-libs
+Requires(post): /sbin/ldconfig
+Requires(postun): /sbin/ldconfig
+
+%description -n libsss_simpleifp
+Provides library that simplifies D-Bus API for the SSSD InfoPipe responder.
+
+%package -n libsss_simpleifp-devel
+Summary: The SSSD D-Bus responder helper library
+Group: Development/Libraries
+License: GPLv3+
+Requires: dbus-devel
+Requires: libsss_simpleifp = %{version}-%{release}
+
+%description -n libsss_simpleifp-devel
+Provides library that simplifies D-Bus API for the SSSD InfoPipe responder.
+
 %prep
 # Update timestamps on the files touched by a patch, to avoid non-equal
 # .pyc/.pyo files across the multilib peers within a build, where "Level"
@@ -363,7 +396,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q
+%setup -q -n %{name}-1.11.90
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -600,6 +633,7 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %doc COPYING
 %{_libdir}/%{name}/libsss_ad.so
+%{_libdir}/%{name}/libsss_ad_common.so
 %{_mandir}/man5/sssd-ad.5*
 
 %files proxy
@@ -607,6 +641,32 @@ rm -rf $RPM_BUILD_ROOT
 %doc COPYING
 %{_libexecdir}/%{servicename}/proxy_child
 %{_libdir}/%{name}/libsss_proxy.so
+
+%files dbus
+%defattr(-,root,root,-)
+%doc COPYING
+%{_libexecdir}/%{servicename}/sssd_ifp
+%{_mandir}/man5/sssd-ifp.5*
+# InfoPipe DBus plumbing
+%{_sysconfdir}/dbus-1/system.d/org.freedesktop.sssd.infopipe.conf
+%{_libdir}/%{name}/libsss_config.so
+
+%files -n libsss_simpleifp
+%defattr(-,root,root,-)
+%{_libdir}/libsss_simpleifp.so.*
+
+%files -n libsss_simpleifp-devel
+%defattr(-,root,root,-)
+%if 0%{?fedora}
+%doc sss_simpleifp_doc/html
+%endif
+%if 0%{?rhel} >= 6
+%doc sss_simpleifp_doc/html
+%endif
+%{_includedir}/sss_sifp.h
+%{_includedir}/sss_sifp_dbus.h
+%{_libdir}/libsss_simpleifp.so
+%{_libdir}/pkgconfig/sss_simpleifp.pc
 
 %files client -f sssd_client.lang
 %defattr(-,root,root,-)
@@ -738,6 +798,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Fri May 30 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-1.alpha1
+- New upstream release 1.12 beta1
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.0beta1
+
 * Thu May 29 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.11.5.1-4
 - Rebuild against new ding-libs
 
