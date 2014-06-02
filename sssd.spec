@@ -14,7 +14,7 @@
 
 Name: sssd
 Version: 1.12.0
-Release: 1%{?dist}.beta1
+Release: 2%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -23,6 +23,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001:  0001-TESTS-fgetc-returns-int-not-char.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -798,7 +799,11 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
-* Fri May 30 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-1.alpha1
+* Mon Jun 02 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-2.beta1
+- Fix tests on big-endian
+- Fix previous changelog entry
+
+* Fri May 30 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.10.0-1.beta1
 - New upstream release 1.12 beta1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.0beta1
 

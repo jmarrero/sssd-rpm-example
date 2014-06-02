@@ -1,0 +1,27 @@
+From 86f9acd3579c36fe4b198b8ec63b364620eee6e2 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 2 Jun 2014 10:59:46 +0200
+Subject: [PATCH] TESTS: fgetc returns int, not char
+
+We used "char c = fgetc()" where we should have used "int c = fgetc()"
+This bug caused errors on big-endian architectures.
+---
+ src/tests/sss_config-tests.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/tests/sss_config-tests.c b/src/tests/sss_config-tests.c
+index 18ce8d8bf8e8abc2afea2350a0d4e8274f4ffc77..1b2608978affbc7cc1a253b9863fd691117757a4 100644
+--- a/src/tests/sss_config-tests.c
++++ b/src/tests/sss_config-tests.c
+@@ -261,7 +261,7 @@ check_file_content(const char *filename, const char *expected)
+ {
+     FILE *file = NULL;
+     size_t i;
+-    char c;
++    int c;
+     bool result;
+ 
+     file = fopen(filename, "r");
+-- 
+1.9.0
+
