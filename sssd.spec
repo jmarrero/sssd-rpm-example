@@ -14,7 +14,7 @@
 
 Name: sssd
 Version: 1.12.0
-Release: 3%{?dist}.beta2
+Release: 4%{?dist}.beta2
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -798,6 +798,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Sun Jun 08 2014 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.12.0-4.beta2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_21_Mass_Rebuild
+
 * Wed Jun 04 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.0-1.beta2
 - New upstream release 1.12 beta1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.0beta2
