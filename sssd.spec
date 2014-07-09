@@ -14,12 +14,12 @@
 
 Name: sssd
 Version: 1.12.0
-Release: 4%{?dist}.beta2
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta2.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -396,7 +396,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.11.91
+%setup -q
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -418,6 +418,7 @@ autoreconf -ivf
     --disable-static \
     --disable-rpath \
     --with-initscript=systemd \
+    --with-syslog=journald \
     --with-test-dir=/dev/shm \
     %{?with_cifs_utils_plugin_option}
 
@@ -567,6 +568,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/sss_ssh_authorizedkeys
 %{_bindir}/sss_ssh_knownhostsproxy
 %{_sbindir}/sss_cache
+%{_libexecdir}/%{servicename}/sss_signal
 
 %dir %{sssdstatedir}
 %dir %{_localstatedir}/cache/krb5rcache
@@ -580,6 +582,8 @@ rm -rf $RPM_BUILD_ROOT
 %attr(750,root,root) %dir %{_var}/log/%{name}
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
 %ghost %attr(0600,root,root) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
+%attr(755,root,root) %dir %{_sysconfdir}/systemd/system/sssd.service.d
+%config(noreplace) %{_sysconfdir}/systemd/system/sssd.service.d/journal.conf
 %config(noreplace) %{_sysconfdir}/logrotate.d/sssd
 %config(noreplace) %{_sysconfdir}/rwtab.d/sssd
 %dir %{_datadir}/sssd
@@ -634,6 +638,7 @@ rm -rf $RPM_BUILD_ROOT
 %doc COPYING
 %{_libdir}/%{name}/libsss_ad.so
 %{_libdir}/%{name}/libsss_ad_common.so
+%{_libexecdir}/%{servicename}/gpo_child
 %{_mandir}/man5/sssd-ad.5*
 
 %files proxy
@@ -649,6 +654,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sssd-ifp.5*
 # InfoPipe DBus plumbing
 %{_sysconfdir}/dbus-1/system.d/org.freedesktop.sssd.infopipe.conf
+%{_datadir}/dbus-1/system-services/org.freedesktop.sssd.infopipe.service
 %{_libdir}/%{name}/libsss_config.so
 
 %files -n libsss_simpleifp
@@ -798,11 +804,15 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Wed Jul 09 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.0-1
+- New upstream release 1.12.0
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.0
+
 * Sun Jun 08 2014 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.12.0-4.beta2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_21_Mass_Rebuild
 
 * Wed Jun 04 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.0-1.beta2
-- New upstream release 1.12 beta1
+- New upstream release 1.12 beta2
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.0beta2
 
 * Mon Jun 02 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.0-2.beta1
