@@ -14,7 +14,7 @@
 
 Name: sssd
 Version: 1.12.0
-Release: 1%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -804,6 +804,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Thu Jul 10 2014 Stephen Gallagher <sgallagh@redhat.com> 1.12.0-5
+- Fix release version for upgrades
+
 * Wed Jul 09 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.0-1
 - New upstream release 1.12.0
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.0
