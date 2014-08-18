@@ -14,7 +14,7 @@
 
 Name: sssd
 Version: 1.12.0
-Release: 5%{?dist}
+Release: 6%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -804,6 +804,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Mon Aug 18 2014 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.12.0-6
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_21_22_Mass_Rebuild
+
 * Thu Jul 10 2014 Stephen Gallagher <sgallagh@redhat.com> 1.12.0-5
 - Fix release version for upgrades
 
