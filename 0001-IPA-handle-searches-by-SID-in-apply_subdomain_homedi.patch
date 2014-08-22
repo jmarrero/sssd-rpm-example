@@ -1,0 +1,69 @@
+From 82347f452febe3cbffc36b0a3308ffb462515442 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 12 Aug 2014 10:32:33 +0200
+Subject: [PATCH] IPA: handle searches by SID in apply_subdomain_homedir
+
+https://fedorahosted.org/sssd/ticket/2391
+
+apply_subdomain_homedir() didn't handle the situation where an entity
+that doesn't match was requested from the cache. For user and group
+lookups this wasn't a problem because the negative match was caught
+sooner.
+
+But SID lookups can match either user or group. When a group SID was
+requested, the preceding LDAP request matched the SID and stored the
+group in the cache. Then apply_subdomain_homedir() only tried to search
+user by SID, didn't find the entry and accessed a NULL pointer.
+
+A simple reproducer is:
+$ python
+>>> import pysss_nss_idmap
+>>> pysss_nss_idmap.getnamebysid(group_sid)
+
+The group_sid can be anything, including Domain Users (XXX-513)
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ipa/ipa_subdomains_id.c | 13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_subdomains_id.c b/src/providers/ipa/ipa_subdomains_id.c
+index 113bc6c06f82bc631b3efa92b87a1cadc7f22605..659bc7c2cba4fd9e4d8b07d79efaa6feede35cb9 100644
+--- a/src/providers/ipa/ipa_subdomains_id.c
++++ b/src/providers/ipa/ipa_subdomains_id.c
+@@ -498,6 +498,9 @@ apply_subdomain_homedir(TALLOC_CTX *mem_ctx, struct sss_domain_info *dom,
+
+     if (filter_type == BE_FILTER_NAME) {
+         ret = sysdb_getpwnam(mem_ctx, dom, filter_value, &res);
++        if (res && res->count == 0) {
++            ret = ENOENT;
++        }
+     } else if (filter_type == BE_FILTER_IDNUM) {
+         errno = 0;
+         uid = strtouint32(filter_value, NULL, 10);
+@@ -506,6 +509,9 @@ apply_subdomain_homedir(TALLOC_CTX *mem_ctx, struct sss_domain_info *dom,
+             goto done;
+         }
+         ret = sysdb_getpwuid(mem_ctx, dom, uid, &res);
++        if (res && res->count == 0) {
++            ret = ENOENT;
++        }
+     } else if (filter_type == BE_FILTER_SECID) {
+         ret = sysdb_search_user_by_sid_str(mem_ctx, dom, filter_value,
+                                            attrs, &msg);
+@@ -521,10 +527,9 @@ apply_subdomain_homedir(TALLOC_CTX *mem_ctx, struct sss_domain_info *dom,
+               "Failed to make request to our cache: [%d]: [%s]\n",
+                ret, sss_strerror(ret));
+         goto done;
+-    }
+-
+-    if ((res && res->count == 0) || (msg && msg->num_elements == 0)) {
+-        ret = ENOENT;
++    } else if (ret == ENOENT) {
++        DEBUG(SSSDBG_TRACE_FUNC, "Cannot find [%s] with search type [%d]\n",
++              filter_value, filter_type);
+         goto done;
+     }
+
+--
+1.9.3

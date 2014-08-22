@@ -14,7 +14,7 @@
 
 Name: sssd
 Version: 1.12.0
-Release: 6%{?dist}
+Release: 7%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -23,6 +23,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001:  0001-IPA-handle-searches-by-SID-in-apply_subdomain_homedi.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -804,6 +805,9 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Fri Aug 22 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.0-7
+- Do not crash on resolving a group SID in IPA server mode
+
 * Mon Aug 18 2014 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.12.0-6
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_21_22_Mass_Rebuild
 
