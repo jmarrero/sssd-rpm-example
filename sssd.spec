@@ -1,3 +1,5 @@
+%global rhel7_minor %(%{__grep} -o "7.[0-9]*" /etc/redhat-release |%{__sed} -s 's/7.//')
+
 # we don't want to provide private python extension libs
 %define __provides_exclude_from %{python_sitearch}/.*\.so$
 %define _hardened_build 1
@@ -12,9 +14,13 @@
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
 %global ldb_version 1.1.17
 
+%if (0%{?fedora} >= 21 || (0%{?rhel} == 7 &&  0%{?rhel7_minor} >= 1))
+    %global with_krb5_localauth_plugin 1
+%endif
+
 Name: sssd
-Version: 1.12.0
-Release: 7%{?dist}
+Version: 1.12.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -23,7 +29,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001:  0001-IPA-handle-searches-by-SID-in-apply_subdomain_homedi.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -41,6 +46,7 @@ Requires: python-sssdconfig = %{version}-%{release}
 %global pipepath %{sssdstatedir}/pipes
 %global mcpath %{sssdstatedir}/mc
 %global pubconfpath %{sssdstatedir}/pubconf
+%global gpocachepath %{sssdstatedir}/gpo_cache
 
 ### Build Dependencies ###
 
@@ -68,7 +74,11 @@ BuildRequires: pcre-devel
 BuildRequires: libxslt
 BuildRequires: libxml2
 BuildRequires: docbook-style-xsl
-BuildRequires: krb5-devel >= 1.10
+%if (0%{?with_krb5_localauth_plugin} == 1)
+BuildRequires: krb5-devel >= 1.12
+%else
+BuildRequires: krb5-devel
+%endif
 BuildRequires: c-ares-devel
 BuildRequires: python-devel
 BuildRequires: check-devel
@@ -93,6 +103,7 @@ BuildRequires: libcmocka-devel
 %if (0%{?with_cifs_utils_plugin} == 1)
 BuildRequires: cifs-utils-devel
 %endif
+BuildRequires: libnfsidmap-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -235,10 +246,7 @@ Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
 Requires: bind-utils
-# RHEL 5 is too old to support the PAC responder
-%if !0%{?is_rhel5}
 Requires: sssd-common-pac = %{version}-%{release}
-%endif
 
 %description ipa
 Provides the IPA back end that the SSSD can utilize to fetch identity data
@@ -252,10 +260,7 @@ Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
 Requires: bind-utils
-# RHEL 5 is too old to support the PAC responder
-%if !0%{?is_rhel5}
 Requires: sssd-common-pac = %{version}-%{release}
-%endif
 
 %description ad
 Provides the Active Directory back end that the SSSD can utilize to fetch
@@ -381,6 +386,22 @@ Requires: libsss_simpleifp = %{version}-%{release}
 %description -n libsss_simpleifp-devel
 Provides library that simplifies D-Bus API for the SSSD InfoPipe responder.
 
+%package libwbclient
+Summary: The SSSD libwbclient implementation
+Group: Applications/System
+License: GPLv3+ and LGPLv3+
+
+%description libwbclient
+The SSSD libwbclient implementation.
+
+%package libwbclient-devel
+Summary: Development libraries for the SSSD libwbclient implementation
+Group:  Development/Libraries
+License: GPLv3+ and LGPLv3+
+
+%description libwbclient-devel
+Development libraries for the SSSD libwbclient implementation.
+
 %prep
 # Update timestamps on the files touched by a patch, to avoid non-equal
 # .pyc/.pyo files across the multilib peers within a build, where "Level"
@@ -411,11 +432,13 @@ autoreconf -ivf
     --with-pipe-path=%{pipepath} \
     --with-pubconf-path=%{pubconfpath} \
     --with-mcache-path=%{mcpath} \
+    --with-gpo-cache-path=%{gpocachepath} \
     --with-init-dir=%{_initrddir} \
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
     --enable-nsslibdir=%{_libdir} \
     --enable-pammoddir=%{_libdir}/security \
     --enable-ldb-version-check \
+    --enable-nfsidmaplibdir=%{_libdir}/libnfsidmap \
     --disable-static \
     --disable-rpath \
     --with-initscript=systemd \
@@ -564,6 +587,7 @@ rm -rf $RPM_BUILD_ROOT
 # 3rd party application libraries
 %{_libdir}/sssd/modules/libsss_autofs.so
 %{_libdir}/libsss_sudo.so
+%{_libdir}/libnfsidmap/sss.so
 
 %{ldb_modulesdir}/memberof.so
 %{_bindir}/sss_ssh_authorizedkeys
@@ -579,6 +603,7 @@ rm -rf $RPM_BUILD_ROOT
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/group
 %attr(755,root,root) %dir %{pipepath}
 %attr(755,root,root) %dir %{pubconfpath}
+%attr(755,root,root) %dir %{gpocachepath}
 %attr(700,root,root) %dir %{pipepath}/private
 %attr(750,root,root) %dir %{_var}/log/%{name}
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
@@ -595,6 +620,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sssd.conf.5*
 %{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man5/sssd-sudo.5*
+%{_mandir}/man5/sss_rpcidmapd.5*
 %{_mandir}/man8/sssd.8*
 %{_mandir}/man8/sss_cache.8*
 %{python_sitearch}/pysss.so
@@ -619,13 +645,10 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/%{name}/libsss_krb5.so
 %{_mandir}/man5/sssd-krb5.5*
 
-# RHEL 5 is too old to support the PAC responder
-%if !0%{?is_rhel5}
 %files common-pac
 %defattr(-,root,root,-)
 %doc COPYING
 %{_libexecdir}/%{servicename}/sssd_pac
-%endif
 
 %files ipa -f sssd_ipa.lang
 %defattr(-,root,root,-)
@@ -685,6 +708,9 @@ rm -rf $RPM_BUILD_ROOT
 %if (0%{?with_cifs_utils_plugin} == 1)
 %{_libdir}/cifs-utils/cifs_idmap_sss.so
 %ghost %{_sysconfdir}/cifs-utils/idmap-plugin
+%endif
+%if (0%{?with_krb5_localauth_plugin} == 1)
+%{_libdir}/%{name}/modules/sssd_krb5_localauth_plugin.so
 %endif
 %{_mandir}/man8/pam_sss.8*
 %{_mandir}/man8/sssd_krb5_locator_plugin.8*
@@ -762,6 +788,16 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %{python_sitearch}/pysss_nss_idmap.so
 
+%files libwbclient
+%defattr(-,root,root,-)
+%{_libdir}/%{name}/modules/libwbclient.so.*
+
+%files libwbclient-devel
+%defattr(-,root,root,-)
+%{_includedir}/wbclient_sssd.h
+%{_libdir}/%{name}/modules/libwbclient.so
+%{_libdir}/pkgconfig/wbclient_sssd.pc
+
 %post common
 if [ $1 -ge 1 ] ; then
     # Initial installation
@@ -805,6 +841,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Mon Sep  8 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.1-1
+- New upstream release 1.12.1
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.1
+
 * Fri Aug 22 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.0-7
 - Do not crash on resolving a group SID in IPA server mode
 
