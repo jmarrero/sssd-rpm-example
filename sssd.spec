@@ -20,7 +20,7 @@
 
 Name: sssd
 Version: 1.12.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -29,6 +29,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-Add-alternative-objectClass-to-group-attribute-maps.patch
+Patch0002: 0002-Use-the-alternative-objectclass-in-group-maps.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -841,6 +843,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Mon Sep 15 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.1-2
+- Resolves: rhbz#1139962 - Fedora 21, FreeIPA 4.0.2: sssd does not find user
+                           private group from server
+
 * Mon Sep  8 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.1-1
 - New upstream release 1.12.1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.1

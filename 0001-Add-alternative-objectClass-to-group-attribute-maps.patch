@@ -1,0 +1,91 @@
+From 6f91c61426c8cfbfec52d5e77ae4650007694e69 Mon Sep 17 00:00:00 2001
+From: Michal Zidek <mzidek@redhat.com>
+Date: Wed, 10 Sep 2014 12:41:16 +0200
+Subject: [PATCH 1/2] Add alternative objectClass to group attribute maps
+
+In IPA we sometimes need to use posixGroup and
+sometimes groupOfNames objectclass to query the
+groups. This patch adds the possibility to specify
+alternative objectclass in group maps. By
+default it is only set for IPA.
+
+Fixes:
+https://fedorahosted.org/sssd/ticket/2436
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ad/ad_opts.h     | 1 +
+ src/providers/ipa/ipa_opts.h   | 3 ++-
+ src/providers/ldap/ldap_opts.h | 3 +++
+ src/providers/ldap/sdap.h      | 1 +
+ 4 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ad/ad_opts.h b/src/providers/ad/ad_opts.h
+index 1429b990ef91f2e469d93f031f1fa4f3454b4009..452516cd24aba4dfbf74376767deb8f5f487253d 100644
+--- a/src/providers/ad/ad_opts.h
++++ b/src/providers/ad/ad_opts.h
+@@ -215,6 +215,7 @@ struct sdap_attr_map ad_2008r2_user_map[] = {
+ 
+ struct sdap_attr_map ad_2008r2_group_map[] = {
+     { "ldap_group_object_class", "group", SYSDB_GROUP_CLASS, NULL },
++    { "ldap_group_object_class_alt", NULL, SYSDB_GROUP_CLASS, NULL },
+     { "ldap_group_name", "name", SYSDB_NAME, NULL },
+     { "ldap_group_pwd", NULL, SYSDB_PWD, NULL },
+     { "ldap_group_gid_number", "gidNumber", SYSDB_GIDNUM, NULL },
+diff --git a/src/providers/ipa/ipa_opts.h b/src/providers/ipa/ipa_opts.h
+index 73decc75a361c1b83eaf42b777c118d793596f8f..30cb96b3d183e66bddba0614690fde2076a3b8f8 100644
+--- a/src/providers/ipa/ipa_opts.h
++++ b/src/providers/ipa/ipa_opts.h
+@@ -204,7 +204,8 @@ struct sdap_attr_map ipa_user_map[] = {
+ };
+ 
+ struct sdap_attr_map ipa_group_map[] = {
+-    { "ldap_group_object_class", "groupofnames", SYSDB_GROUP_CLASS, NULL },
++    { "ldap_group_object_class", "groupOfNames", SYSDB_GROUP_CLASS, NULL },
++    { "ldap_group_object_class_alt", "posixGroup", SYSDB_GROUP_CLASS, NULL },
+     { "ldap_group_name", "cn", SYSDB_NAME, NULL },
+     { "ldap_group_pwd", "userPassword", SYSDB_PWD, NULL },
+     { "ldap_group_gid_number", "gidNumber", SYSDB_GIDNUM, NULL },
+diff --git a/src/providers/ldap/ldap_opts.h b/src/providers/ldap/ldap_opts.h
+index 7c3b4e019d0fad80b4ddebea69fec5532d725535..0a33289f2d1ad618b8745975f1f91a795009768e 100644
+--- a/src/providers/ldap/ldap_opts.h
++++ b/src/providers/ldap/ldap_opts.h
+@@ -183,6 +183,7 @@ struct sdap_attr_map rfc2307_user_map[] = {
+ 
+ struct sdap_attr_map rfc2307_group_map[] = {
+     { "ldap_group_object_class", "posixGroup", SYSDB_GROUP_CLASS, NULL },
++    { "ldap_group_object_class_alt", NULL, SYSDB_GROUP_CLASS, NULL },
+     { "ldap_group_name", "cn", SYSDB_NAME, NULL },
+     { "ldap_group_pwd", "userPassword", SYSDB_PWD, NULL },
+     { "ldap_group_gid_number", "gidNumber", SYSDB_GIDNUM, NULL },
+@@ -234,6 +235,7 @@ struct sdap_attr_map rfc2307bis_user_map[] = {
+ 
+ struct sdap_attr_map rfc2307bis_group_map[] = {
+     { "ldap_group_object_class", "posixGroup", SYSDB_GROUP_CLASS, NULL },
++    { "ldap_group_object_class_alt", NULL, SYSDB_GROUP_CLASS, NULL },
+     { "ldap_group_name", "cn", SYSDB_NAME, NULL },
+     { "ldap_group_pwd", "userPassword", SYSDB_PWD, NULL },
+     { "ldap_group_gid_number", "gidNumber", SYSDB_GIDNUM, NULL },
+@@ -285,6 +287,7 @@ struct sdap_attr_map gen_ad2008r2_user_map[] = {
+ 
+ struct sdap_attr_map gen_ad2008r2_group_map[] = {
+     { "ldap_group_object_class", "group", SYSDB_GROUP_CLASS, NULL },
++    { "ldap_group_object_class_alt", NULL, SYSDB_GROUP_CLASS, NULL },
+     { "ldap_group_name", "name", SYSDB_NAME, NULL },
+     { "ldap_group_pwd", NULL, SYSDB_PWD, NULL },
+     { "ldap_group_gid_number", "gidNumber", SYSDB_GIDNUM, NULL },
+diff --git a/src/providers/ldap/sdap.h b/src/providers/ldap/sdap.h
+index 41063149f65ca1035731d14563b9ff953ae5ac63..937869d1a218ecb2c171f423ee6917dde30eab9a 100644
+--- a/src/providers/ldap/sdap.h
++++ b/src/providers/ldap/sdap.h
+@@ -291,6 +291,7 @@ enum sdap_user_attrs {
+  * Functions depend on this */
+ enum sdap_group_attrs {
+     SDAP_OC_GROUP = 0,
++    SDAP_OC_GROUP_ALT,
+     SDAP_AT_GROUP_NAME,
+     SDAP_AT_GROUP_PWD,
+     SDAP_AT_GROUP_GID,
+-- 
+1.9.3
+
