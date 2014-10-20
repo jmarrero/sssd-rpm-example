@@ -19,8 +19,8 @@
 %endif
 
 Name: sssd
-Version: 1.12.1
-Release: 2%{?dist}
+Version: 1.12.2
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -29,8 +29,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-Add-alternative-objectClass-to-group-attribute-maps.patch
-Patch0002: 0002-Use-the-alternative-objectclass-in-group-maps.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -101,6 +99,10 @@ BuildRequires: systemd-devel
 BuildRequires: libsmbclient-devel
 %ifarch %{ix86} x86_64 %{arm}
 BuildRequires: libcmocka-devel
+%endif
+%if (0%{?fedora} >= 20)
+BuildRequires: uid_wrapper
+BuildRequires: nss_wrapper
 %endif
 %if (0%{?with_cifs_utils_plugin} == 1)
 BuildRequires: cifs-utils-devel
@@ -843,6 +845,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Mon Oct 20 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-1
+- New upstream release 1.12.2
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.2
+
 * Mon Sep 15 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.1-2
 - Resolves: rhbz#1139962 - Fedora 21, FreeIPA 4.0.2: sssd does not find user
                            private group from server
