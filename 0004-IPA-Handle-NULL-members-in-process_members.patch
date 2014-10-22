@@ -1,0 +1,40 @@
+From 7bdd47bfbb558d948dd2afce0ae53d22046067ef Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 14 Oct 2014 14:15:25 +0200
+Subject: [PATCH 4/4] IPA: Handle NULL members in process_members()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/providers/ipa/ipa_s2n_exop.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index bd5c00b6a48018f8f904aaa03e8162425651b37a..2c31120b196353df52c87ef5b924a80bda134a17 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -1196,6 +1196,11 @@ static errno_t process_members(struct sss_domain_info *domain,
+     struct sss_domain_info *obj_domain;
+     struct sss_domain_info *parent_domain;
+ 
++    if (members == NULL) {
++        DEBUG(SSSDBG_TRACE_INTERNAL, "No members\n");
++        return EOK;
++    }
++
+     tmp_ctx = talloc_new(NULL);
+     if (tmp_ctx == NULL) {
+         DEBUG(SSSDBG_OP_FAILURE, "talloc_new failed.\n");
+@@ -1731,6 +1736,7 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+                     goto done;
+                 }
+             }
++            DEBUG(SSSDBG_TRACE_FUNC, "Processing group %s\n", name);
+ 
+             ret = sysdb_attrs_add_lc_name_alias(attrs->sysdb_attrs, name);
+             if (ret != EOK) {
+-- 
+1.9.3
+

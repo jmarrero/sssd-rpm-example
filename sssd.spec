@@ -20,7 +20,7 @@
 
 Name: sssd
 Version: 1.12.2
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -29,6 +29,10 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-ipa-fix-issues-with-older-servers-not-supporting-vie.patch
+Patch0002: 0002-ipa-improve-error-reporting-for-extdom-LDAP-exop.patch
+Patch0003: 0003-ipa_subdomains_handler_master_done-initialize-reply_.patch
+Patch0004: 0004-IPA-Handle-NULL-members-in-process_members.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -845,6 +849,10 @@ fi
 %postun -n libsss_idmap -p /sbin/ldconfig
 
 %changelog
+* Wed Oct 22 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-2
+- Backport several patches from upstream.
+- Fix a potential crash against old (pre-4.0) IPA servers
+
 * Mon Oct 20 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-1
 - New upstream release 1.12.2
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.2
