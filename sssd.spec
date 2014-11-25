@@ -18,9 +18,14 @@
     %global with_krb5_localauth_plugin 1
 %endif
 
+%global libwbc_alternatives_suffix %nil
+%if 0%{?__isa_bits} == 64
+%global libwbc_alternatives_suffix -64
+%endif
+
 Name: sssd
 Version: 1.12.2
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -398,6 +403,7 @@ Provides library that simplifies D-Bus API for the SSSD InfoPipe responder.
 Summary: The SSSD libwbclient implementation
 Group: Applications/System
 License: GPLv3+ and LGPLv3+
+Conflicts: libwbclient < 4.2.0-0.2.rc2
 
 %description libwbclient
 The SSSD libwbclient implementation.
@@ -406,6 +412,7 @@ The SSSD libwbclient implementation.
 Summary: Development libraries for the SSSD libwbclient implementation
 Group:  Development/Libraries
 License: GPLv3+ and LGPLv3+
+Conflicts: libwbclient-devel < 4.2.0-0.2.rc2
 
 %description libwbclient-devel
 Development libraries for the SSSD libwbclient implementation.
@@ -848,7 +855,36 @@ fi
 
 %postun -n libsss_idmap -p /sbin/ldconfig
 
+%post libwbclient
+%{_sbindir}/update-alternatives --install %{_libdir}/libwbclient.so.0.11 \
+                                libwbclient.so.0.11%{libwbc_alternatives_suffix} \
+                                %{_libdir}/%{name}/modules/libwbclient.so.0.11.0 20
+/sbin/ldconfig
+
+%preun libwbclient
+if [ $1 -eq 0 ]; then
+        %{_sbindir}/update-alternatives --remove \
+                                libwbclient.so.0.11%{libwbc_alternatives_suffix} \
+                                %{_libdir}/%{name}/modules/libwbclient.so.0.11.0
+fi
+/sbin/ldconfig
+
+%post libwbclient-devel
+%{_sbindir}/update-alternatives --install %{_libdir}/libwbclient.so \
+                                libwbclient.so%{libwbc_alternatives_suffix} \
+                                %{_libdir}/%{name}/modules/libwbclient.so 20
+
+%preun libwbclient-devel
+if [ $1 -eq 0 ]; then
+        %{_sbindir}/update-alternatives --remove \
+                                libwbclient.so%{libwbc_alternatives_suffix} \
+                                %%{_libdir}/%{name}/modules/libwbclient.so
+fi
+
 %changelog
+* Tue Nov 25 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-3
+- Use alternatives for libwbclient
+
 * Wed Oct 22 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-2
 - Backport several patches from upstream.
 - Fix a potential crash against old (pre-4.0) IPA servers
