@@ -25,7 +25,7 @@
 
 Name: sssd
 Version: 1.12.2
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -878,10 +878,13 @@ fi
 if [ $1 -eq 0 ]; then
         %{_sbindir}/update-alternatives --remove \
                                 libwbclient.so%{libwbc_alternatives_suffix} \
-                                %%{_libdir}/%{name}/modules/libwbclient.so
+                                %{_libdir}/%{name}/modules/libwbclient.so
 fi
 
 %changelog
+* Wed Nov 26 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-4
+- Fix typo in libwbclient-devel %preun
+
 * Tue Nov 25 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-3
 - Use alternatives for libwbclient
 
