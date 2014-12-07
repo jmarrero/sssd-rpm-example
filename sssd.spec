@@ -12,7 +12,7 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.17
+%global ldb_version 1.1.18
 
 %if (0%{?fedora} >= 21 || (0%{?rhel} == 7 &&  0%{?rhel7_minor} >= 1))
     %global with_krb5_localauth_plugin 1
@@ -25,7 +25,7 @@
 
 Name: sssd
 Version: 1.12.2
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -882,6 +882,9 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Sun Dec  7 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-5
+- Rebuild for libldb 1.1.18
+
 * Wed Nov 26 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-4
 - Fix typo in libwbclient-devel %preun
 
