@@ -1,0 +1,35 @@
+From c5228b2d19709d284d1f82204184d98de86643af Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Fri, 31 Oct 2014 14:26:30 +0100
+Subject: [PATCH 08/26] IPA: use ipaUserGroup object class for groups
+
+dfb34c6c82ed5014599bf70de6791e6d79106fc2 changed object class
+of IPA groups from posixGroups to more general groupOfNames.
+However, this object class is used also for roles, permissions and
+privileges which caused SSSD to consider those objects to be groups as
+well during initgroups.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2471
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ipa/ipa_opts.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_opts.h b/src/providers/ipa/ipa_opts.h
+index 4785e0164bf6d9efb574a8703b573f4e8086cab6..0e0eed49cd397fe88ce7bf41579c066088947d04 100644
+--- a/src/providers/ipa/ipa_opts.h
++++ b/src/providers/ipa/ipa_opts.h
+@@ -205,7 +205,7 @@ struct sdap_attr_map ipa_user_map[] = {
+ };
+ 
+ struct sdap_attr_map ipa_group_map[] = {
+-    { "ldap_group_object_class", "groupOfNames", SYSDB_GROUP_CLASS, NULL },
++    { "ldap_group_object_class", "ipaUserGroup", SYSDB_GROUP_CLASS, NULL },
+     { "ldap_group_object_class_alt", "posixGroup", SYSDB_GROUP_CLASS, NULL },
+     { "ldap_group_name", "cn", SYSDB_NAME, NULL },
+     { "ldap_group_pwd", "userPassword", SYSDB_PWD, NULL },
+-- 
+2.1.0
+

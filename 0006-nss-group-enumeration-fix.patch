@@ -1,0 +1,36 @@
+From e0f1b42c6b51d10b52749cdc2e1f018762f6004c Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Fri, 24 Oct 2014 11:28:54 +0200
+Subject: [PATCH 06/26] nss: group enumeration fix
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The view/override patches introduced and issue with group enumeration
+where all groups are returned with the same name. This patch should fix
+it.
+
+Fixes: https://fedorahosted.org/sssd/ticket/2475
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/responder/nss/nsssrv_cmd.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/responder/nss/nsssrv_cmd.c b/src/responder/nss/nsssrv_cmd.c
+index 616f83dda58b11bb7b715e1eb6a2c43e91d2d9da..351ba671b980c589c875876116ed617c039d6000 100644
+--- a/src/responder/nss/nsssrv_cmd.c
++++ b/src/responder/nss/nsssrv_cmd.c
+@@ -2662,6 +2662,9 @@ static int fill_grent(struct sss_packet *packet,
+         rsize = 0;
+ 
+         /* find group name/gid */
++
++        /* start with an empty name for each iteration */
++        orig_name = NULL;
+         if (DOM_HAS_VIEWS(dom)) {
+             orig_name = ldb_msg_find_attr_as_string(msg,
+                                                     OVERRIDE_PREFIX SYSDB_NAME,
+-- 
+2.1.0
+

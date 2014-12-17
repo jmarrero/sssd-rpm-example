@@ -1,0 +1,72 @@
+From 730dc6fc96bd1903e4fdae5c2a040034c187558d Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 21 Nov 2014 14:00:23 +0100
+Subject: [PATCH 15/26] sss_client: Extract destroying of mmap cache to
+ function
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+---
+ src/sss_client/nss_mc_common.c | 30 ++++++++++++++----------------
+ 1 file changed, 14 insertions(+), 16 deletions(-)
+
+diff --git a/src/sss_client/nss_mc_common.c b/src/sss_client/nss_mc_common.c
+index 6c9b35de280c637bf957207993e539c889b16c23..9c6e1af1642275fc7738b51d7ca80d712d49b2ac 100644
+--- a/src/sss_client/nss_mc_common.c
++++ b/src/sss_client/nss_mc_common.c
+@@ -102,6 +102,18 @@ errno_t sss_nss_check_header(struct sss_cli_mc_ctx *ctx)
+     return 0;
+ }
+ 
++static void sss_nss_mc_destroy_ctx(struct sss_cli_mc_ctx *ctx)
++{
++    if ((ctx->mmap_base != NULL) && (ctx->mmap_size != 0)) {
++        munmap(ctx->mmap_base, ctx->mmap_size);
++    }
++    if (ctx->fd != -1) {
++        close(ctx->fd);
++    }
++    memset(ctx, 0, sizeof(struct sss_cli_mc_ctx));
++    ctx->fd = -1;
++}
++
+ static errno_t sss_nss_mc_init_ctx(const char *name,
+                                    struct sss_cli_mc_ctx *ctx)
+ {
+@@ -157,14 +169,7 @@ static errno_t sss_nss_mc_init_ctx(const char *name,
+ 
+ done:
+     if (ret) {
+-        if ((ctx->mmap_base != NULL) && (ctx->mmap_size != 0)) {
+-            munmap(ctx->mmap_base, ctx->mmap_size);
+-        }
+-        if (ctx->fd != -1) {
+-            close(ctx->fd);
+-        }
+-        memset(ctx, 0, sizeof(struct sss_cli_mc_ctx));
+-        ctx->fd = -1;
++        sss_nss_mc_destroy_ctx(ctx);
+     }
+     free(file);
+     sss_nss_unlock();
+@@ -191,14 +196,7 @@ errno_t sss_nss_mc_get_ctx(const char *name, struct sss_cli_mc_ctx *ctx)
+ 
+ done:
+     if (ret) {
+-        if ((ctx->mmap_base != NULL) && (ctx->mmap_size != 0)) {
+-            munmap(ctx->mmap_base, ctx->mmap_size);
+-        }
+-        if (ctx->fd != -1) {
+-            close(ctx->fd);
+-        }
+-        memset(ctx, 0, sizeof(struct sss_cli_mc_ctx));
+-        ctx->fd = -1;
++        sss_nss_mc_destroy_ctx(ctx);
+     }
+     return ret;
+ }
+-- 
+2.1.0
+

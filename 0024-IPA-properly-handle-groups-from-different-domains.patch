@@ -1,0 +1,51 @@
+From d58be56e09962a311d3599d4e134e1f7bbadc90f Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 12 Dec 2014 13:07:55 -0500
+Subject: [PATCH 24/26] IPA: properly handle groups from different domains
+
+When groups are resolved on IPA clients as part of a user lookup not all
+groups have to be from the same domain as the used. This has to be
+checked to store the group object properly in the cache.
+
+Related to https://fedorahosted.org/sssd/ticket/2529
+       and https://fedorahosted.org/sssd/ticket/2524
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/providers/ipa/ipa_s2n_exop.c | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index 677d1625860186ad02d4d8c7290d45b782bc4c38..6d5b45edf20f720f5b97f0ed5c8ec591c580de0d 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -1867,10 +1867,24 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+         case RESP_GROUP_MEMBERS:
+             type = SYSDB_MEMBER_GROUP;
+ 
++            if (0 != strcmp(dom->name, attrs->domain_name)) {
++                dom = find_domain_by_name(get_domains_head(dom),
++                                          attrs->domain_name, true);
++                if (dom == NULL) {
++                    DEBUG(SSSDBG_OP_FAILURE,
++                          "Cannot find domain: [%s]\n", attrs->domain_name);
++                    ret = EINVAL;
++                    goto done;
++                }
++            }
++
+             if (name == NULL) {
++                name = attrs->a.group.gr_name;
++            }
++
++            if (IS_SUBDOMAIN(dom)) {
+                 /* we always use the fully qualified name for subdomain users */
+-                name = sss_tc_fqname(tmp_ctx, dom->names, dom,
+-                                     attrs->a.group.gr_name);
++                name = sss_tc_fqname(tmp_ctx, dom->names, dom, name);
+                 if (!name) {
+                     DEBUG(SSSDBG_OP_FAILURE, "failed to format user name,\n");
+                     ret = ENOMEM;
+-- 
+2.1.0
+

@@ -1,0 +1,102 @@
+From da75b87ffc1ff98d8a3685a6ccbf00265838cf7a Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 5 Nov 2014 18:01:07 +0100
+Subject: [PATCH 12/26] Fix uuid defaults
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Recently the uuid attributes for user and groups were removed because
+it was found that there are not used at all and that some of them where
+causing issues (https://fedorahosted.org/sssd/ticket/2383).
+
+The new views/overrides feature of FreeIPA uses the ipaUniqueID attribute
+to relate overrides with the original IPA objects. The previous two
+patches revert the removal of the uuid attributes from users and groups
+with this patch set the default value of these attributes to
+ipaUniqueID from the IPA provider, to objectGUID for the AD provider and
+leaves them unset for the general LDAP case to avoid issues like the one
+from ticket #2383.
+
+Related to https://fedorahosted.org/sssd/ticket/2481
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/man/sssd-ldap.5.xml        | 6 ++++--
+ src/providers/ipa/ipa_opts.h   | 4 ++--
+ src/providers/ldap/ldap_opts.h | 6 ++----
+ 3 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/src/man/sssd-ldap.5.xml b/src/man/sssd-ldap.5.xml
+index b8b6f2abe5bb79a055c02bd2abac72ee79266f09..aa47ed7a6dd41f7f82ea80e1deb34f9ccc894dc9 100644
+--- a/src/man/sssd-ldap.5.xml
++++ b/src/man/sssd-ldap.5.xml
+@@ -345,7 +345,8 @@
+                             an LDAP user object.
+                         </para>
+                         <para>
+-                            Default: nsUniqueId
++                            Default: not set in the general case, objectGUID for
++                            AD and ipaUniqueID for IPA
+                         </para>
+                     </listitem>
+                 </varlistentry>
+@@ -866,7 +867,8 @@
+                             an LDAP group object.
+                         </para>
+                         <para>
+-                            Default: nsUniqueId
++                            Default: not set in the general case, objectGUID for
++                            AD and ipaUniqueID for IPA
+                         </para>
+                     </listitem>
+                 </varlistentry>
+diff --git a/src/providers/ipa/ipa_opts.h b/src/providers/ipa/ipa_opts.h
+index 890a0437ae2fa81d111dcf0eba941786b2b83a1a..3cde1a4362c1fa81259d7764e182a9163d272577 100644
+--- a/src/providers/ipa/ipa_opts.h
++++ b/src/providers/ipa/ipa_opts.h
+@@ -178,7 +178,7 @@ struct sdap_attr_map ipa_user_map[] = {
+     { "ldap_user_principal", "krbPrincipalName", SYSDB_UPN, NULL },
+     { "ldap_user_fullname", "cn", SYSDB_FULLNAME, NULL },
+     { "ldap_user_member_of", "memberOf", SYSDB_MEMBEROF, NULL },
+-    { "ldap_user_uuid", "nsUniqueId", SYSDB_UUID, NULL },
++    { "ldap_user_uuid", "ipaUniqueID", SYSDB_UUID, NULL },
+     { "ldap_user_objectsid", "ipaNTSecurityIdentifier", SYSDB_SID_STR, NULL },
+     { "ldap_user_primary_group", NULL, SYSDB_PRIMARY_GROUP, NULL },
+     { "ldap_user_modify_timestamp", "modifyTimestamp", SYSDB_ORIG_MODSTAMP, NULL },
+@@ -212,7 +212,7 @@ struct sdap_attr_map ipa_group_map[] = {
+     { "ldap_group_pwd", "userPassword", SYSDB_PWD, NULL },
+     { "ldap_group_gid_number", "gidNumber", SYSDB_GIDNUM, NULL },
+     { "ldap_group_member", "member", SYSDB_MEMBER, NULL },
+-    { "ldap_group_uuid", "nsUniqueId", SYSDB_UUID, NULL },
++    { "ldap_group_uuid", "ipaUniqueID", SYSDB_UUID, NULL },
+     { "ldap_group_objectsid", "ipaNTSecurityIdentifier", SYSDB_SID_STR, NULL },
+     { "ldap_group_modify_timestamp", "modifyTimestamp", SYSDB_ORIG_MODSTAMP, NULL },
+     { "ldap_group_entry_usn", NULL, SYSDB_USN, NULL },
+diff --git a/src/providers/ldap/ldap_opts.h b/src/providers/ldap/ldap_opts.h
+index 096a63bd53918ba79378c01257a18e543597209a..29d9faf99784bfc3526398488be837a2716ee11d 100644
+--- a/src/providers/ldap/ldap_opts.h
++++ b/src/providers/ldap/ldap_opts.h
+@@ -209,8 +209,7 @@ struct sdap_attr_map rfc2307bis_user_map[] = {
+     { "ldap_user_principal", "krbPrincipalName", SYSDB_UPN, NULL },
+     { "ldap_user_fullname", "cn", SYSDB_FULLNAME, NULL },
+     { "ldap_user_member_of", "memberOf", SYSDB_MEMBEROF, NULL },
+-    /* FIXME: this is 389ds specific */
+-    { "ldap_user_uuid", "nsUniqueId", SYSDB_UUID, NULL },
++    { "ldap_user_uuid", NULL, SYSDB_UUID, NULL },
+     { "ldap_user_objectsid", "objectSID", SYSDB_SID, NULL },
+     { "ldap_user_primary_group", NULL, SYSDB_PRIMARY_GROUP, NULL },
+     { "ldap_user_modify_timestamp", "modifyTimestamp", SYSDB_ORIG_MODSTAMP, NULL },
+@@ -244,8 +243,7 @@ struct sdap_attr_map rfc2307bis_group_map[] = {
+     { "ldap_group_pwd", "userPassword", SYSDB_PWD, NULL },
+     { "ldap_group_gid_number", "gidNumber", SYSDB_GIDNUM, NULL },
+     { "ldap_group_member", "member", SYSDB_MEMBER, NULL },
+-    /* FIXME: this is 389ds specific */
+-    { "ldap_group_uuid", "nsUniqueId", SYSDB_UUID, NULL },
++    { "ldap_group_uuid", NULL, SYSDB_UUID, NULL },
+     { "ldap_group_objectsid", "objectSID", SYSDB_SID, NULL },
+     { "ldap_group_modify_timestamp", "modifyTimestamp", SYSDB_ORIG_MODSTAMP, NULL },
+     { "ldap_group_entry_usn", NULL, SYSDB_USN, NULL },
+-- 
+2.1.0
+

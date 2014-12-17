@@ -1,0 +1,62 @@
+From 51ecb61c7c6e2f002c2da188e30f69d67f767ead Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 4 Dec 2014 12:50:03 +0100
+Subject: [PATCH 26/26] IPA: handle GID overrides for MPG domains on clients
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves https://fedorahosted.org/sssd/ticket/2514
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/providers/ipa/ipa_s2n_exop.c | 26 ++++++++++++++++++++++++++
+ 1 file changed, 26 insertions(+)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index 6d5b45edf20f720f5b97f0ed5c8ec591c580de0d..55450c7029391a99bfc33b8446765f71c4d0928a 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -1618,6 +1618,7 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+     char *realm;
+     char *upn = NULL;
+     gid_t gid;
++    gid_t orig_gid = 0;
+     TALLOC_CTX *tmp_ctx;
+     const char *sid_str;
+     const char *tmp_str;
+@@ -1796,6 +1797,31 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+             gid = 0;
+             if (dom->mpg == false) {
+                 gid = attrs->a.user.pw_gid;
++            } else {
++                /* The extdom plugin always returns the objects with the
++                 * default view applied. Since the GID is handled specially
++                 * for MPG domains we have add any overridden GID separately.
++                 */
++                ret = sysdb_attrs_get_uint32_t(attrs->sysdb_attrs,
++                                               ORIGINALAD_PREFIX SYSDB_GIDNUM,
++                                               &orig_gid);
++                if (ret == EOK || ret == ENOENT) {
++                    if ((orig_gid != 0 && orig_gid != attrs->a.user.pw_gid)
++                            || attrs->a.user.pw_uid != attrs->a.user.pw_gid) {
++                        ret = sysdb_attrs_add_uint32(attrs->sysdb_attrs,
++                                                     SYSDB_GIDNUM,
++                                                     attrs->a.user.pw_gid);
++                        if (ret != EOK) {
++                            DEBUG(SSSDBG_OP_FAILURE,
++                                  "sysdb_attrs_add_uint32 failed.\n");
++                            goto done;
++                        }
++                    }
++                } else {
++                    DEBUG(SSSDBG_OP_FAILURE,
++                          "sysdb_attrs_get_uint32_t failed.\n");
++                    goto done;
++                }
+             }
+ 
+             ret = sysdb_transaction_start(dom->sysdb);
+-- 
+2.1.0
+

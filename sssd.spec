@@ -25,7 +25,7 @@
 
 Name: sssd
 Version: 1.12.2
-Release: 5%{?dist}
+Release: 6%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -38,6 +38,28 @@ Patch0001: 0001-ipa-fix-issues-with-older-servers-not-supporting-vie.patch
 Patch0002: 0002-ipa-improve-error-reporting-for-extdom-LDAP-exop.patch
 Patch0003: 0003-ipa_subdomains_handler_master_done-initialize-reply_.patch
 Patch0004: 0004-IPA-Handle-NULL-members-in-process_members.patch
+Patch0005: 0005-GPO-Terminate-request-on-error.patch
+Patch0006: 0006-nss-group-enumeration-fix.patch
+Patch0007: 0007-IPA-Don-t-fail-the-request-when-BE-doesn-t-find-the-.patch
+Patch0008: 0008-IPA-use-ipaUserGroup-object-class-for-groups.patch
+Patch0009: 0009-PAM-Remove-authtok-from-PAM-stack-with-OTP.patch
+Patch0010: 0010-Revert-LDAP-Remove-unused-option-ldap_user_uuid.patch
+Patch0011: 0011-Revert-LDAP-Remove-unused-option-ldap_group_uuid.patch
+Patch0012: 0012-Fix-uuid-defaults.patch
+Patch0013: 0013-Revert-LDAP-Change-defaults-for-ldap_user-group_obje.patch
+Patch0014: 0014-LDAP-Disable-token-groups-by-default.patch
+Patch0015: 0015-sss_client-Extract-destroying-of-mmap-cache-to-funct.patch
+Patch0016: 0016-sss_client-Fix-race-condition-in-memory-cache.patch
+Patch0017: 0017-test-Wrong-parameter-type-in-sss_parse_name_check.patch
+Patch0018: 0018-util-Special-case-PCRE_ERROR_NOMATCH-in-sss_parse_na.patch
+Patch0019: 0019-util-sss_get_domain_name-regex-mismatch-not-fatal.patch
+Patch0020: 0020-SBUS-Initialize-DBusError-before-using-it.patch
+Patch0021: 0021-krb5-handle-KRB5KRB_ERR_GENERIC-as-unspecific-error.patch
+Patch0022: 0022-IPA-Handle-IPA-groups-returned-from-extop-plugin.patch
+Patch0023: 0023-IPA-verify-group-memberships-of-trusted-domain-users.patch
+Patch0024: 0024-IPA-properly-handle-groups-from-different-domains.patch
+Patch0025: 0025-IPA-do-not-try-to-add-override-gid-twice.patch
+Patch0026: 0026-IPA-handle-GID-overrides-for-MPG-domains-on-clients.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -882,6 +904,12 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Wed Dec 17 2014 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.2-6
+- Fix regressions and bugs in sssd upstream 1.12.2
+- https://fedorahosted.org/sssd/ticket/{id}
+- Regressions: #2471, #2475, #2483, #2487, #2529, #2535
+- Bugs: #2287, #2445
+
 * Sun Dec  7 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-5
 - Rebuild for libldb 1.1.18
 

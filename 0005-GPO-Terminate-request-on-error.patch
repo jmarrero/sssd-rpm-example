@@ -1,0 +1,31 @@
+From 08f261acfa442e38ff3d803b2ddeaa2f848b5fb8 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 21 Oct 2014 16:18:02 +0200
+Subject: [PATCH 05/26] GPO: Terminate request on error
+
+Reviewed-by: Pavel Reichl <preichl@redhat.com>
+---
+ src/providers/ad/ad_gpo.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/providers/ad/ad_gpo.c b/src/providers/ad/ad_gpo.c
+index 3f5df75c5a9de53eac11ffcf785e929cf9b3165e..4dfbd4b6943b477bd93fdd730dfa5b1c5828a10a 100644
+--- a/src/providers/ad/ad_gpo.c
++++ b/src/providers/ad/ad_gpo.c
+@@ -3954,11 +3954,13 @@ static void gpo_cse_done(struct tevent_req *subreq)
+               "ad_gpo_parse_gpo_child_response failed: [%d][%s]\n",
+               ret, strerror(ret));
+         tevent_req_error(req, ret);
++        return;
+     } else if (child_result != 0){
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "Error in gpo_child: [%d][%s]\n",
+               child_result, strerror(child_result));
+         tevent_req_error(req, child_result);
++        return;
+     }
+ 
+     now = time(NULL);
+-- 
+2.1.0
+
