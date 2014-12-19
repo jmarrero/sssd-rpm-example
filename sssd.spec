@@ -1,7 +1,7 @@
 %global rhel7_minor %(%{__grep} -o "7.[0-9]*" /etc/redhat-release |%{__sed} -s 's/7.//')
 
 # we don't want to provide private python extension libs
-%define __provides_exclude_from %{python_sitearch}/.*\.so$
+%define __provides_exclude_from %{python_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
 %define _hardened_build 1
 
 %if (0%{?fedora} >= 17 || 0%{?rhel} >= 7)
@@ -25,7 +25,7 @@
 
 Name: sssd
 Version: 1.12.2
-Release: 6%{?dist}
+Release: 7%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -60,6 +60,7 @@ Patch0023: 0023-IPA-verify-group-memberships-of-trusted-domain-users.patch
 Patch0024: 0024-IPA-properly-handle-groups-from-different-domains.patch
 Patch0025: 0025-IPA-do-not-try-to-add-override-gid-twice.patch
 Patch0026: 0026-IPA-handle-GID-overrides-for-MPG-domains-on-clients.patch
+PAtch0027: 0027-libwbclient-initialize-some-return-values.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -904,6 +905,12 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Fri Dec 19 2014 Sumit Bose <sbose@redhat.com> - 1.12.2-7
+- Resolves: rhbz#1175511 - sssd-libwbclient conflicts with Samba's and causes
+                           crash in wbinfo
+                           - in addition to the patch libwbclient.so is
+                             filtered out of the Provides list of the package
+
 * Wed Dec 17 2014 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.2-6
 - Fix regressions and bugs in sssd upstream 1.12.2
 - https://fedorahosted.org/sssd/ticket/{id}
