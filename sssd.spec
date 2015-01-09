@@ -25,7 +25,7 @@
 
 Name: sssd
 Version: 1.12.3
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -34,6 +34,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-logrotate-Fix-warning-file-size-changed-while-zippin.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -379,6 +380,7 @@ Summary: The SSSD D-Bus responder helper library
 Group: Development/Libraries
 License: GPLv3+
 Requires: dbus-libs
+Requires: sssd-dbus = %{version}-%{release}
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
@@ -880,6 +882,11 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Fri Jan 09 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-2
+- Resolves: rhbz#1164156 - libsss_simpleifp should pull sssd-dbus
+- Resolves: rhbz#1179379 - gzip: stdin: file size changed while
+                           zipping when rotating logfile
+
 * Thu Jan 08 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-1
 - New upstream release 1.12.3
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.3
