@@ -69,7 +69,7 @@ BuildRequires: libtdb-devel
 BuildRequires: libldb-devel = %{ldb_version}
 BuildRequires: libdhash-devel >= 0.4.2
 BuildRequires: libcollection-devel
-BuildRequires: libini_config-devel >= 1.0.0.1
+BuildRequires: libini_config-devel >= 1.1
 BuildRequires: dbus-devel
 BuildRequires: dbus-libs
 BuildRequires: openldap-devel
@@ -234,8 +234,6 @@ Requires: sssd-krb5-common = %{version}-%{release}
 Provides the Kerberos back end that the SSSD can utilize authenticate
 against a Kerberos server.
 
-# RHEL 5 is too old to support the PAC responder
-%if !0%{?is_rhel5}
 %package common-pac
 Summary: Common files needed for supporting PAC processing
 Group: Applications/System
@@ -245,7 +243,6 @@ Requires: sssd-common = %{version}-%{release}
 %description common-pac
 Provides common files needed by SSSD providers such as IPA and Active Directory
 for handling Kerberos PACs.
-%endif #is_rhel5
 
 %package ipa
 Summary: The IPA back end of the SSSD
@@ -702,12 +699,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files -n libsss_simpleifp-devel
 %defattr(-,root,root,-)
-%if 0%{?fedora}
 %doc sss_simpleifp_doc/html
-%endif
-%if 0%{?rhel} >= 6
-%doc sss_simpleifp_doc/html
-%endif
 %{_includedir}/sss_sifp.h
 %{_includedir}/sss_sifp_dbus.h
 %{_libdir}/libsss_simpleifp.so
@@ -821,7 +813,7 @@ fi
 
 %preun common
 if [ $1 -eq 0 ]; then
-     # Package removal, not upgrade
+    # Package removal, not upgrade
     /bin/systemctl --no-reload disable sssd.service > /dev/null 2>&1 || :
     /bin/systemctl stop sssd.service > /dev/null 2>&1 || :
 fi
@@ -829,6 +821,7 @@ fi
 %postun common
 /bin/systemctl daemon-reload >/dev/null 2>&1 || :
 if [ $1 -ge 1 ] ; then
+    # Package upgrade, not uninstall
     /bin/systemctl try-restart sssd.service >/dev/null 2>&1 || :
 fi
 
@@ -854,6 +847,10 @@ fi
 %post -n libsss_idmap -p /sbin/ldconfig
 
 %postun -n libsss_idmap -p /sbin/ldconfig
+
+%post -n libsss_nss_idmap -p /sbin/ldconfig
+
+%postun -n libsss_nss_idmap -p /sbin/ldconfig
 
 %post libwbclient
 %{_sbindir}/update-alternatives --install %{_libdir}/libwbclient.so.0.11 \
