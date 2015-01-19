@@ -4,19 +4,21 @@
 %define __provides_exclude_from %{python_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
 %define _hardened_build 1
 
-%if (0%{?fedora} >= 17 || 0%{?rhel} >= 7)
-    %global with_cifs_utils_plugin 1
-%else
-    %global with_cifs_utils_plugin_option --disable-cifs-idmap-plugin
-%endif
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
 %global ldb_version 1.1.19
 
+%if (0%{?fedora} || 0%{?rhel} >= 7)
+    %global with_cifs_utils_plugin 1
+%else
+    %global with_cifs_utils_plugin_option --disable-cifs-idmap-plugin
+%endif
+
 %if (0%{?fedora} >= 21 || (0%{?rhel} == 7 &&  0%{?rhel7_minor} >= 1))
     %global with_krb5_localauth_plugin 1
 %endif
+
 
 %global libwbc_alternatives_suffix %nil
 %if 0%{?__isa_bits} == 64
@@ -93,16 +95,12 @@ BuildRequires: libselinux-devel
 BuildRequires: libsemanage-devel
 BuildRequires: bind-utils
 BuildRequires: keyutils-libs-devel
-BuildRequires: libnl3-devel
 BuildRequires: gettext-devel
 BuildRequires: pkgconfig
-BuildRequires: glib2-devel
 BuildRequires: diffstat
 BuildRequires: findutils
-BuildRequires: samba4-devel >= 4.0.0-59beta2
+BuildRequires: glib2-devel
 BuildRequires: selinux-policy-targeted
-BuildRequires: systemd-devel
-BuildRequires: libsmbclient-devel
 %ifarch %{ix86} x86_64 %{arm}
 BuildRequires: libcmocka-devel
 %endif
@@ -110,10 +108,15 @@ BuildRequires: libcmocka-devel
 BuildRequires: uid_wrapper
 BuildRequires: nss_wrapper
 %endif
+BuildRequires: libnl3-devel
+BuildRequires: systemd-devel
 %if (0%{?with_cifs_utils_plugin} == 1)
 BuildRequires: cifs-utils-devel
 %endif
 BuildRequires: libnfsidmap-devel
+
+BuildRequires: samba4-devel >= 4.0.0-59beta2
+BuildRequires: libsmbclient-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -437,24 +440,25 @@ done
 
 %build
 autoreconf -ivf
+
 %configure \
+    --with-test-dir=/dev/shm \
     --with-db-path=%{dbpath} \
+    --with-mcache-path=%{mcpath} \
     --with-pipe-path=%{pipepath} \
     --with-pubconf-path=%{pubconfpath} \
-    --with-mcache-path=%{mcpath} \
     --with-gpo-cache-path=%{gpocachepath} \
     --with-init-dir=%{_initrddir} \
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
     --enable-nsslibdir=%{_libdir} \
     --enable-pammoddir=%{_libdir}/security \
-    --enable-ldb-version-check \
     --enable-nfsidmaplibdir=%{_libdir}/libnfsidmap \
     --disable-static \
     --disable-rpath \
     --with-initscript=systemd \
     --with-syslog=journald \
-    --with-test-dir=/dev/shm \
-    %{?with_cifs_utils_plugin_option}
+    %{?with_cifs_utils_plugin_option} \
+    --enable-ldb-version-check
 
 make %{?_smp_mflags} all docs
 
@@ -573,8 +577,8 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %doc COPYING
 %doc src/examples/sssd-example.conf
-%{_unitdir}/sssd.service
 %{_sbindir}/sssd
+%{_unitdir}/sssd.service
 
 %dir %{_libexecdir}/%{servicename}
 %{_libexecdir}/%{servicename}/sssd_be
@@ -775,10 +779,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/libipa_hbac.so
 %{_libdir}/pkgconfig/ipa_hbac.pc
 
-%files -n libipa_hbac-python
-%defattr(-,root,root,-)
-%{python_sitearch}/pyhbac.so
-
 %files -n libsss_nss_idmap
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
@@ -794,6 +794,10 @@ rm -rf $RPM_BUILD_ROOT
 %files -n libsss_nss_idmap-python
 %defattr(-,root,root,-)
 %{python_sitearch}/pysss_nss_idmap.so
+
+%files -n libipa_hbac-python
+%defattr(-,root,root,-)
+%{python_sitearch}/pyhbac.so
 
 %files libwbclient
 %defattr(-,root,root,-)
