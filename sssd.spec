@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.3
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -37,6 +37,8 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001: 0001-logrotate-Fix-warning-file-size-changed-while-zippin.patch
+Patch0002: 0002-MAN-dyndns_iface-supports-only-one-interface.patch
+Patch0003: 0003-krb5-fix-entry-order-in-MEMORY-keytab.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -458,7 +460,8 @@ autoreconf -ivf
     --with-initscript=systemd \
     --with-syslog=journald \
     %{?with_cifs_utils_plugin_option} \
-    --enable-ldb-version-check
+    --enable-ldb-version-check \
+    --enable-sss-default-nss-plugin
 
 make %{?_smp_mflags} all docs
 
@@ -883,6 +886,14 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Mon Jan 19 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-3
+- Apply a number of patches from upstream to fix issues found 1.12.3
+- Resolves: rhbz#1176373 - dyndns_iface does not accept multiple
+                           interfaces, or isn't documented to be able to
+- Resolves: rhbz#988068 - getpwnam_r fails for non-existing users when sssd is
+                          not running
+- Resolves: upstream #2557  authentication failure with user from AD
+
 * Fri Jan 09 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-2
 - Resolves: rhbz#1164156 - libsss_simpleifp should pull sssd-dbus
 - Resolves: rhbz#1179379 - gzip: stdin: file size changed while
