@@ -1,0 +1,276 @@
+From d71ad29db423b6d164b346ea3c1baab29d8d8d49 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Thu, 29 Jan 2015 09:46:27 +0100
+Subject: [PATCH 7/9] SSSDConfig: Port missing parts to python3
+
+* fix incompatible imports
+* fix translation.[u]?gettext
+* fix dict method has_key
+* fix octal literals PEP 3127
+* long is not defined in python3
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2017
+
+Reviewed-by: Petr Viktorin <pviktori@redhat.com>
+(cherry picked from commit a71004c112cd5d61d3a9e37a4cfc5760dc9a1cec)
+---
+ src/config/SSSDConfig/__init__.py.in | 41 +++++++++++++++++++-----------------
+ src/config/SSSDConfigTest.py         | 24 ++++++++++-----------
+ 2 files changed, 34 insertions(+), 31 deletions(-)
+
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index e05c98b6a334893116747968b9ddfabce05fa981..95b3f0ca190a84ede0ba26ce6dd60262431bb9fa 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -6,9 +6,9 @@ Created on Sep 18, 2009
+ 
+ import os
+ import gettext
+-import exceptions
+ import re
+-from ipachangeconf import SSSDChangeConf
++import sys
++from .ipachangeconf import SSSDChangeConf
+ 
+ # Exceptions
+ class SSSDConfigException(Exception): pass
+@@ -32,7 +32,10 @@ PACKAGE = 'sss_daemon'
+ LOCALEDIR = '/usr/share/locale'
+ 
+ translation = gettext.translation(PACKAGE, LOCALEDIR, fallback=True)
+-_ = translation.ugettext
++if sys.version_info[0] > 2:
++    _ = translation.gettext
++else:
++    _ = translation.ugettext
+ 
+ # TODO: This needs to be made external
+ option_strings = {
+@@ -444,7 +447,7 @@ class SSSDConfigSchema(SSSDChangeConf):
+         self.type_lookup = {
+             'bool' : bool,
+             'int'  : int,
+-            'long' : long,
++            'long' : long if sys.version_info[0] == 2 else int,
+             'float': float,
+             'str'  : str,
+             'list' : list,
+@@ -479,7 +482,7 @@ class SSSDConfigSchema(SSSDChangeConf):
+             subtype = self.type_lookup[split_option[SUBTYPE]]
+             mandatory = self.bool_lookup[split_option[MANDATORY]]
+ 
+-            if option_strings.has_key(option['name']):
++            if option['name'] in option_strings:
+                 desc = option_strings[option['name']]
+             else:
+                 desc = None
+@@ -608,7 +611,7 @@ class SSSDConfigSchema(SSSDChangeConf):
+             splitsection = section['name'].split('/')
+             if (splitsection[0] == 'provider'):
+                 if(len(splitsection) == 3):
+-                    if not providers.has_key(splitsection[1]):
++                    if splitsection[1] not in providers:
+                         providers[splitsection[1]] = []
+                     providers[splitsection[1]].extend([splitsection[2]])
+         for key in providers.keys():
+@@ -672,7 +675,7 @@ class SSSDConfigObject(object):
+         === Errors ===
+         No errors
+         """
+-        if self.options.has_key(optionname):
++        if optionname in self.options:
+             del self.options[optionname]
+ 
+ class SSSDService(SSSDConfigObject):
+@@ -1307,12 +1310,12 @@ class SSSDDomain(SSSDConfigObject):
+         # We should now have a list of options used only by this
+         # provider. So we remove them.
+         for option in options:
+-            if self.options.has_key(option):
++            if option in self.options:
+                 del self.options[option]
+ 
+         # Remove this provider from the option list
+         option = '%s_provider' % provider_type
+-        if self.options.has_key(option):
++        if option in self.options:
+             del self.options[option]
+ 
+         self.providers.remove((provider, provider_type))
+@@ -1450,9 +1453,9 @@ class SSSDConfig(SSSDChangeConf):
+             outputfile = self.configfile
+ 
+         # open() will raise IOError if it fails
+-        old_umask = os.umask(0177)
++        old_umask = os.umask(0o177)
+         of = open(outputfile, "wb")
+-        output = self.dump(self.opts)
++        output = self.dump(self.opts).encode('utf-8')
+         of.write(output)
+         of.close()
+         os.umask(old_umask)
+@@ -1475,7 +1478,7 @@ class SSSDConfig(SSSDChangeConf):
+         if (self.has_option('sssd', 'services')):
+             active_services = striplist(self.get('sssd', 'services').split(','))
+             service_dict = dict.fromkeys(active_services)
+-            if service_dict.has_key(''):
++            if '' in service_dict:
+                 del service_dict['']
+ 
+             # Remove any entries in this list that don't
+@@ -1631,7 +1634,7 @@ class SSSDConfig(SSSDChangeConf):
+         # This guarantees uniqueness and makes it easy
+         # to add a new value
+         service_dict = dict.fromkeys(striplist(item['value'].split(',')))
+-        if service_dict.has_key(''):
++        if '' in service_dict:
+             del service_dict['']
+ 
+         # Add a new key for the service being activated
+@@ -1672,11 +1675,11 @@ class SSSDConfig(SSSDChangeConf):
+         # This guarantees uniqueness and makes it easy
+         # to remove the one unwanted value.
+         service_dict = dict.fromkeys(striplist(item['value'].split(',')))
+-        if service_dict.has_key(''):
++        if '' in service_dict:
+             del service_dict['']
+ 
+         # Remove the unwanted service from the lest
+-        if service_dict.has_key(name):
++        if name in service_dict:
+             del service_dict[name]
+ 
+         # Write out the joined keys
+@@ -1758,7 +1761,7 @@ class SSSDConfig(SSSDChangeConf):
+         if (self.has_option('sssd', 'domains')):
+             active_domains = striplist(self.get('sssd', 'domains').split(','))
+             domain_dict = dict.fromkeys(active_domains)
+-            if domain_dict.has_key(''):
++            if '' in domain_dict:
+                 del domain_dict['']
+ 
+             # Remove any entries in this list that don't
+@@ -1953,7 +1956,7 @@ class SSSDConfig(SSSDChangeConf):
+         # This guarantees uniqueness and makes it easy
+         # to add a new value
+         domain_dict = dict.fromkeys(striplist(item['value'].split(',')))
+-        if domain_dict.has_key(''):
++        if '' in domain_dict:
+             del domain_dict['']
+ 
+         # Add a new key for the domain being activated
+@@ -1994,11 +1997,11 @@ class SSSDConfig(SSSDChangeConf):
+         # This guarantees uniqueness and makes it easy
+         # to remove the one unwanted value.
+         domain_dict = dict.fromkeys(striplist(item['value'].split(',')))
+-        if domain_dict.has_key(''):
++        if '' in domain_dict:
+             del domain_dict['']
+ 
+         # Remove the unwanted domain from the lest
+-        if domain_dict.has_key(name):
++        if name in domain_dict:
+             del domain_dict[name]
+ 
+         # Write out the joined keys
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index bdca8517dedd793af88fdcc0712f7ab620feb228..865079fea295d1ecc89f2c4927f54b7aba0f7567 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -748,12 +748,12 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+         # Ensure that all of the expected defaults are there
+         for provider in control_provider_dict.keys():
+             for ptype in control_provider_dict[provider]:
+-                self.assertTrue(providers.has_key(provider))
++                self.assertTrue(provider in providers)
+                 self.assertTrue(ptype in providers[provider])
+ 
+         for provider in providers.keys():
+             for ptype in providers[provider]:
+-                self.assertTrue(control_provider_dict.has_key(provider))
++                self.assertTrue(provider in control_provider_dict)
+                 self.assertTrue(ptype in control_provider_dict[provider])
+ 
+     def testListProviderOptions(self):
+@@ -1003,7 +1003,7 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+         # Remove the local ID provider and add an LDAP one
+         # LDAP ID providers can also use the krb5_realm
+         domain.remove_provider('id')
+-        self.assertFalse(domain.options.has_key('id_provider'))
++        self.assertFalse('id_provider' in domain.options)
+ 
+         domain.add_provider('ldap', 'id')
+ 
+@@ -1020,7 +1020,7 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+         domain.remove_provider('id')
+         self.assertEquals(domain.get_option('krb5_realm'),
+                   'EXAMPLE.COM')
+-        self.assertFalse(domain.options.has_key('ldap_uri'))
++        self.assertFalse('ldap_uri' in domain.options)
+ 
+         # Put the LOCAL provider back
+         domain.add_provider('local', 'id')
+@@ -1028,7 +1028,7 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+         # Remove the auth domain and verify that the options
+         # revert to the backup_list
+         domain.remove_provider('auth')
+-        self.assertFalse(domain.options.has_key('auth_provider'))
++        self.assertFalse('auth_provider' in domain.options)
+         options = domain.list_options()
+ 
+         self.assertTrue(type(options) == dict,
+@@ -1047,21 +1047,21 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+                             option)
+ 
+         # Ensure that the krb5_realm option is now gone
+-        self.assertFalse(domain.options.has_key('krb5_realm'))
++        self.assertFalse('krb5_realm' in domain.options)
+ 
+         # Test removing nonexistent provider - Real
+         domain.remove_provider('id')
+-        self.assertFalse(domain.options.has_key('id_provider'))
++        self.assertFalse('id_provider' in domain.options)
+ 
+         # Test removing nonexistent provider - Bad backend type
+         # Should pass without complaint
+         domain.remove_provider('id')
+-        self.assertFalse(domain.options.has_key('id_provider'))
++        self.assertFalse('id_provider' in domain.options)
+ 
+         # Test removing nonexistent provider - Bad provider type
+         # Should pass without complaint
+         domain.remove_provider('nosuchprovider')
+-        self.assertFalse(domain.options.has_key('nosuchprovider_provider'))
++        self.assertFalse('nosuchprovider_provider' in domain.options)
+ 
+     def testGetOption(self):
+         domain = SSSDConfig.SSSDDomain('sssd', self.schema)
+@@ -1367,7 +1367,7 @@ class SSSDConfigTestSSSDConfig(unittest.TestCase):
+         # Positive test - Service with invalid option loads
+         # but ignores the invalid option
+         service = sssdconfig.get_service('pam')
+-        self.assertFalse(service.options.has_key('nosuchoption'))
++        self.assertFalse('nosuchoption' in service.options)
+ 
+     def testNewService(self):
+         sssdconfig = SSSDConfig.SSSDConfig(srcdir + "/etc/sssd.api.conf",
+@@ -1598,13 +1598,13 @@ class SSSDConfigTestSSSDConfig(unittest.TestCase):
+         # Expected result: Domain is imported, but does not contain the
+         # unknown provider entry
+         domain = sssdconfig.get_domain('INVALIDPROVIDER')
+-        self.assertFalse(domain.options.has_key('chpass_provider'))
++        self.assertFalse('chpass_provider' in domain.options)
+ 
+         # Positive Test - Domain with unknown option
+         # Expected result: Domain is imported, but does not contain the
+         # unknown option entry
+         domain = sssdconfig.get_domain('INVALIDOPTION')
+-        self.assertFalse(domain.options.has_key('nosuchoption'))
++        self.assertFalse('nosuchoption' in domain.options)
+ 
+     def testNewDomain(self):
+         sssdconfig = SSSDConfig.SSSDConfig(srcdir + "/etc/sssd.api.conf",
+-- 
+2.1.0
+

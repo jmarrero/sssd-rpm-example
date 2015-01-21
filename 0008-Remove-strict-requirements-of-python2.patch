@@ -1,0 +1,112 @@
+From 3d992dd766b49a185147b4daa7f919d40f72ac6e Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 28 Jan 2015 16:10:12 +0100
+Subject: [PATCH 8/9] Remove strict requirements of python2
+
+* fix hashbangs
+* remove strict requirements of python2 in build system
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2017
+
+Reviewed-by: Petr Viktorin <pviktori@redhat.com>
+(cherry picked from commit e8058322725ba050014777ee2484f7e833ab1e3a)
+
+Fedora:
+Fix patching missing file in tarball
+
+The text leading up to this was:
+--------------------------
+|diff --git a/src/tests/python-test.py b/src/tests/python-test.py
+|index 81e09c4bb96fb710e9e5fbcca051fc2c0581fc60..9c1dd3fca0cceba601aa37b07a9c8a4ca48e0441 100644
+|--- a/src/tests/python-test.py
+|+++ b/src/tests/python-test.py
+--------------------------
+---
+ configure.ac                   | 1 -
+ src/config/SSSDConfigTest.py   | 2 +-
+ src/external/python.m4         | 2 +-
+ src/sbus/sbus_codegen          | 2 +-
+ src/tests/pyhbac-test.py       | 2 +-
+ src/tests/pysss_murmur-test.py | 2 +-
+ src/tools/sss_obfuscate        | 2 +-
+ 7 files changed, 6 insertions(+), 7 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index e5ec204ad9671d15deb1830c60168e066a66f198..580add9c90a3abbaaa58762cc0dbde99f47cfc4d 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -248,7 +248,6 @@ AM_CONDITIONAL([HAVE_MANPAGES], [test "x$HAVE_MANPAGES" != "x"])
+ AM_CONDITIONAL([HAVE_PO4A], [test "x$PO4A" != "xno"])
+ 
+ if test x$HAVE_PYTHON_BINDINGS != x; then
+-    PYTHON=python2
+     AM_PATH_PYTHON([2.4])
+     AM_CHECK_PYTHON_HEADERS([],
+                             AC_MSG_ERROR([Could not find python headers]))
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index 865079fea295d1ecc89f2c4927f54b7aba0f7567..3a5312ea945b5247c69e97b73565b7061e037b69 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python2
++#!/usr/bin/env python
+ '''
+ Created on Sep 18, 2009
+ 
+diff --git a/src/external/python.m4 b/src/external/python.m4
+index 25fc7f3972a0f3e13b78160af20a7bde32ab9aec..a1bd87a0ee3a56ddd25c4aba7687ffc7540b4ec2 100644
+--- a/src/external/python.m4
++++ b/src/external/python.m4
+@@ -9,7 +9,7 @@ AC_DEFUN([AM_PYTHON_CONFIG],
+ dnl We need to check for python build flags using distutils.sysconfig
+ dnl We cannot use python-config, as it was not available on older
+ dnl versions of python
+-    AC_PATH_PROG(PYTHON, python2)
++    AC_PATH_PROG(PYTHON, python)
+     AC_MSG_CHECKING([for working python])
+     if test -x "$PYTHON"; then
+         PYTHON_CFLAGS="`$PYTHON -c \"from distutils import sysconfig; \
+diff --git a/src/sbus/sbus_codegen b/src/sbus/sbus_codegen
+index b4e63f33e6e5ef9fb56646142a29c97d35ca3ebf..6a96c40f5c2fdc95c9ed1238f53d0f9b9349fb98 100755
+--- a/src/sbus/sbus_codegen
++++ b/src/sbus/sbus_codegen
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python2
++#!/usr/bin/env python
+ 
+ #
+ # Authors:
+diff --git a/src/tests/pyhbac-test.py b/src/tests/pyhbac-test.py
+index b7f27026b6d1ca12a0759c09e31e1f2c2a2c484c..0abc5703dedb2466b4d99718b5b524951b8af95c 100755
+--- a/src/tests/pyhbac-test.py
++++ b/src/tests/pyhbac-test.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python2
++#!/usr/bin/env python
+ from __future__ import print_function
+ 
+ import unittest
+diff --git a/src/tests/pysss_murmur-test.py b/src/tests/pysss_murmur-test.py
+index 41cb350f7b1fe1d82a5977eb66233ea2b38441ec..0b28f45e67cb4b033516a585867085dba7b412e6 100755
+--- a/src/tests/pysss_murmur-test.py
++++ b/src/tests/pysss_murmur-test.py
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python2
++#!/usr/bin/env python
+ #  SSSD
+ #
+ #  Unit tests for pysss_murmur
+diff --git a/src/tools/sss_obfuscate b/src/tools/sss_obfuscate
+index 86e7daa1f626c76bdd54f5a4a37bde35b32eba1f..fbea1213d8f7e99ab3b1a6d7d24accf8a6194094 100644
+--- a/src/tools/sss_obfuscate
++++ b/src/tools/sss_obfuscate
+@@ -1,4 +1,4 @@
+-#!/usr/bin/python2
++#!/usr/bin/python
+ 
+ import sys
+ from optparse import OptionParser
+-- 
+2.1.0
+

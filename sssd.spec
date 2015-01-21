@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.3
-Release: 6%{?dist}
+Release: 7%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -40,6 +40,11 @@ Patch0001: 0001-logrotate-Fix-warning-file-size-changed-while-zippin.patch
 Patch0002: 0002-MAN-dyndns_iface-supports-only-one-interface.patch
 Patch0003: 0003-krb5-fix-entry-order-in-MEMORY-keytab.patch
 Patch0004: 0004-MONITOR-Fix-double-free.patch
+Patch0005: 0005-Python3-support-in-SSSD.patch
+Patch0006: 0006-SSSDConfig-Remove-unused-exception-name.patch
+Patch0007: 0007-SSSDConfig-Port-missing-parts-to-python3.patch
+Patch0008: 0008-Remove-strict-requirements-of-python2.patch
+Patch0009: 0009-sbus_codegen-Port-to-python3.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -887,6 +892,9 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Sat Feb 14 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-7
+- Backport patches with Python3 support from upstream
+
 * Thu Feb 12 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-6
 - Fix double free in monitor
 - Resolves: rhbz#1186887 [abrt] sssd-common: talloc_abort():
@@ -902,7 +910,7 @@ fi
 
 * Mon Jan 19 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-3
 - Apply a number of patches from upstream to fix issues found 1.12.3
-- Resolves: rhbz#1176373 - dyndns_iface does not accept multiple
+- Resolves: rhbz#1176374 - dyndns_iface does not accept multiple
                            interfaces, or isn't documented to be able to
 - Resolves: rhbz#988068 - getpwnam_r fails for non-existing users when sssd is
                           not running

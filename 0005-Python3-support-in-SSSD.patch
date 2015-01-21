@@ -1,0 +1,1200 @@
+From 02a784d11fc19721d9e3d47e5e878cf0762c8269 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 21 Jan 2015 21:41:27 +0100
+Subject: [PATCH] Python3 support in SSSD
+
+---
+ contrib/rhel/update_debug_levels.py          |  12 +--
+ src/config/SSSDConfig/ipachangeconf.py       |  33 ++++----
+ src/config/SSSDConfig/sssd_upgrade_config.py |  33 ++++----
+ src/config/SSSDConfigTest.py                 |   8 +-
+ src/external/python.m4                       |  19 ++---
+ src/python/pyhbac.c                          | 117 +++++++++++++++++----------
+ src/python/pysss.c                           |  68 +++++++++++++---
+ src/python/pysss_murmur.c                    |  28 ++++++-
+ src/python/pysss_nss_idmap.c                 |  62 ++++++++++----
+ src/tests/pyhbac-test.py                     |   9 ++-
+ src/tests/pysss_murmur-test.py               |   7 +-
+ src/util/sss_python.h                        |  16 +++-
+ 12 files changed, 280 insertions(+), 132 deletions(-)
+
+diff --git a/contrib/rhel/update_debug_levels.py b/contrib/rhel/update_debug_levels.py
+index a9462625fac3a0d064a396d7834b980b1920f26f..a260ec1e82ba8eb17d70d8e13d9858fbbd289b6c 100644
+--- a/contrib/rhel/update_debug_levels.py
++++ b/contrib/rhel/update_debug_levels.py
+@@ -1,3 +1,5 @@
++from __future__ import print_function
++
+ import os
+ import sys
+ import shutil
+@@ -27,19 +29,19 @@ by default""")
+                       help="Be verbose")
+     (options, args) = parser.parse_args()
+     if len(args) > 0:
+-        print >>sys.stderr, "Stray arguments: %s" % ' '.join([a for a in args])
++        print("Stray arguments: %s" % ' '.join([a for a in args]), file=sys.stderr)
+         return None
+ 
+     return options
+ 
+ def verbose(msg, verbosity):
+     if verbosity:
+-        print msg
++        print(msg)
+ 
+ def main():
+     options = parse_options()
+     if not options:
+-        print >> sys.stderr, "Cannot parse options"
++        print("Cannot parse options", file=sys.stderr)
+         return 1
+ 
+     # Import the current config file
+@@ -47,8 +49,8 @@ def main():
+         sssdconfig = SSSDConfig.SSSDConfig()
+         sssdconfig.import_config()
+ 
+-    except Exception, e:
+-        print "Error: %s" % e
++    except Exception as e:
++        print("Error: %s" % e)
+         verbose(traceback.format_exc(), options.verbose)
+         return 2
+ 
+diff --git a/src/config/SSSDConfig/ipachangeconf.py b/src/config/SSSDConfig/ipachangeconf.py
+index 49394f20e352952e0a833e8f0578671ed1fbe269..257c0f46dcfd1cc24c22df1648f58cc6d97490f3 100644
+--- a/src/config/SSSDConfig/ipachangeconf.py
++++ b/src/config/SSSDConfig/ipachangeconf.py
+@@ -34,7 +34,8 @@ def openLocked(filename, perms, create = True):
+     try:
+         fd = os.open(filename, flags, perms)
+         fcntl.lockf(fd, fcntl.LOCK_EX)
+-    except OSError, (errno, strerr):
++    except OSError as err:
++        errno, strerr = err.args
+         if fd != -1:
+             try:
+                 os.close(fd)
+@@ -73,7 +74,7 @@ class IPAChangeConf:
+         elif type(indent) is str:
+             self.indent = (indent, )
+         else:
+-           raise ValueError, 'Indent must be a list of strings'
++           raise ValueError('Indent must be a list of strings')
+ 
+     def setOptionAssignment(self, assign):
+         if type(assign) is tuple:
+@@ -174,7 +175,7 @@ class IPAChangeConf:
+             if o['type'] == "empty":
+                 output += self.deol
+                 continue
+-            raise SyntaxError, 'Unknown type: ['+o['type']+']'
++            raise SyntaxError('Unknown type: ['+o['type']+']')
+ 
+         return output
+ 
+@@ -189,7 +190,7 @@ class IPAChangeConf:
+ 
+         parts = line.split(self.dassign, 1)
+         if len(parts) < 2:
+-            raise SyntaxError, 'Syntax Error: Unknown line format'
++            raise SyntaxError('Syntax Error: Unknown line format')
+ 
+         return {'name':parts[0].strip(), 'type':'option', 'value':parts[1].rstrip()}
+ 
+@@ -238,7 +239,7 @@ class IPAChangeConf:
+             if o['type'] == 'empty':
+                 opts.append({'name':'comment', 'type':'comment', 'value':''})
+                 continue
+-            raise SyntaxError, 'Unknown type: ['+o['type']+']'
++            raise SyntaxError('Unknown type: ['+o['type']+']')
+ 
+         return opts
+ 
+@@ -263,7 +264,7 @@ class IPAChangeConf:
+                     continue
+                 if no['action'] == "remove":
+                     continue
+-                raise SyntaxError, 'Unknown action: ['+no['action']+']'
++                raise SyntaxError('Unknown action: ['+no['action']+']')
+ 
+             if o['type'] == "comment" or o['type'] == "empty":
+                  opts.append(o)
+@@ -285,9 +286,9 @@ class IPAChangeConf:
+                 if no['action'] == 'set':
+                     opts.append(no)
+                     continue
+-                raise SyntaxError, 'Unknown action: ['+o['action']+']'
++                raise SyntaxError('Unknown action: ['+o['action']+']')
+ 
+-            raise SyntaxError, 'Unknown type: ['+o['type']+']'
++            raise SyntaxError('Unknown type: ['+o['type']+']')
+ 
+         return opts
+ 
+@@ -323,7 +324,7 @@ class IPAChangeConf:
+                 cline += 1
+                 continue
+ 
+-            raise SyntaxError, 'Unknown type: ['+no['type']+']'
++            raise SyntaxError('Unknown type: ['+no['type']+']')
+ 
+ 
+     def merge(self, oldopts, newopts):
+@@ -368,7 +369,7 @@ class IPAChangeConf:
+             value = self.matchSubSection(line)
+             if value:
+                 if subsection is not None:
+-                    raise SyntaxError, 'nested subsections are not supported yet'
++                    raise SyntaxError('nested subsections are not supported yet')
+                 subsectopts = []
+                 curopts = subsectopts
+                 subsection = value
+@@ -377,7 +378,7 @@ class IPAChangeConf:
+             value = self.matchSubSectionEnd(line)
+             if value:
+                 if subsection is None:
+-                    raise SyntaxError, 'Unmatched end subsection terminator found'
++                    raise SyntaxError('Unmatched end subsection terminator found')
+                 fatheropts.append({'name':subsection, 'type':'subsection', 'value':subsectopts})
+                 subsection = None
+                 curopts = fatheropts
+@@ -407,7 +408,7 @@ class IPAChangeConf:
+             #Do not catch an unexisting file error, we want to fail in that case
+             shutil.copy2(file, file+self.backup_suffix)
+ 
+-            f = openLocked(file, 0644)
++            f = openLocked(file, 0o644)
+ 
+             oldopts = self.parse(f)
+ 
+@@ -441,12 +442,12 @@ class IPAChangeConf:
+         try:
+             try:
+                 shutil.copy2(file, file+self.backup_suffix)
+-            except IOError, err:
++            except IOError as err:
+                 if err.errno == 2:
+                     # The orign file did not exist
+                     pass
+ 
+-            f = openLocked(file, 0644)
++            f = openLocked(file, 0o644)
+ 
+             # Trunkate
+             f.seek(0)
+@@ -494,12 +495,12 @@ class SSSDChangeConf(IPAChangeConf):
+ 
+         mo = self.OPTCRE.match(line)
+         if not mo:
+-            raise SyntaxError, 'Syntax Error: Unknown line format'
++            raise SyntaxError('Syntax Error: Unknown line format')
+ 
+         try:
+             name, value = mo.group('option', 'value')
+         except IndexError:
+-            raise SyntaxError, 'Syntax Error: Unknown line format'
++            raise SyntaxError('Syntax Error: Unknown line format')
+ 
+         return {'name':name.strip(), 'type':'option', 'value':value.strip()}
+ 
+diff --git a/src/config/SSSDConfig/sssd_upgrade_config.py b/src/config/SSSDConfig/sssd_upgrade_config.py
+index 33d9fed74424a7d3ee28e888aaed724d0a8a94ff..282d6c46f46fb3ec0be78b87aa474e271bf3325f 100644
+--- a/src/config/SSSDConfig/sssd_upgrade_config.py
++++ b/src/config/SSSDConfig/sssd_upgrade_config.py
+@@ -18,6 +18,7 @@
+ #
+ #  You should have received a copy of the GNU General Public License
+ #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
++from __future__ import print_function
+ 
+ import os
+ import sys
+@@ -25,15 +26,15 @@ import shutil
+ import traceback
+ from optparse import OptionParser
+ 
+-from ipachangeconf import openLocked
+-from ipachangeconf import SSSDChangeConf
++from .ipachangeconf import openLocked
++from .ipachangeconf import SSSDChangeConf
+ 
+ class SSSDConfigFile(SSSDChangeConf):
+     def __init__(self, filename):
+         SSSDChangeConf.__init__(self)
+         self.filename = filename
+ 
+-        f = openLocked(self.filename, 0600, False)
++        f = openLocked(self.filename, 0o600, False)
+         self.opts = self.parse(f)
+         f.close()
+ 
+@@ -41,7 +42,7 @@ class SSSDConfigFile(SSSDChangeConf):
+         " Copy the file we operate on to a backup location "
+         shutil.copy(file_name, file_name + self.backup_suffix)
+         # make sure we don't leak data, force permissions on the backup
+-        os.chmod(file_name + self.backup_suffix, 0600)
++        os.chmod(file_name + self.backup_suffix, 0o600)
+ 
+     def get_version(self):
+         ver = self.get_option_index('sssd', 'config_file_version')[1]
+@@ -50,7 +51,7 @@ class SSSDConfigFile(SSSDChangeConf):
+         try:
+             return int(ver['value'])
+         except ValueError:
+-            raise SyntaxError, 'config_file_version not an integer'
++            raise SyntaxError('config_file_version not an integer')
+ 
+     def rename_opts(self, parent_name, rename_kw, type='option'):
+         for new_name, old_name in rename_kw.items():
+@@ -332,7 +333,7 @@ class SSSDConfigFile(SSSDChangeConf):
+         of.write(output)
+         of.close()
+         # make sure it has the right permissions too
+-        os.chmod(out_file_name, 0600)
++        os.chmod(out_file_name, 0o600)
+ 
+     def upgrade_v2(self, out_file_name, backup=True):
+         # read in the old file, make backup if needed
+@@ -352,7 +353,7 @@ class SSSDConfigFile(SSSDChangeConf):
+         of.write(output)
+         of.close()
+         # make sure it has the right permissions too
+-        os.chmod(out_file_name, 0600)
++        os.chmod(out_file_name, 0o600)
+ 
+ def parse_options():
+     parser = OptionParser()
+@@ -383,7 +384,7 @@ by default""")
+ 
+ def verbose(msg, verbose):
+     if verbose:
+-        print msg
++        print(msg)
+ 
+ def main():
+     options = parse_options()
+@@ -397,33 +398,33 @@ def main():
+         verbose(traceback.format_exc(), options.verbose)
+         print >>sys.stderr, "Cannot parse config file %s" % options.filename
+         return 1
+-    except Exception, e:
+-        print "ERROR: %s" % e
++    except Exception as e:
++        print("ERROR: %s" % e)
+         verbose(traceback.format_exc(), options.verbose)
+         return 1
+ 
+     # make sure we keep strict settings when creating new files
+-    os.umask(0077)
++    os.umask(0o077)
+ 
+     version = config.get_version()
+     if version == 2:
+         verbose("Looks like v2, only checking changes", options.verbose)
+         try:
+             config.v2_changes(options.outfile, options.backup)
+-        except Exception, e:
+-            print "ERROR: %s" % e
++        except Exception as e:
++            print("ERROR: %s" % e)
+             verbose(traceback.format_exc(), options.verbose)
+             return 1
+     elif version == 1:
+         verbose("Looks like v1, performing full upgrade", options.verbose)
+         try:
+             config.upgrade_v2(options.outfile, options.backup)
+-        except Exception, e:
+-            print "ERROR: %s" % e
++        except Exception as e:
++            print("ERROR: %s" % e)
+             verbose(traceback.format_exc(), options.verbose)
+             return 1
+     else:
+-        print >>sys.stderr, "Can only upgrade from v1 to v2, file %s looks like version %d" % (options.filename, config.get_version())
++        print("Can only upgrade from v1 to v2, file %s looks like version %d" % (options.filename, config.get_version()), file=sys.stderr)
+         return 1
+ 
+     return 0
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index 78e22f6eff19aac8289d769dc9f565b2d548f4b3..bdca8517dedd793af88fdcc0712f7ab620feb228 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -148,7 +148,7 @@ class SSSDConfigTestValid(unittest.TestCase):
+ 
+         #Output files should not be readable or writable by
+         #non-owners, and should not be executable by anyone
+-        self.assertFalse(S_IMODE(mode) & 0177)
++        self.assertFalse(S_IMODE(mode) & 0o177)
+ 
+         #Remove the output file
+         os.unlink(of)
+@@ -182,7 +182,7 @@ class SSSDConfigTestValid(unittest.TestCase):
+ 
+         #Output files should not be readable or writable by
+         #non-owners, and should not be executable by anyone
+-        self.assertFalse(S_IMODE(mode) & 0177)
++        self.assertFalse(S_IMODE(mode) & 0o177)
+ 
+         #Remove the output file
+         os.unlink(of)
+@@ -216,7 +216,7 @@ class SSSDConfigTestValid(unittest.TestCase):
+ 
+         #Output files should not be readable or writable by
+         #non-owners, and should not be executable by anyone
+-        self.assertFalse(S_IMODE(mode) & 0177)
++        self.assertFalse(S_IMODE(mode) & 0o177)
+ 
+         #Remove the output file
+         os.unlink(of)
+@@ -1767,7 +1767,7 @@ class SSSDConfigTestSSSDConfig(unittest.TestCase):
+ 
+         #Output files should not be readable or writable by
+         #non-owners, and should not be executable by anyone
+-        self.assertFalse(S_IMODE(mode) & 0177)
++        self.assertFalse(S_IMODE(mode) & 0o177)
+ 
+         #Remove the output file
+         os.unlink(of)
+diff --git a/src/external/python.m4 b/src/external/python.m4
+index b5d05e49e94a2364531d0014ab68a6526540d29a..25fc7f3972a0f3e13b78160af20a7bde32ab9aec 100644
+--- a/src/external/python.m4
++++ b/src/external/python.m4
+@@ -13,14 +13,14 @@ dnl versions of python
+     AC_MSG_CHECKING([for working python])
+     if test -x "$PYTHON"; then
+         PYTHON_CFLAGS="`$PYTHON -c \"from distutils import sysconfig; \
+-            print '-I' + sysconfig.get_python_inc() + \
++            print('-I' + sysconfig.get_python_inc() + \
+             ' -I' + sysconfig.get_python_inc(plat_specific=True) + ' ' + \
+-            sysconfig.get_config_var('BASECFLAGS')\"`"
++            sysconfig.get_config_var('BASECFLAGS'))\"`"
+         PYTHON_LIBS="`$PYTHON -c \"from distutils import sysconfig; \
+-            print \\\" \\\".join(sysconfig.get_config_var('LIBS').split() + \
++            print(' '.join(sysconfig.get_config_var('LIBS').split() + \
+             sysconfig.get_config_var('SYSLIBS').split()) + \
+-            ' -lpython' + sysconfig.get_config_var('VERSION') + \
+-            ' -L' + sysconfig.get_config_var('LIBDIR')\"`"
++            ' ' + sysconfig.get_config_var('BLDLIBRARY') + ' ' + \
++            ' -L' + sysconfig.get_config_var('LIBDIR'))\"`"
+             AC_MSG_RESULT([yes])
+     else
+         AC_MSG_RESULT([no])
+@@ -37,12 +37,9 @@ AC_DEFUN([AM_CHECK_PYTHON_HEADERS],
+     AC_MSG_CHECKING(for headers required to compile python extensions)
+ 
+     dnl deduce PYTHON_INCLUDES
+-    py_prefix=`$PYTHON -c "import sys; print sys.prefix"`
+-    py_exec_prefix=`$PYTHON -c "import sys; print sys.exec_prefix"`
+-    PYTHON_INCLUDES="-I${py_prefix}/include/python${PYTHON_VERSION}"
+-    if test "$py_prefix" != "$py_exec_prefix"; then
+-        PYTHON_INCLUDES="$PYTHON_INCLUDES -I${py_exec_prefix}/include/python${PYTHON_VERSION}"
+-    fi
++    py_prefix=`$PYTHON -c "import sys; print(sys.prefix)"`
++    py_exec_prefix=`$PYTHON -c "import sys; print(sys.exec_prefix)"`
++    PYTHON_INCLUDES=-I`$PYTHON -c "from distutils import sysconfig; print(sysconfig.get_config_var('INCLUDEPY'))"`
+ 
+     AC_SUBST(PYTHON_INCLUDES)
+ 
+diff --git a/src/python/pyhbac.c b/src/python/pyhbac.c
+index dd345a6eb4db8ac6104251d5b9c8f11a160e280d..c46f7c6b300df9eb82fa411673da3d77504080cd 100644
+--- a/src/python/pyhbac.c
++++ b/src/python/pyhbac.c
+@@ -78,7 +78,7 @@ get_utf8_string(PyObject *obj, const char *attrname)
+     const char *a = attrname ? attrname : "attribute";
+     PyObject *obj_utf8 = NULL;
+ 
+-    if (PyString_Check(obj)) {
++    if (PyBytes_Check(obj)) {
+         obj_utf8 = obj;
+         Py_INCREF(obj_utf8); /* Make sure we can DECREF later */
+     } else if (PyUnicode_Check(obj)) {
+@@ -143,7 +143,7 @@ sequence_as_string_list(PyObject *seq, const char *paramname)
+             return NULL;
+         }
+ 
+-        ret[i] = py_strdup(PyString_AsString(utf_item));
++        ret[i] = py_strdup(PyBytes_AsString(utf_item));
+         Py_DECREF(utf_item);
+         if (!ret[i]) {
+             Py_DECREF(item);
+@@ -172,9 +172,9 @@ verify_sequence(PyObject *seq, const char *attrname)
+ static int
+ pyobject_to_category(PyObject *o)
+ {
+-    int c;
++    long c;
+ 
+-    c = PyInt_AsLong(o);
++    c = PYNUMBER_ASLONG(o);
+     if (c == -1 && PyErr_Occurred()) {
+         PyErr_Format(PyExc_TypeError,
+                      "Invalid type for category element - must be an int\n");
+@@ -187,7 +187,7 @@ pyobject_to_category(PyObject *o)
+             return c;
+     }
+ 
+-    PyErr_Format(PyExc_ValueError, "Invalid value %d for category\n", c);
++    PyErr_Format(PyExc_ValueError, "Invalid value %ld for category\n", c);
+     return -1;
+ }
+ 
+@@ -244,8 +244,11 @@ str_concat_sequence(PyObject *seq, const char *delim)
+         item = PySequence_GetItem(seq, i);
+         if (item == NULL) goto fail;
+ 
++#ifdef IS_PY3K
++        part = PyUnicode_AsUTF8(item);
++#else
+         part = PyString_AsString(item);
+-        if (part == NULL) goto fail;
++#endif
+ 
+         if (s) {
+             s = py_strcat_realloc(s, delim);
+@@ -325,7 +328,7 @@ static void
+ HbacRuleElement_dealloc(HbacRuleElement *self)
+ {
+     HbacRuleElement_clear(self);
+-    self->ob_type->tp_free((PyObject*) self);
++    Py_TYPE(self)->tp_free((PyObject*) self);
+ }
+ 
+ static int
+@@ -380,7 +383,7 @@ HbacRuleElement_init(HbacRuleElement *self, PyObject *args, PyObject *kwargs)
+             return -1;
+         }
+     } else {
+-        tmp = PyInt_FromLong(HBAC_CATEGORY_NULL);
++        tmp = PYNUMBER_FROMLONG(HBAC_CATEGORY_NULL);
+         if (!tmp) {
+             return -1;
+         }
+@@ -561,7 +564,7 @@ PyDoc_STRVAR(HbacRuleElement__doc__,
+ "names and/or groups and/or category\n");
+ 
+ static PyTypeObject pyhbac_hbacrule_element_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = sss_py_const_p(char, "pyhbac.HbacRuleElement"),
+     .tp_basicsize = sizeof(HbacRuleElement),
+     .tp_new = HbacRuleElement_new,
+@@ -699,7 +702,7 @@ static void
+ HbacRule_dealloc(HbacRuleObject *self)
+ {
+     HbacRule_clear(self);
+-    self->ob_type->tp_free((PyObject*) self);
++    Py_TYPE(self)->tp_free((PyObject*) self);
+ }
+ 
+ static int
+@@ -765,13 +768,13 @@ hbac_rule_set_enabled(HbacRuleObject *self, PyObject *enabled, void *closure)
+ {
+     CHECK_ATTRIBUTE_DELETE(enabled, "enabled");
+ 
+-    if (PyString_Check(enabled) || PyUnicode_Check(enabled)) {
++    if (PyBytes_Check(enabled) || PyUnicode_Check(enabled)) {
+         PyObject *utf8_str;
+         char *str;
+ 
+         utf8_str = get_utf8_string(enabled, "enabled");
+         if (!utf8_str) return -1;
+-        str = PyString_AsString(utf8_str);
++        str = PyBytes_AsString(utf8_str);
+         if (!str) {
+             Py_DECREF(utf8_str);
+             return -1;
+@@ -794,8 +797,8 @@ hbac_rule_set_enabled(HbacRuleObject *self, PyObject *enabled, void *closure)
+     } else if (PyBool_Check(enabled)) {
+         self->enabled = (enabled == Py_True);
+         return 0;
+-    } else if (PyInt_Check(enabled)) {
+-        switch(PyInt_AsLong(enabled)) {
++    } else if (PYNUMBER_CHECK(enabled)) {
++        switch(PYNUMBER_ASLONG(enabled)) {
+             case 0:
+                 self->enabled = false;
+                 break;
+@@ -832,7 +835,7 @@ hbac_rule_set_name(HbacRuleObject *self, PyObject *name, void *closure)
+ {
+     CHECK_ATTRIBUTE_DELETE(name, "name");
+ 
+-    if (!PyString_Check(name) && !PyUnicode_Check(name)) {
++    if (!PyBytes_Check(name) && !PyUnicode_Check(name)) {
+         PyErr_Format(PyExc_TypeError, "name must be a string or Unicode");
+         return -1;
+     }
+@@ -847,7 +850,7 @@ hbac_rule_get_name(HbacRuleObject *self, void *closure)
+     if (PyUnicode_Check(self->name)) {
+         Py_INCREF(self->name);
+         return self->name;
+-    } else if (PyString_Check(self->name)) {
++    } else if (PyBytes_Check(self->name)) {
+         return PyUnicode_FromEncodedObject(self->name,
+                                            PYHBAC_ENCODING, PYHBAC_ENCODING_ERRORS);
+     }
+@@ -953,7 +956,7 @@ py_hbac_rule_validate(HbacRuleObject *self, PyObject *args)
+          attr <<= 1) {
+         if (!(missing & attr)) continue;
+ 
+-        py_attr = PyInt_FromLong(attr);
++        py_attr = PYNUMBER_FROMLONG(attr);
+         if (!py_attr) {
+             PyErr_NoMemory();
+             goto fail;
+@@ -1050,7 +1053,7 @@ PyDoc_STRVAR(HbacRuleObject__doc__,
+ "and srchosts attributes.\n");
+ 
+ static PyTypeObject pyhbac_hbacrule_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = sss_py_const_p(char, "pyhbac.HbacRule"),
+     .tp_basicsize = sizeof(HbacRuleObject),
+     .tp_new = HbacRule_new,
+@@ -1104,7 +1107,7 @@ HbacRule_to_native(HbacRuleObject *pyrule)
+         return NULL;
+     }
+ 
+-    rule->name = py_strdup(PyString_AsString(utf_name));
++    rule->name = py_strdup(PyBytes_AsString(utf_name));
+     Py_DECREF(utf_name);
+     if (rule->name == NULL) {
+         goto fail;
+@@ -1176,7 +1179,7 @@ static void
+ HbacRequestElement_dealloc(HbacRequestElement *self)
+ {
+     HbacRequestElement_clear(self);
+-    self->ob_type->tp_free((PyObject*) self);
++    Py_TYPE(self)->tp_free((PyObject*) self);
+ }
+ 
+ static int
+@@ -1235,7 +1238,7 @@ hbac_request_element_set_name(HbacRequestElement *self,
+ {
+     CHECK_ATTRIBUTE_DELETE(name, "name");
+ 
+-    if (!PyString_Check(name) && !PyUnicode_Check(name)) {
++    if (!PyBytes_Check(name) && !PyUnicode_Check(name)) {
+         PyErr_Format(PyExc_TypeError, "name must be a string or Unicode");
+         return -1;
+     }
+@@ -1250,7 +1253,7 @@ hbac_request_element_get_name(HbacRequestElement *self, void *closure)
+     if (PyUnicode_Check(self->name)) {
+         Py_INCREF(self->name);
+         return self->name;
+-    } else if (PyString_Check(self->name)) {
++    } else if (PyBytes_Check(self->name)) {
+         return PyUnicode_FromEncodedObject(self->name,
+                                            PYHBAC_ENCODING, PYHBAC_ENCODING_ERRORS);
+     }
+@@ -1341,7 +1344,7 @@ PyDoc_STRVAR(HbacRequestElement__doc__,
+ "groups\n");
+ 
+ static PyTypeObject pyhbac_hbacrequest_element_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = sss_py_const_p(char, "pyhbac.HbacRequestElement"),
+     .tp_basicsize = sizeof(HbacRequestElement),
+     .tp_new = HbacRequestElement_new,
+@@ -1389,7 +1392,7 @@ HbacRequestElement_to_native(HbacRequestElement *pyel)
+         return NULL;
+     }
+ 
+-    el->name = py_strdup(PyString_AsString(utf_name));
++    el->name = py_strdup(PyBytes_AsString(utf_name));
+     Py_DECREF(utf_name);
+     if (!el->name) {
+         goto fail;
+@@ -1471,7 +1474,7 @@ static void
+ HbacRequest_dealloc(HbacRequest *self)
+ {
+     HbacRequest_clear(self);
+-    self->ob_type->tp_free((PyObject*) self);
++    Py_TYPE(self)->tp_free((PyObject*) self);
+ }
+ 
+ static int
+@@ -1613,7 +1616,7 @@ py_hbac_evaluate(HbacRequest *self, PyObject *args)
+         }
+         /* FALLTHROUGH */
+     case HBAC_EVAL_DENY:
+-        ret = PyInt_FromLong(eres);
++        ret = PYNUMBER_FROMLONG(eres);
+         break;
+     case HBAC_EVAL_ERROR:
+         set_hbac_exception(PyExc_HbacError, info);
+@@ -1766,7 +1769,7 @@ PyDoc_STRVAR(HbacRequest__doc__,
+ "HbacRequest() -> new empty HBAC request");
+ 
+ static PyTypeObject pyhbac_hbacrequest_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = sss_py_const_p(char, "pyhbac.HbacRequest"),
+     .tp_basicsize = sizeof(HbacRequest),
+     .tp_new = HbacRequest_new,
+@@ -1901,14 +1904,36 @@ PyDoc_STRVAR(HbacError__doc__,
+ "the name of the rule that was being processed. Use hbac_error_string()\n"
+ "to get the text representation of the HBAC error");
+ 
++#ifdef IS_PY3K
++static struct PyModuleDef pyhbacdef = {
++    PyModuleDef_HEAD_INIT,
++    PYTHON_MODULE_NAME,
++    NULL,
++    -1,
++    pyhbac_module_methods,
++    NULL,
++    NULL,
++    NULL,
++    NULL
++};
++
++PyMODINIT_FUNC
++PyInit_pyhbac(void)
++#else
+ PyMODINIT_FUNC
+ initpyhbac(void)
++#endif
+ {
+     PyObject *m;
+     int ret;
+ 
+-    m = Py_InitModule(sss_py_const_p(char, PYTHON_MODULE_NAME), pyhbac_module_methods);
+-    if (m == NULL) return;
++#ifdef IS_PY3K
++    m = PyModule_Create(&pyhbacdef);
++#else
++    m = Py_InitModule(sss_py_const_p(char, PYTHON_MODULE_NAME),
++                      pyhbac_module_methods);
++#endif
++    if (m == NULL) MODINITERROR;
+ 
+     /* The HBAC module exception */
+     PyExc_HbacError = sss_exception_with_doc(
+@@ -1917,46 +1942,50 @@ initpyhbac(void)
+                         PyExc_EnvironmentError, NULL);
+     Py_INCREF(PyExc_HbacError);
+     ret = PyModule_AddObject(m, sss_py_const_p(char, "HbacError"), PyExc_HbacError);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+ 
+     /* HBAC rule categories */
+     ret = PyModule_AddIntMacro(m, HBAC_CATEGORY_NULL);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+     ret = PyModule_AddIntMacro(m, HBAC_CATEGORY_ALL);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+ 
+     /* HBAC rule elements */
+     ret = PyModule_AddIntMacro(m, HBAC_RULE_ELEMENT_USERS);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+     ret = PyModule_AddIntMacro(m, HBAC_RULE_ELEMENT_SERVICES);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+     ret = PyModule_AddIntMacro(m, HBAC_RULE_ELEMENT_TARGETHOSTS);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+     ret = PyModule_AddIntMacro(m, HBAC_RULE_ELEMENT_SOURCEHOSTS);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+ 
+     /* enum hbac_eval_result */
+     ret = PyModule_AddIntMacro(m, HBAC_EVAL_ALLOW);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+     ret = PyModule_AddIntMacro(m, HBAC_EVAL_DENY);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+     ret = PyModule_AddIntMacro(m, HBAC_EVAL_ERROR);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+ 
+     /* enum hbac_error_code */
+     ret = PyModule_AddIntMacro(m, HBAC_ERROR_UNKNOWN);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+     ret = PyModule_AddIntMacro(m, HBAC_SUCCESS);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+     ret = PyModule_AddIntMacro(m, HBAC_ERROR_NOT_IMPLEMENTED);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+     ret = PyModule_AddIntMacro(m, HBAC_ERROR_OUT_OF_MEMORY);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+     ret = PyModule_AddIntMacro(m, HBAC_ERROR_UNPARSEABLE_RULE);
+-    if (ret == -1) return;
++    if (ret == -1) MODINITERROR;
+ 
+     TYPE_READY(m, pyhbac_hbacrule_type, "HbacRule");
+     TYPE_READY(m, pyhbac_hbacrule_element_type, "HbacRuleElement");
+     TYPE_READY(m, pyhbac_hbacrequest_element_type, "HbacRequestElement");
+     TYPE_READY(m, pyhbac_hbacrequest_type, "HbacRequest");
++
++#ifdef IS_PY3K
++    return m;
++#endif
+ }
+diff --git a/src/python/pysss.c b/src/python/pysss.c
+index 9e899f1399553a950e41e157612a7360de4c07b5..684ad72b1c0468bd2327d2b0ec87b5aa7348c349 100644
+--- a/src/python/pysss.c
++++ b/src/python/pysss.c
+@@ -43,13 +43,24 @@ static char **PyList_AsStringList(TALLOC_CTX *mem_ctx, PyObject *list,
+ 
+     ret = talloc_array(mem_ctx, char *, PyList_Size(list)+1);
+     for (i = 0; i < PyList_Size(list); i++) {
++        char *itemstr;
++        Py_ssize_t itemlen;
+         PyObject *item = PyList_GetItem(list, i);
++#ifdef IS_PY3K
++        if (!PyUnicode_Check(item)) {
++#else
+         if (!PyString_Check(item)) {
++#endif
+             PyErr_Format(PyExc_TypeError, "%s should be strings", paramname);
+             return NULL;
+         }
+-        ret[i] = talloc_strndup(ret, PyString_AsString(item),
+-                                PyString_Size(item));
++#ifdef IS_PY3K
++        itemstr = PyUnicode_AsUTF8AndSize(item, &itemlen);
++#else
++        itemstr = PyString_AsString(item);
++        itemlen = strlen(itemstr);
++#endif
++        ret[i] = talloc_strndup(ret, itemstr, itemlen);
+     }
+ 
+     ret[i] = NULL;
+@@ -791,7 +802,13 @@ static PyObject *py_sss_getgrouplist(PyObject *self, PyObject *args)
+     for (i = 0; i < ngroups; i++) {
+         gr = getgrgid(groups[i]);
+         if (gr) {
+-            PyTuple_SetItem(groups_tuple, idx, PyString_FromString(gr->gr_name));
++            PyTuple_SetItem(groups_tuple, idx,
++#ifdef IS_PY3K
++                    PyUnicode_FromString(gr->gr_name)
++#else
++                    PyString_FromString(gr->gr_name)
++#endif
++                    );
+             idx++;
+         }
+     }
+@@ -817,7 +834,7 @@ fail:
+ static void PySssLocalObject_dealloc(PySssLocalObject *self)
+ {
+     talloc_free(self->mem_ctx);
+-    self->ob_type->tp_free((PyObject*) self);
++    Py_TYPE(self)->tp_free((PyObject *)self);
+ }
+ 
+ /*
+@@ -909,9 +926,9 @@ static PyMethodDef sss_local_methods[] = {
+ 
+ static PyMemberDef sss_local_members[] = {
+     { discard_const_p(char, "lock"), T_INT,
+-      offsetof(PySssLocalObject, lock), RO, NULL},
++      offsetof(PySssLocalObject, lock), READONLY, NULL},
+     { discard_const_p(char, "unlock"), T_INT,
+-      offsetof(PySssLocalObject, unlock), RO, NULL},
++      offsetof(PySssLocalObject, unlock), READONLY, NULL},
+     {NULL, 0, 0, 0, NULL} /* Sentinel */
+ };
+ 
+@@ -919,7 +936,7 @@ static PyMemberDef sss_local_members[] = {
+  * sss.local object properties
+  */
+ static PyTypeObject pysss_local_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = sss_py_const_p(char, "sss.local"),
+     .tp_basicsize = sizeof(PySssLocalObject),
+     .tp_new = PySssLocalObject_new,
+@@ -1036,7 +1053,7 @@ fail:
+  */
+ static void PySssPasswordObject_dealloc(PySssPasswordObject *self)
+ {
+-    self->ob_type->tp_free((PyObject*) self);
++    Py_TYPE(self)->tp_free((PyObject*) self);
+ }
+ 
+ /*
+@@ -1079,7 +1096,7 @@ static PyMethodDef sss_password_methods[] = {
+  */
+ static PyMemberDef sss_password_members[] = {
+     { discard_const_p(char, "AES_256"), T_INT,
+-      offsetof(PySssPasswordObject, aes_256), RO, NULL},
++      offsetof(PySssPasswordObject, aes_256), READONLY, NULL},
+     {NULL, 0, 0, 0, NULL} /* Sentinel */
+ };
+ 
+@@ -1087,7 +1104,7 @@ static PyMemberDef sss_password_members[] = {
+  * sss.password object properties
+  */
+ static PyTypeObject pysss_password_type = {
+-    PyObject_HEAD_INIT(NULL)
++    PyVarObject_HEAD_INIT(NULL, 0)
+     .tp_name = sss_py_const_p(char, "sss.password"),
+     .tp_basicsize = sizeof(PySssPasswordObject),
+     .tp_new = PySssPasswordObject_new,
+@@ -1111,23 +1128,48 @@ static PyMethodDef module_methods[] = {
+ /*
+  * Module initialization
+  */
++#ifdef IS_PY3K
++static struct PyModuleDef pysssdef = {
++    PyModuleDef_HEAD_INIT,
++    "pysss",
++    NULL,
++    -1,
++    module_methods,
++    NULL,
++    NULL,
++    NULL,
++    NULL
++};
++
++PyMODINIT_FUNC
++PyInit_pysss(void)
++#else
+ PyMODINIT_FUNC
+ initpysss(void)
++#endif
+ {
+     PyObject *m;
+ 
+     if (PyType_Ready(&pysss_local_type) < 0)
+-        return;
++        MODINITERROR;
+     if (PyType_Ready(&pysss_password_type) < 0)
+-        return;
++        MODINITERROR;
+ 
++#ifdef IS_PY3K
++    m = PyModule_Create(&pysssdef);
++#else
+     m = Py_InitModule(discard_const_p(char, "pysss"), module_methods);
++#endif
+     if (m == NULL)
+-        return;
++        MODINITERROR;
+ 
+     Py_INCREF(&pysss_local_type);
+     PyModule_AddObject(m, discard_const_p(char, "local"), (PyObject *)&pysss_local_type);
+     Py_INCREF(&pysss_password_type);
+     PyModule_AddObject(m, discard_const_p(char, "password"), (PyObject *)&pysss_password_type);
++
++#ifdef IS_PY3K
++    return m;
++#endif
+ }
+ 
+diff --git a/src/python/pysss_murmur.c b/src/python/pysss_murmur.c
+index a193c56da08eb8aba09f88ddc10e23625dbe8f0c..97d752b2a7734a332a5d5da07d75b594638015c8 100644
+--- a/src/python/pysss_murmur.c
++++ b/src/python/pysss_murmur.c
+@@ -60,10 +60,36 @@ static PyMethodDef methods[] = {
+     { NULL,NULL, 0, NULL }
+ };
+ 
++#ifdef IS_PY3K
++static struct PyModuleDef pysss_murmurdef = {
++    PyModuleDef_HEAD_INIT,
++    "pysss_murmur",
++    NULL,
++    -1,
++    methods,
++    NULL,
++    NULL,
++    NULL,
++    NULL
++};
+ 
+ PyMODINIT_FUNC
++PyInit_pysss_murmur(void)
++#else
++PyMODINIT_FUNC
+ initpysss_murmur(void)
++#endif
+ {
+-    Py_InitModule3(sss_py_const_p(char, "pysss_murmur"),
++    PyObject *m;
++#ifdef IS_PY3K
++    m = PyModule_Create(&pysss_murmurdef);
++#else
++    m = Py_InitModule3(sss_py_const_p(char, "pysss_murmur"),
+                    methods, sss_py_const_p(char, "murmur hash functions"));
++#endif
++    if (m == NULL)
++        MODINITERROR;
++#ifdef IS_PY3K
++    return m;
++#endif
+ }
+diff --git a/src/python/pysss_nss_idmap.c b/src/python/pysss_nss_idmap.c
+index 0870b0da614e127c925572a8fc444cee1c6cf441..36d66f405442d63e430f92862990f1656486112d 100644
+--- a/src/python/pysss_nss_idmap.c
++++ b/src/python/pysss_nss_idmap.c
+@@ -53,7 +53,7 @@ static int add_dict(PyObject *py_result, PyObject *key, PyObject *res_type,
+         return ret;
+     }
+ 
+-    ret = PyDict_SetItem(py_dict, PyString_FromString(SSS_TYPE_KEY), id_type);
++    ret = PyDict_SetItem(py_dict, PyBytes_FromString(SSS_TYPE_KEY), id_type);
+     if (ret != 0) {
+         Py_XDECREF(py_dict);
+         return ret;
+@@ -70,14 +70,14 @@ static char *py_string_or_unicode_as_string(PyObject *inp)
+ 
+     if (PyUnicode_Check(inp)) {
+         py_str = PyUnicode_AsUTF8String(inp);
+-    } else if (PyString_Check(inp)) {
++    } else if (PyBytes_Check(inp)) {
+         py_str = inp;
+     } else {
+         PyErr_Format(PyExc_TypeError, "input must be unicode or a string");
+         return NULL;
+     }
+ 
+-    return PyString_AS_STRING(py_str);
++    return PyBytes_AS_STRING(py_str);
+ }
+ 
+ static int do_getsidbyname(PyObject *py_result, PyObject *py_name)
+@@ -94,8 +94,8 @@ static int do_getsidbyname(PyObject *py_result, PyObject *py_name)
+ 
+     ret = sss_nss_getsidbyname(name, &sid, &id_type);
+     if (ret == 0) {
+-        ret = add_dict(py_result, py_name, PyString_FromString(SSS_SID_KEY),
+-                       PyUnicode_FromString(sid), PyInt_FromLong(id_type));
++        ret = add_dict(py_result, py_name, PyBytes_FromString(SSS_SID_KEY),
++                       PyUnicode_FromString(sid), PYNUMBER_FROMLONG(id_type));
+     }
+     free(sid);
+ 
+@@ -116,8 +116,8 @@ static int do_getnamebysid(PyObject *py_result, PyObject *py_sid)
+ 
+     ret = sss_nss_getnamebysid(sid, &name, &id_type);
+     if (ret == 0) {
+-        ret = add_dict(py_result, py_sid, PyString_FromString(SSS_NAME_KEY),
+-                       PyUnicode_FromString(name), PyInt_FromLong(id_type));
++        ret = add_dict(py_result, py_sid, PyBytes_FromString(SSS_NAME_KEY),
++                       PyUnicode_FromString(name), PYNUMBER_FROMLONG(id_type));
+     }
+     free(name);
+ 
+@@ -133,9 +133,12 @@ static int do_getsidbyid(PyObject *py_result, PyObject *py_id)
+     int ret;
+     enum sss_id_type id_type;
+ 
++#ifndef IS_PY3K
+     if (PyInt_Check(py_id)) {
+         id = PyInt_AS_LONG(py_id);
+-    } else if (PyLong_Check(py_id)) {
++    } else
++#endif
++    if (PyLong_Check(py_id)) {
+         id = PyLong_AsLong(py_id);
+     } else {
+         id_str = py_string_or_unicode_as_string(py_id);
+@@ -155,8 +158,8 @@ static int do_getsidbyid(PyObject *py_result, PyObject *py_id)
+ 
+     ret = sss_nss_getsidbyid((uint32_t) id, &sid, &id_type);
+     if (ret == 0) {
+-        ret = add_dict(py_result, py_id, PyString_FromString(SSS_SID_KEY),
+-                       PyUnicode_FromString(sid), PyInt_FromLong(id_type));
++        ret = add_dict(py_result, py_id, PyBytes_FromString(SSS_SID_KEY),
++                       PyUnicode_FromString(sid), PYNUMBER_FROMLONG(id_type));
+     }
+     free(sid);
+ 
+@@ -177,8 +180,8 @@ static int do_getidbysid(PyObject *py_result, PyObject *py_sid)
+ 
+     ret = sss_nss_getidbysid(sid, &id, &id_type);
+     if (ret == 0) {
+-        ret = add_dict(py_result, py_sid, PyString_FromString(SSS_ID_KEY),
+-                       PyInt_FromLong(id), PyInt_FromLong(id_type));
++        ret = add_dict(py_result, py_sid, PyBytes_FromString(SSS_ID_KEY),
++                       PYNUMBER_FROMLONG(id), PYNUMBER_FROMLONG(id_type));
+     }
+ 
+     return ret;
+@@ -220,8 +223,8 @@ static PyObject *check_args(enum lookup_type type, PyObject *args)
+     }
+ 
+     if (!(PyList_Check(obj) || PyTuple_Check(obj) ||
+-          PyString_Check(obj) || PyUnicode_Check(obj) ||
+-          (type == SIDBYID && (PyInt_Check(obj) || PyLong_Check(obj))))) {
++          PyBytes_Check(obj) || PyUnicode_Check(obj) ||
++          (type == SIDBYID && (PYNUMBER_CHECK(obj))))) {
+         PyErr_Format(PyExc_ValueError,
+                      "Only string, long or list or tuples of them " \
+                      "are accepted\n");
+@@ -241,9 +244,8 @@ static PyObject *check_args(enum lookup_type type, PyObject *args)
+         for(i=0; i < len; i++) {
+             py_value = PySequence_GetItem(obj, i);
+             if ((py_value != NULL) &&
+-                (PyString_Check(py_value) || PyUnicode_Check(py_value) ||
+-                 (type == SIDBYID &&
+-                  (PyInt_Check(py_value) || PyLong_Check(py_value))))) {
++                (PyBytes_Check(py_value) || PyUnicode_Check(py_value) ||
++                 (type == SIDBYID && PYNUMBER_CHECK(py_value)))) {
+                 ret = do_lookup(type, py_result, py_value);
+                 if (ret != 0) {
+                     /* Skip this name */
+@@ -349,15 +351,37 @@ static PyMethodDef methods[] = {
+     { NULL,NULL, 0, NULL }
+ };
+ 
++#ifdef IS_PY3K
++static struct PyModuleDef pysss_nss_idmap_def = {
++    PyModuleDef_HEAD_INIT,
++    "pysss_nss_idmap",
++    NULL,
++    -1,
++    methods,
++    NULL,
++    NULL,
++    NULL,
++    NULL
++};
+ 
+ PyMODINIT_FUNC
++PyInit_pysss_nss_idmap(void)
++#else
++PyMODINIT_FUNC
+ initpysss_nss_idmap(void)
++#endif
+ {
+     PyObject *module;
+ 
++#ifdef IS_PY3K
++    module = PyModule_Create(&pysss_nss_idmap_def);
++#else
+     module = Py_InitModule3(sss_py_const_p(char, "pysss_nss_idmap"),
+                             methods,
+                             sss_py_const_p(char, "SSSD ID-mapping functions"));
++#endif
++    if (module == NULL)
++        MODINITERROR;
+ 
+     PyModule_AddIntConstant(module, "ID_NOT_SPECIFIED",
+                             SSS_ID_TYPE_NOT_SPECIFIED);
+@@ -369,4 +393,8 @@ initpysss_nss_idmap(void)
+     PyModule_AddStringConstant(module, "NAME_KEY", SSS_NAME_KEY);
+     PyModule_AddStringConstant(module, "ID_KEY", SSS_ID_KEY);
+     PyModule_AddStringConstant(module, "TYPE_KEY", SSS_TYPE_KEY);
++
++#ifdef IS_PY3K
++    return module;
++#endif
+ }
+diff --git a/src/tests/pyhbac-test.py b/src/tests/pyhbac-test.py
+index c4228368a27741eff568b1a2858d7be072d9fef6..b7f27026b6d1ca12a0759c09e31e1f2c2a2c484c 100755
+--- a/src/tests/pyhbac-test.py
++++ b/src/tests/pyhbac-test.py
+@@ -1,15 +1,20 @@
+ #!/usr/bin/python2
++from __future__ import print_function
+ 
+ import unittest
+ import sys
+ import os
+ import copy
++import sys
+ 
+ srcdir = os.getenv('builddir')
+ if not srcdir:
+     srcdir = "."
+ MODPATH = srcdir + "/.libs" #FIXME - is there a way to get this from libtool?
+ 
++if sys.version_info[0] > 2:
++    unicode = str
++
+ def compat_assertItemsEqual(this, expected_seq, actual_seq, msg=None):
+     return this.assertEqual(sorted(expected_seq), sorted(actual_seq))
+ 
+@@ -37,8 +42,8 @@ class PyHbacImport(unittest.TestCase):
+         " Import the module and assert it comes from tree "
+         try:
+             import pyhbac
+-        except ImportError, e:
+-            print >>sys.stderr, "Could not load the pyhbac module. Please check if it is compiled"
++        except ImportError as e:
++            print("Could not load the pyhbac module. Please check if it is compiled", file=sys.stderr)
+             raise e
+         self.assertEqual(pyhbac.__file__, MODPATH + "/pyhbac.so")
+ 
+diff --git a/src/tests/pysss_murmur-test.py b/src/tests/pysss_murmur-test.py
+index ee0e8b8a0fdef9e6ab825c7fc5f2fe661ec669ea..41cb350f7b1fe1d82a5977eb66233ea2b38441ec 100755
+--- a/src/tests/pysss_murmur-test.py
++++ b/src/tests/pysss_murmur-test.py
+@@ -17,6 +17,7 @@
+ #
+ #  You should have received a copy of the GNU General Public License
+ #  along with this program.  If not, see <http://www.gnu.org/licenses/>.
++from __future__ import print_function
+ 
+ import unittest
+ import sys
+@@ -46,6 +47,8 @@ class PySssMurmurImport(unittest.TestCase):
+         " Make sure we load the in-tree module "
+         self.system_path = sys.path[:]
+         sys.path = [ MODPATH ]
++        print (os.getcwd())
++        print(MODPATH)
+ 
+     def tearDown(self):
+         " Restore the system path "
+@@ -55,8 +58,8 @@ class PySssMurmurImport(unittest.TestCase):
+         " Import the module and assert it comes from tree "
+         try:
+             import pysss_murmur
+-        except ImportError, e:
+-            print >>sys.stderr, "Could not load the pysss_murmur module. Please check if it is compiled"
++        except ImportError as e:
++            print("Could not load the pysss_murmur module. Please check if it is compiled", file=sys.stderr)
+             raise e
+         self.assertEqual(pysss_murmur.__file__, MODPATH + "/pysss_murmur.so")
+ 
+diff --git a/src/util/sss_python.h b/src/util/sss_python.h
+index 8f81bf91b2edc05230b06aa8cfa592dcb9325fa4..828bd22ec44fe9493bfaa246b072777b70c7b585 100644
+--- a/src/util/sss_python.h
++++ b/src/util/sss_python.h
+@@ -11,6 +11,20 @@
+ #define sss_py_const_p(type, value) (value)
+ #endif
+ 
++#if PY_MAJOR_VERSION >= 3
++#define IS_PY3K
++#define MODINITERROR return NULL
++#define PYNUMBER_CHECK(what) PyLong_Check(what)
++#define PYNUMBER_FROMLONG(what) PyLong_FromLong(what)
++#define PYNUMBER_ASLONG(what) PyLong_AsLong(what)
++#else
++#include <bytesobject.h>
++#define MODINITERROR return
++#define PYNUMBER_CHECK(what) PyInt_Check(what)
++#define PYNUMBER_FROMLONG(what) PyInt_FromLong(what)
++#define PYNUMBER_ASLONG(what) PyInt_AsLong(what)
++#endif
++
+ /* Py_ssize_t compatibility for python < 2.5 as per
+  * http://www.python.org/dev/peps/pep-0353/ */
+ #ifndef HAVE_PY_SSIZE_T
+@@ -45,7 +59,7 @@ sss_exception_with_doc(char *name, char *doc, PyObject *base, PyObject *dict);
+ /* Convenience macros */
+ #define TYPE_READY(module, type, name) do {         \
+     if (PyType_Ready(&type) < 0)                    \
+-        return;                                     \
++	MODINITERROR;                               \
+     Py_INCREF(&type);                               \
+     PyModule_AddObject(module,                      \
+                        discard_const_p(char, name), \
+-- 
+2.1.0
+
