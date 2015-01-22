@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.3
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -862,7 +862,7 @@ fi
 %post libwbclient
 %{_sbindir}/update-alternatives --install %{_libdir}/libwbclient.so.0.11 \
                                 libwbclient.so.0.11%{libwbc_alternatives_suffix} \
-                                %{_libdir}/%{name}/modules/libwbclient.so.0.11.0 20
+                                %{_libdir}/%{name}/modules/libwbclient.so.0.11.0 5
 /sbin/ldconfig
 
 %preun libwbclient
@@ -876,7 +876,7 @@ fi
 %post libwbclient-devel
 %{_sbindir}/update-alternatives --install %{_libdir}/libwbclient.so \
                                 libwbclient.so%{libwbc_alternatives_suffix} \
-                                %{_libdir}/%{name}/modules/libwbclient.so 20
+                                %{_libdir}/%{name}/modules/libwbclient.so 5
 
 %preun libwbclient-devel
 if [ $1 -eq 0 ]; then
@@ -886,6 +886,11 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Thu Jan 22 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-4
+- Decrease priority of sssd-libwbclient 20 -> 5
+- It should be lower than priority of samba veriosn of libwbclient.
+- https://bugzilla.redhat.com/show_bug.cgi?id=1175511#c18
+
 * Mon Jan 19 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-3
 - Apply a number of patches from upstream to fix issues found 1.12.3
 - Resolves: rhbz#1176373 - dyndns_iface does not accept multiple
