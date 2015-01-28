@@ -7,7 +7,7 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.19
+%global ldb_version 1.1.20
 
 %if (0%{?fedora} || 0%{?rhel} >= 7)
     %global with_cifs_utils_plugin 1
@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.3
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -886,6 +886,9 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Wed Jan 28 2015 Jakub Hrozek <jhrozek@redhat.com> - 1.12.3-5
+- Rebuild for new libldb
+
 * Thu Jan 22 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-4
 - Decrease priority of sssd-libwbclient 20 -> 5
 - It should be lower than priority of samba veriosn of libwbclient.
