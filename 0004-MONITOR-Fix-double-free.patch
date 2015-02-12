@@ -1,0 +1,61 @@
+From 2aac87a3dfc12ba1187c7045635cac0647d397d9 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Thu, 12 Feb 2015 19:10:34 +0100
+Subject: [PATCH 4/4] MONITOR: Fix double free
+
+If kill timer was successfully executed then it will be released by libtevent.
+So we should not released it in mt_svc_exit_handler for the second time.
+
+[sssd] [mt_svc_exit_handler] (0x0040): Child [ifp] terminated with signal [9]
+[sssd] [talloc_log_fn] (0x0010): talloc: access after free error - first free
+                                         may be at ../tevent_timed.c:351
+[sssd] [talloc_log_fn] (0x0010): Bad talloc magic value - access after free
+
+==19129== Invalid read of size 4
+==19129==    at 0x50470CD: talloc_chunk_from_ptr (talloc.c:372)
+==19129==    by 0x50470CD: _talloc_free (talloc.c:1559)
+==19129==    by 0x11086C: mt_svc_exit_handler (monitor.c:2754)
+==19129==    by 0x8AF9B2F: sss_child_invoke_cb (child_common.c:181)
+==19129==    by 0x4E39823: tevent_common_loop_immediate (tevent_immediate.c:135)
+==19129==    by 0x4E3AF4D: poll_event_loop_once (tevent_poll.c:649)
+==19129==    by 0x4E38FEC: _tevent_loop_once (tevent.c:530)
+==19129==    by 0x4E3AA4A: poll_event_loop_wait (tevent_poll.c:677)
+==19129==    by 0x84C4B02: server_loop (server.c:668)
+==19129==    by 0x10D9A6: main (monitor.c:3028)
+==19129==  Address 0xb8a06c0 is 64 bytes inside a block of size 176 free'd
+==19129==    at 0x4C2ACE9: free (in /usr/lib64/valgrind/vgpreload_memcheck-amd64-linux.so)
+==19129==    by 0x50472F2: _talloc_free_internal (talloc.c:1057)
+==19129==    by 0x50472F2: _talloc_free (talloc.c:1581)
+==19129==    by 0x4E3D0A3: tevent_common_loop_timer_delay (tevent_timed.c:351)
+==19129==    by 0x4E3AF59: poll_event_loop_once (tevent_poll.c:653)
+==19129==    by 0x4E38FEC: _tevent_loop_once (tevent.c:530)
+==19129==    by 0x4E3AA4A: poll_event_loop_wait (tevent_poll.c:677)
+==19129==    by 0x84C4B02: server_loop (server.c:668)
+==19129==    by 0x10D9A6: main (monitor.c:3028)
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2572
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+(cherry picked from commit 373946b540eaa5d97c6efb39629195dbe2a1f015)
+---
+ src/monitor/monitor.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index afefe7f11c15ad343e8a79dceeff5a89e2787add..f171c05acd2c770ab9ffad2429d92c5041bcdb59 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -646,6 +646,9 @@ static void mt_svc_sigkill(struct tevent_context *ev,
+             "[%s][%d] is not responding to SIGTERM. Sending SIGKILL.\n",
+             svc->name, svc->pid);
+ 
++    /* timer was succesfully executed and it will be released by tevent */
++    svc->kill_timer = NULL;
++
+     ret = kill(svc->pid, SIGKILL);
+     if (ret != EOK) {
+         ret = errno;
+-- 
+2.1.0
+

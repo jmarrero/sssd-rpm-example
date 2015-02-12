@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.3
-Release: 5%{?dist}
+Release: 6%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -39,6 +39,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 Patch0001: 0001-logrotate-Fix-warning-file-size-changed-while-zippin.patch
 Patch0002: 0002-MAN-dyndns_iface-supports-only-one-interface.patch
 Patch0003: 0003-krb5-fix-entry-order-in-MEMORY-keytab.patch
+Patch0004: 0004-MONITOR-Fix-double-free.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -886,6 +887,11 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Wed Feb 12 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-6
+- Fix double free in monitor
+- Resolves: rhbz#1186887 [abrt] sssd-common: talloc_abort():
+                        sssd killed by SIGABRT
+
 * Wed Jan 28 2015 Jakub Hrozek <jhrozek@redhat.com> - 1.12.3-5
 - Rebuild for new libldb
 
