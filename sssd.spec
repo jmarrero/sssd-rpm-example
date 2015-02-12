@@ -887,7 +887,7 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
-* Wed Feb 12 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-6
+* Thu Feb 12 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-6
 - Fix double free in monitor
 - Resolves: rhbz#1186887 [abrt] sssd-common: talloc_abort():
                         sssd killed by SIGABRT
