@@ -910,7 +910,7 @@ fi
 
 * Mon Jan 19 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.3-3
 - Apply a number of patches from upstream to fix issues found 1.12.3
-- Resolves: rhbz#1176374 - dyndns_iface does not accept multiple
+- Resolves: rhbz#1176373 - dyndns_iface does not accept multiple
                            interfaces, or isn't documented to be able to
 - Resolves: rhbz#988068 - getpwnam_r fails for non-existing users when sssd is
                           not running
