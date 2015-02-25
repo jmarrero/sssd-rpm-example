@@ -1,7 +1,7 @@
 %global rhel7_minor %(%{__grep} -o "7.[0-9]*" /etc/redhat-release |%{__sed} -s 's/7.//')
 
 # we don't want to provide private python extension libs
-%define __provides_exclude_from %{python_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
+%define __provides_exclude_from %{python2_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
 %define _hardened_build 1
 
 
@@ -540,9 +540,9 @@ rm -Rf ${RPM_BUILD_ROOT}/%{_docdir}/%{name}
 
 # Older versions of rpmbuild can only handle one -f option
 # So we need to append to the sssd*.lang file
-for file in `ls $RPM_BUILD_ROOT/%{python_sitelib}/*.egg-info 2> /dev/null`
+for file in `ls $RPM_BUILD_ROOT/%{python2_sitelib}/*.egg-info 2> /dev/null`
 do
-    echo %{python_sitelib}/`basename $file` >> python_sssdconfig.lang
+    echo %{python2_sitelib}/`basename $file` >> python2_sssdconfig.lang
 done
 
 touch sssd_tools.lang
@@ -788,20 +788,20 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sss_debuglevel.8*
 %{_mandir}/man8/sss_seed.8*
 
-%files -n python-sssdconfig -f python_sssdconfig.lang
+%files -n python-sssdconfig -f python2_sssdconfig.lang
 %defattr(-,root,root,-)
-%dir %{python_sitelib}/SSSDConfig
-%{python_sitelib}/SSSDConfig/*.py*
+%dir %{python2_sitelib}/SSSDConfig
+%{python2_sitelib}/SSSDConfig/*.py*
 
 %files -n python-sss
 %defattr(-,root,root,-)
-%{python_sitearch}/pysss.so
-%{python_sitearch}/_py2sss.so
+%{python2_sitearch}/pysss.so
+%{python2_sitearch}/_py2sss.so
 
 %files -n python-sss-murmur
 %defattr(-,root,root,-)
-%{python_sitearch}/pysss_murmur.so
-%{python_sitearch}/_py2sss_murmur.so
+%{python2_sitearch}/pysss_murmur.so
+%{python2_sitearch}/_py2sss_murmur.so
 
 %files -n libsss_idmap
 %defattr(-,root,root,-)
@@ -841,13 +841,13 @@ rm -rf $RPM_BUILD_ROOT
 
 %files -n libsss_nss_idmap-python
 %defattr(-,root,root,-)
-%{python_sitearch}/pysss_nss_idmap.so
-%{python_sitearch}/_py2sss_nss_idmap.so
+%{python2_sitearch}/pysss_nss_idmap.so
+%{python2_sitearch}/_py2sss_nss_idmap.so
 
 %files -n libipa_hbac-python
 %defattr(-,root,root,-)
-%{python_sitearch}/pyhbac.so
-%{python_sitearch}/_py2hbac.so
+%{python2_sitearch}/pyhbac.so
+%{python2_sitearch}/_py2hbac.so
 
 %files libwbclient
 %defattr(-,root,root,-)
