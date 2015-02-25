@@ -796,10 +796,12 @@ rm -rf $RPM_BUILD_ROOT
 %files -n python-sss
 %defattr(-,root,root,-)
 %{python_sitearch}/pysss.so
+%{python_sitearch}/_py2sss.so
 
 %files -n python-sss-murmur
 %defattr(-,root,root,-)
 %{python_sitearch}/pysss_murmur.so
+%{python_sitearch}/_py2sss_murmur.so
 
 %files -n libsss_idmap
 %defattr(-,root,root,-)
@@ -840,10 +842,12 @@ rm -rf $RPM_BUILD_ROOT
 %files -n libsss_nss_idmap-python
 %defattr(-,root,root,-)
 %{python_sitearch}/pysss_nss_idmap.so
+%{python_sitearch}/_py2sss_nss_idmap.so
 
 %files -n libipa_hbac-python
 %defattr(-,root,root,-)
 %{python_sitearch}/pyhbac.so
+%{python_sitearch}/_py2hbac.so
 
 %files libwbclient
 %defattr(-,root,root,-)
