@@ -1,7 +1,7 @@
 %global rhel7_minor %(%{__grep} -o "7.[0-9]*" /etc/redhat-release |%{__sed} -s 's/7.//')
 
 # we don't want to provide private python extension libs
-%define __provides_exclude_from %{python2_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
+%define __provides_exclude_from %{python2_sitearch}/.*\.so$|%{python3_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
 %define _hardened_build 1
 
 
@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.4
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -60,7 +60,7 @@ Requires: sssd-ipa = %{version}-%{release}
 Requires: sssd-common-pac = %{version}-%{release}
 Requires: sssd-ad = %{version}-%{release}
 Requires: sssd-proxy = %{version}-%{release}
-Requires: python-sssdconfig = %{version}-%{release}
+Requires: python3-sssdconfig = %{version}-%{release}
 
 %global servicename sssd
 %global sssdstatedir %{_localstatedir}/lib/sss
@@ -103,6 +103,7 @@ BuildRequires: krb5-devel
 %endif
 BuildRequires: c-ares-devel
 BuildRequires: python-devel
+BuildRequires: python3-devel
 BuildRequires: check-devel
 BuildRequires: doxygen
 BuildRequires: libselinux-devel
@@ -197,8 +198,8 @@ Group: Applications/System
 License: GPLv3+
 Requires: sssd-common = %{version}-%{release}
 # required by sss_obfuscate
-Requires: python-sss = %{version}-%{release}
-Requires: python-sssdconfig = %{version}-%{release}
+Requires: python3-sss = %{version}-%{release}
+Requires: python3-sssdconfig = %{version}-%{release}
 
 %description tools
 Provides userspace tools for manipulating users, groups, and nested groups in
@@ -216,29 +217,60 @@ License: GPLv3+
 BuildArch: noarch
 
 %description -n python-sssdconfig
-Provides python files for manipulation SSSD and IPA configuration files.
+Provides python2 files for manipulation SSSD and IPA configuration files.
+
+%package -n python3-sssdconfig
+Summary: SSSD and IPA configuration file manipulation classes and functions
+Group: Applications/System
+License: GPLv3+
+BuildArch: noarch
+
+%description -n python3-sssdconfig
+Provides python3 files for manipulation SSSD and IPA configuration files.
 
 %package -n python-sss
-Summary: Python bindings for sssd
+Summary: Python2 bindings for sssd
 Group: Development/Libraries
 License: LGPLv3+
 Requires: sssd-common = %{version}-%{release}
 
 %description -n python-sss
-Provides python module for manipulating users, groups, and nested groups in
+Provides python2 module for manipulating users, groups, and nested groups in
 SSSD when using id_provider = local in /etc/sssd/sssd.conf.
 
-Also provides several other useful python bindings:
+Also provides several other useful python2 bindings:
+    * function for retrieving list of groups user belongs to.
+    * class for obfuscation of passwords
+
+%package -n python3-sss
+Summary: Python3 bindings for sssd
+Group: Development/Libraries
+License: LGPLv3+
+Requires: sssd-common = %{version}-%{release}
+
+%description -n python3-sss
+Provides python3 module for manipulating users, groups, and nested groups in
+SSSD when using id_provider = local in /etc/sssd/sssd.conf.
+
+Also provides several other useful python3 bindings:
     * function for retrieving list of groups user belongs to.
     * class for obfuscation of passwords
 
 %package -n python-sss-murmur
-Summary: Python bindings for murmur hash function
+Summary: Python2 bindings for murmur hash function
 Group: Development/Libraries
 License: LGPLv3+
 
 %description -n python-sss-murmur
-Provides python module for calculating the murmur hash version 3
+Provides python2 module for calculating the murmur hash version 3
+
+%package -n python3-sss-murmur
+Summary: Python3 bindings for murmur hash function
+Group: Development/Libraries
+License: LGPLv3+
+
+%description -n python3-sss-murmur
+Provides python3 module for calculating the murmur hash version 3
 
 %package ldap
 Summary: The LDAP back end of the SSSD
@@ -365,13 +397,23 @@ Requires: libipa_hbac = %{version}-%{release}
 Utility library to validate FreeIPA HBAC rules for authorization requests
 
 %package -n libipa_hbac-python
-Summary: Python bindings for the FreeIPA HBAC Evaluator library
+Summary: Python2 bindings for the FreeIPA HBAC Evaluator library
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libipa_hbac = %{version}-%{release}
 
 %description -n libipa_hbac-python
 The libipa_hbac-python contains the bindings so that libipa_hbac can be
+used by Python applications.
+
+%package -n python3-libipa_hbac
+Summary: Python3 bindings for the FreeIPA HBAC Evaluator library
+Group: Development/Libraries
+License: LGPLv3+
+Requires: libipa_hbac = %{version}-%{release}
+
+%description -n python3-libipa_hbac
+The python3-libipa_hbac contains the bindings so that libipa_hbac can be
 used by Python applications.
 
 %package -n libsss_nss_idmap
@@ -394,13 +436,23 @@ Requires: libsss_nss_idmap = %{version}-%{release}
 Utility library for SID based lookups
 
 %package -n libsss_nss_idmap-python
-Summary: Python bindings for libsss_nss_idmap
+Summary: Python2 bindings for libsss_nss_idmap
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libsss_nss_idmap = %{version}-%{release}
 
 %description -n libsss_nss_idmap-python
 The libsss_nss_idmap-python contains the bindings so that libsss_nss_idmap can
+be used by Python applications.
+
+%package -n python3-libsss_nss_idmap
+Summary: Python3 bindings for libsss_nss_idmap
+Group: Development/Libraries
+License: LGPLv3+
+Requires: libsss_nss_idmap = %{version}-%{release}
+
+%description -n python3-libsss_nss_idmap
+The python3-libsss_nss_idmap contains the bindings so that libsss_nss_idmap can
 be used by Python applications.
 
 %package dbus
@@ -503,12 +555,20 @@ autoreconf -ivf
 make %{?_smp_mflags} all docs
 
 %check
+
+# the utility patch did not apply changes in file permissions
+chmod 755 src/config/SSSDConfigTest.py*.sh \
+          src/tests/pyhbac-test.py*.sh \
+          src/tests/pysss_murmur-test.py*.sh
+
 export CK_TIMEOUT_MULTIPLIER=10
 make %{?_smp_mflags} check VERBOSE=yes
 unset CK_TIMEOUT_MULTIPLIER
 
 %install
 rm -rf $RPM_BUILD_ROOT
+
+sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
 
 make install DESTDIR=$RPM_BUILD_ROOT
 
@@ -543,6 +603,11 @@ rm -Rf ${RPM_BUILD_ROOT}/%{_docdir}/%{name}
 for file in `ls $RPM_BUILD_ROOT/%{python2_sitelib}/*.egg-info 2> /dev/null`
 do
     echo %{python2_sitelib}/`basename $file` >> python2_sssdconfig.lang
+done
+
+for file in `ls $RPM_BUILD_ROOT/%{python3_sitelib}/*.egg-info 2> /dev/null`
+do
+    echo %{python3_sitelib}/`basename $file` >> python3_sssdconfig.lang
 done
 
 touch sssd_tools.lang
@@ -793,15 +858,31 @@ rm -rf $RPM_BUILD_ROOT
 %dir %{python2_sitelib}/SSSDConfig
 %{python2_sitelib}/SSSDConfig/*.py*
 
+%files -n python3-sssdconfig -f python3_sssdconfig.lang
+%defattr(-,root,root,-)
+%dir %{python3_sitelib}/SSSDConfig
+%{python3_sitelib}/SSSDConfig/*.py*
+%{python3_sitelib}/SSSDConfig/__pycache__/*.py*
+
 %files -n python-sss
 %defattr(-,root,root,-)
 %{python2_sitearch}/pysss.so
 %{python2_sitearch}/_py2sss.so
 
+%files -n python3-sss
+%defattr(-,root,root,-)
+%{python3_sitearch}/pysss.so
+%{python3_sitearch}/_py3sss.so
+
 %files -n python-sss-murmur
 %defattr(-,root,root,-)
 %{python2_sitearch}/pysss_murmur.so
 %{python2_sitearch}/_py2sss_murmur.so
+
+%files -n python3-sss-murmur
+%defattr(-,root,root,-)
+%{python3_sitearch}/pysss_murmur.so
+%{python3_sitearch}/_py3sss_murmur.so
 
 %files -n libsss_idmap
 %defattr(-,root,root,-)
@@ -844,10 +925,20 @@ rm -rf $RPM_BUILD_ROOT
 %{python2_sitearch}/pysss_nss_idmap.so
 %{python2_sitearch}/_py2sss_nss_idmap.so
 
+%files -n python3-libsss_nss_idmap
+%defattr(-,root,root,-)
+%{python3_sitearch}/pysss_nss_idmap.so
+%{python3_sitearch}/_py3sss_nss_idmap.so
+
 %files -n libipa_hbac-python
 %defattr(-,root,root,-)
 %{python2_sitearch}/pyhbac.so
 %{python2_sitearch}/_py2hbac.so
+
+%files -n python3-libipa_hbac
+%defattr(-,root,root,-)
+%{python3_sitearch}/pyhbac.so
+%{python3_sitearch}/_py3hbac.so
 
 %files libwbclient
 %defattr(-,root,root,-)
@@ -933,6 +1024,11 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Wed Feb 25 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.4-2
+- Add support for python3 bindings
+- Add requirement to python3 or python3 bindings
+- Resolves: rhbz#1014594 - sssd: Support Python 3
+
 * Wed Feb 18 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.4-1
 - New upstream release 1.12.4
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.12.4
