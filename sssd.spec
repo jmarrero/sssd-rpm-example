@@ -196,6 +196,9 @@ Summary: Userspace tools for use with the SSSD
 Group: Applications/System
 License: GPLv3+
 Requires: sssd-common = %{version}-%{release}
+# required by sss_obfuscate
+Requires: python-sss = %{version}-%{release}
+Requires: python-sssdconfig = %{version}-%{release}
 
 %description tools
 Provides userspace tools for manipulating users, groups, and nested groups in
@@ -214,6 +217,28 @@ BuildArch: noarch
 
 %description -n python-sssdconfig
 Provides python files for manipulation SSSD and IPA configuration files.
+
+%package -n python-sss
+Summary: Python bindings for sssd
+Group: Development/Libraries
+License: LGPLv3+
+Requires: sssd-common = %{version}-%{release}
+
+%description -n python-sss
+Provides python module for manipulating users, groups, and nested groups in
+SSSD when using id_provider = local in /etc/sssd/sssd.conf.
+
+Also provides several other useful python bindings:
+    * function for retrieving list of groups user belongs to.
+    * class for obfuscation of passwords
+
+%package -n python-sss-murmur
+Summary: Python bindings for murmur hash function
+Group: Development/Libraries
+License: LGPLv3+
+
+%description -n python-sss-murmur
+Provides python module for calculating the murmur hash version 3
 
 %package ldap
 Summary: The LDAP back end of the SSSD
@@ -653,8 +678,6 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man5/sss_rpcidmapd.5*
 %{_mandir}/man8/sssd.8*
 %{_mandir}/man8/sss_cache.8*
-%{python_sitearch}/pysss.so
-%{python_sitearch}/pysss_murmur.so
 
 %files ldap -f sssd_ldap.lang
 %defattr(-,root,root,-)
@@ -769,6 +792,14 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %dir %{python_sitelib}/SSSDConfig
 %{python_sitelib}/SSSDConfig/*.py*
+
+%files -n python-sss
+%defattr(-,root,root,-)
+%{python_sitearch}/pysss.so
+
+%files -n python-sss-murmur
+%defattr(-,root,root,-)
+%{python_sitearch}/pysss_murmur.so
 
 %files -n libsss_idmap
 %defattr(-,root,root,-)
