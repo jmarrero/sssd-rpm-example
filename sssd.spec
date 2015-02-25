@@ -36,6 +36,21 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-BUILD-Remove-unused-libraries-for-pysss.so.patch
+Patch0002: 0002-BUILD-Remove-unused-variables.patch
+Patch0003: 0003-BUILD-Remove-detection-of-type-Py_ssize_t.patch
+Patch0004: 0004-UTIL-Remove-python-wrapper-sss_python_set_new.patch
+Patch0005: 0005-UTIL-Remove-python-wrapper-sss_python_set_add.patch
+Patch0006: 0006-UTIL-Remove-python-wrapper-sss_python_set_check.patch
+Patch0007: 0007-UTIL-Remove-compatibility-macro-PyModule_AddIntMacro.patch
+Patch0008: 0008-UTIL-Remove-python-wrapper-sss_python_unicode_from_s.patch
+Patch0009: 0009-BUILD-Use-python-config-for-detection-FLAGS.patch
+Patch0010: 0010-SPEC-Use-new-convention-for-python-packages.patch
+Patch0011: 0011-SPEC-Move-python-bindings-to-separate-packages.patch
+Patch0012: 0012-BUILD-Add-possibility-to-build-python-2-3-bindings.patch
+Patch0013: 0013-TESTS-Run-python-tests-with-all-supported-python-ver.patch
+Patch0014: 0014-SPEC-Replace-python_-macros-with-python2_.patch
+Patch0015: 0015-SPEC-Build-python3-bindings-on-available-platforms.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
