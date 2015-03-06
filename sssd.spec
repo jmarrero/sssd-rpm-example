@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.4
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -81,8 +81,7 @@ BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
 BuildRequires: libtdb-devel
 
-# LDB needs a strict version match to build
-BuildRequires: libldb-devel = %{ldb_version}
+BuildRequires: libldb-devel >= %{ldb_version}
 BuildRequires: libdhash-devel >= 0.4.2
 BuildRequires: libcollection-devel
 BuildRequires: libini_config-devel >= 1.1
@@ -1024,6 +1023,9 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Fri Mar  6 2015 Jakub Hrozek <jhrozek@redhat.com> - 1.12.4-3
+- Relax libldb BuildRequires to be greater-or-equal
+
 * Wed Feb 25 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.4-2
 - Add support for python3 bindings
 - Add requirement to python3 or python3 bindings
