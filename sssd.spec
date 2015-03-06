@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.4
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -151,10 +151,7 @@ Conflicts: selinux-policy < 3.10.0-46
 Conflicts: sssd < 1.10.0-8%{?dist}.beta2
 # Requires
 
-# LDB needs a strict version match to run
-# This protects against
-# "sssd[XXX]: ldb: module version mismatch in src/ldb_modules/memberof.c"
-Requires: libldb%{?_isa} = %{ldb_version}
+Requires: libldb%{?_isa} >= %{ldb_version}
 
 Requires: libtdb%{?_isa} >= 1.1.3
 Requires: sssd-client%{?_isa} = %{version}-%{release}
@@ -548,7 +545,6 @@ autoreconf -ivf
     --with-initscript=systemd \
     --with-syslog=journald \
     %{?with_cifs_utils_plugin_option} \
-    --enable-ldb-version-check \
     --enable-sss-default-nss-plugin
 
 make %{?_smp_mflags} all docs
@@ -1023,6 +1019,10 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Fri Mar  6 2015 Jakub Hrozek <jhrozek@redhat.com> - 1.12.4-4
+- Also relax libldb Requires
+- Remove --enable-ldb-version-check
+
 * Fri Mar  6 2015 Jakub Hrozek <jhrozek@redhat.com> - 1.12.4-3
 - Relax libldb BuildRequires to be greater-or-equal
 
