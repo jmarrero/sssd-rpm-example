@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.4
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -51,6 +51,8 @@ Patch0012: 0012-BUILD-Add-possibility-to-build-python-2-3-bindings.patch
 Patch0013: 0013-TESTS-Run-python-tests-with-all-supported-python-ver.patch
 Patch0014: 0014-SPEC-Replace-python_-macros-with-python2_.patch
 Patch0015: 0015-SPEC-Build-python3-bindings-on-available-platforms.patch
+Patch0016: 0016-selinux-Delete-existing-user-mapping-on-empty-defaul.patch
+Patch0017: 0017-selinux-Handle-setup-with-empty-default-and-no-confi.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -1019,6 +1021,11 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Mon Mar 23 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.4-5
+- Fix regressions with ipa and SELinux
+- Resolves: upstream #2587 - With empty ipaselinuxusermapdefault security
+                             context on client is staff_u
+
 * Fri Mar  6 2015 Jakub Hrozek <jhrozek@redhat.com> - 1.12.4-4
 - Also relax libldb Requires
 - Remove --enable-ldb-version-check
