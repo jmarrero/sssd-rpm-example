@@ -572,10 +572,6 @@ make install DESTDIR=$RPM_BUILD_ROOT
 # Prepare language files
 /usr/lib/rpm/find-lang.sh $RPM_BUILD_ROOT sssd
 
-# Prepare empty config file
-mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/sssd
-touch $RPM_BUILD_ROOT/%{_sysconfdir}/sssd/sssd.conf
-
 # Copy default logrotate file
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/logrotate.d
 install -m644 src/examples/logrotate $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/sssd
@@ -583,11 +579,6 @@ install -m644 src/examples/logrotate $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/s
 # Make sure SSSD is able to run on read-only root
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/rwtab.d
 install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
-
-# Replace sysv init script with systemd unit file
-rm -f $RPM_BUILD_ROOT/%{_initrddir}/%{name}
-mkdir -p $RPM_BUILD_ROOT/%{_unitdir}/
-cp src/sysv/systemd/sssd.service $RPM_BUILD_ROOT/%{_unitdir}/
 
 # Remove .la files created by libtool
 find $RPM_BUILD_ROOT -name "*.la" -exec rm -f {} \;
@@ -954,7 +945,7 @@ if [ $1 -ge 1 ] ; then
 fi
 
 %preun common
-if [ $1 -eq 0 ]; then
+if [ $1 -eq 0 ] ; then
     # Package removal, not upgrade
     /bin/systemctl --no-reload disable sssd.service > /dev/null 2>&1 || :
     /bin/systemctl stop sssd.service > /dev/null 2>&1 || :
@@ -973,7 +964,7 @@ fi
 /usr/sbin/alternatives --install /etc/cifs-utils/idmap-plugin cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so 20
 
 %preun client
-if [ $1 -eq 0 ]; then
+if [ $1 -eq 0 ] ; then
         /usr/sbin/alternatives --remove cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so
 fi
 %else
