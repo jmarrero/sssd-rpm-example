@@ -53,6 +53,9 @@ Patch0014: 0014-SPEC-Replace-python_-macros-with-python2_.patch
 Patch0015: 0015-SPEC-Build-python3-bindings-on-available-platforms.patch
 Patch0016: 0016-selinux-Delete-existing-user-mapping-on-empty-defaul.patch
 Patch0017: 0017-selinux-Handle-setup-with-empty-default-and-no-confi.patch
+Patch0018: 0018-selinux-Disconnect-before-closing-the-handle.patch
+Patch0019: 0019-selinux-Begin-and-end-the-transaction-on-the-same-ne.patch
+Patch0020: 0020-selinux-Only-call-semanage-if-the-context-actually-c.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -1012,6 +1015,11 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Wed Apr 15 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.4-6
+- Fix slow login with ipa and SELinux
+- Resolves: upstream #2624 - Only set the selinux context if the context
+                             differs from the local one
+
 * Mon Mar 23 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.4-5
 - Fix regressions with ipa and SELinux
 - Resolves: upstream #2587 - With empty ipaselinuxusermapdefault security
