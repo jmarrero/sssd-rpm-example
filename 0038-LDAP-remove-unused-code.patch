@@ -1,0 +1,39 @@
+From f5c1ef14c603dda7ca3e5d9fe8c4cf54d72e97f2 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Fri, 20 Mar 2015 05:23:49 -0400
+Subject: [PATCH 38/99] LDAP: remove unused code
+
+Also fix debug message.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit ef9ca5848ea08aafa0827f5d2922d49130ba324d)
+---
+ src/providers/ldap/sdap_async_groups.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/src/providers/ldap/sdap_async_groups.c b/src/providers/ldap/sdap_async_groups.c
+index 818f30b95d4a4707c32d16b9866b008d89141e4d..7779d499de87e2f0657512cb1f8e1980f9bf1f71 100644
+--- a/src/providers/ldap/sdap_async_groups.c
++++ b/src/providers/ldap/sdap_async_groups.c
+@@ -2013,17 +2013,13 @@ static void sdap_get_groups_process(struct tevent_req *subreq)
+                                          state->count);
+         if (ret == EOK) {
+             DEBUG(SSSDBG_TRACE_LIBS,
+-                  "Reading only group data without members successful.\n");
++                  "Writing only group data without members was successful.\n");
+             tevent_req_done(req);
+         } else {
+             DEBUG(SSSDBG_OP_FAILURE, "sdap_add_incomplete_groups failed.\n");
+             tevent_req_error(req, ret);
+         }
+         return;
+-
+-        ret = sdap_save_groups(state, state->sysdb, state->dom, state->opts,
+-                               state->groups, state->count, false,
+-                               NULL, true, NULL);
+     }
+ 
+     /* Check whether we need to do nested searches
+-- 
+2.4.0
+

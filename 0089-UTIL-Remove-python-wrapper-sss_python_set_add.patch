@@ -1,0 +1,93 @@
+From 3ef450d7bce2c6af6f3ea06de5bae5bc7fe7e81a Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 9 Feb 2015 19:23:44 +0100
+Subject: [PATCH 89/99] UTIL: Remove python wrapper sss_python_set_add
+
+The function PySet_Add is available in python >= 2.6
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ src/external/python.m4 |  2 +-
+ src/python/pyhbac.c    |  4 ++--
+ src/util/sss_python.c  | 17 -----------------
+ src/util/sss_python.h  |  1 -
+ 4 files changed, 3 insertions(+), 21 deletions(-)
+
+diff --git a/src/external/python.m4 b/src/external/python.m4
+index 440d2f97740e43c31c9a530daecb7c5ded92a0dd..e3812a50406e7f6e2b2f143f3022ee07431ac120 100644
+--- a/src/external/python.m4
++++ b/src/external/python.m4
+@@ -62,7 +62,7 @@ AC_DEFUN([AM_CHECK_PYTHON_COMPAT],
+     CPPFLAGS="$CPPFLAGS $PYTHON_INCLUDES"
+     LIBS="$LIBS $PYTHON_LIBS"
+ 
+-    AC_CHECK_FUNCS([PySet_Add PyErr_NewExceptionWithDoc])
++    AC_CHECK_FUNCS([PyErr_NewExceptionWithDoc])
+     AC_CHECK_DECLS([PySet_Check, PyModule_AddIntMacro, PyUnicode_FromString], [], [], [[#include <Python.h>]])
+ 
+     CPPFLAGS="$save_CPPFLAGS"
+diff --git a/src/python/pyhbac.c b/src/python/pyhbac.c
+index 58d906d138464c9f25e6b513ad41b985b510baa2..11cd40656bbeaf93c2b1717483e716ba45a78a69 100644
+--- a/src/python/pyhbac.c
++++ b/src/python/pyhbac.c
+@@ -388,7 +388,7 @@ HbacRuleElement_init(HbacRuleElement *self, PyObject *args, PyObject *kwargs)
+             return -1;
+         }
+ 
+-        if (sss_python_set_add(self->category, tmp) != 0) {
++        if (PySet_Add(self->category, tmp) != 0) {
+             Py_DECREF(tmp);
+             return -1;
+         }
+@@ -962,7 +962,7 @@ py_hbac_rule_validate(HbacRuleObject *self, PyObject *args)
+             goto fail;
+         }
+ 
+-        if (sss_python_set_add(py_missing, py_attr) != 0) {
++        if (PySet_Add(py_missing, py_attr) != 0) {
+             /* If the set-add succeeded, it would steal the reference */
+             Py_DECREF(py_attr);
+             goto fail;
+diff --git a/src/util/sss_python.c b/src/util/sss_python.c
+index dad2a46d86f4243fb4a2d1fad94e49f66db23f0c..56850782a64314db70286ef67d76ae1227d8625f 100644
+--- a/src/util/sss_python.c
++++ b/src/util/sss_python.c
+@@ -21,23 +21,6 @@
+ #include "src/util/sss_python.h"
+ #include "config.h"
+ 
+-int
+-sss_python_set_add(PyObject *set, PyObject *key)
+-{
+-#ifdef HAVE_PYSET_ADD
+-    return PySet_Add(set, key);
+-#else
+-    PyObject *pyret;
+-    int ret;
+-
+-    pyret = PyObject_CallMethod(set, sss_py_const_p(char, "add"),
+-                                sss_py_const_p(char, "O"), key);
+-    ret = (pyret == NULL) ? -1 : 0;
+-    Py_XDECREF(pyret);
+-    return ret;
+-#endif
+-}
+-
+ bool
+ sss_python_set_check(PyObject *set)
+ {
+diff --git a/src/util/sss_python.h b/src/util/sss_python.h
+index 6851a64e816ccf3bb84321bbeb9946ad2fbfbc41..1ff13c4ef4380ff791cf3cfbe12845fb26b3b873 100644
+--- a/src/util/sss_python.h
++++ b/src/util/sss_python.h
+@@ -26,7 +26,6 @@
+ #endif
+ 
+ /* Wrappers providing the subset of C API for python's set objects we use */
+-int sss_python_set_add(PyObject *set, PyObject *key);
+ bool sss_python_set_check(PyObject *set);
+ 
+ /* Unicode compatibility */
+-- 
+2.4.0
+

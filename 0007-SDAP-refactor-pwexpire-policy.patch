@@ -1,0 +1,204 @@
+From 8b353dd2b90b7ab222acdea726ab7e8681752237 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Mon, 16 Feb 2015 18:56:25 -0500
+Subject: [PATCH 07/99] SDAP: refactor pwexpire policy
+
+Move part of pwexpire policy code to a separate function.
+
+Relates to:
+https://fedorahosted.org/sssd/ticket/2167
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit cdaa29d2c5724a4c72bfa0f42284ccfac3d5a464)
+---
+ Makefile.am                    |  1 +
+ src/providers/ldap/ldap_auth.c | 76 ++++++++++++++++++++++++------------------
+ src/providers/ldap/ldap_auth.h | 46 +++++++++++++++++++++++++
+ 3 files changed, 91 insertions(+), 32 deletions(-)
+ create mode 100644 src/providers/ldap/ldap_auth.h
+
+diff --git a/Makefile.am b/Makefile.am
+index 254930387aa9dda981c1539616e2912447c2b1d6..9fe60d656403e09595ced5f623f381afbd3b2a43 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -563,6 +563,7 @@ dist_noinst_HEADERS = \
+     src/providers/ldap/sdap_autofs.h \
+     src/providers/ldap/sdap_id_op.h \
+     src/providers/ldap/ldap_opts.h \
++    src/providers/ldap/ldap_auth.h \
+     src/providers/ldap/sdap_range.h \
+     src/providers/ldap/sdap_users.h \
+     src/providers/ldap/sdap_dyndns.h \
+diff --git a/src/providers/ldap/ldap_auth.c b/src/providers/ldap/ldap_auth.c
+index 5a40c1359f138c42eb915e873fe21a50ab038e81..4035aaf58c23291eb8115ef320758ba7666ed4e2 100644
+--- a/src/providers/ldap/ldap_auth.c
++++ b/src/providers/ldap/ldap_auth.c
+@@ -46,16 +46,10 @@
+ #include "providers/ldap/ldap_common.h"
+ #include "providers/ldap/sdap_async.h"
+ #include "providers/ldap/sdap_async_private.h"
++#include "providers/ldap/ldap_auth.h"
+ 
+ #define LDAP_PWEXPIRE_WARNING_TIME 0
+ 
+-enum pwexpire {
+-    PWEXPIRE_NONE = 0,
+-    PWEXPIRE_LDAP_PASSWORD_POLICY,
+-    PWEXPIRE_KERBEROS,
+-    PWEXPIRE_SHADOW
+-};
+-
+ static errno_t add_expired_warning(struct pam_data *pd, long exp_time)
+ {
+     int ret;
+@@ -248,10 +242,41 @@ done:
+     return ret;
+ }
+ 
+-static errno_t find_password_expiration_attributes(TALLOC_CTX *mem_ctx,
+-                                               const struct ldb_message *msg,
+-                                               struct dp_option *opts,
+-                                               enum pwexpire *type, void **data)
++errno_t check_pwexpire_policy(enum pwexpire pw_expire_type,
++                              void *pw_expire_data,
++                              struct pam_data *pd,
++                              int pwd_expiration_warning)
++{
++    errno_t ret;
++
++    switch (pw_expire_type) {
++    case PWEXPIRE_SHADOW:
++        ret = check_pwexpire_shadow(pw_expire_data, time(NULL), pd);
++        break;
++    case PWEXPIRE_KERBEROS:
++        ret = check_pwexpire_kerberos(pw_expire_data, time(NULL), pd,
++                                      pwd_expiration_warning);
++        break;
++    case PWEXPIRE_LDAP_PASSWORD_POLICY:
++        ret = check_pwexpire_ldap(pd, pw_expire_data,
++                                  pwd_expiration_warning);
++        break;
++    case PWEXPIRE_NONE:
++        ret = EOK;
++        break;
++    default:
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unknown password expiration type.\n");
++        ret = EINVAL;
++    }
++
++    return ret;
++}
++
++static errno_t
++find_password_expiration_attributes(TALLOC_CTX *mem_ctx,
++                                    const struct ldb_message *msg,
++                                    struct dp_option *opts,
++                                    enum pwexpire *type, void **data)
+ {
+     const char *mark;
+     const char *val;
+@@ -492,7 +517,7 @@ static int get_user_dn_recv(TALLOC_CTX *mem_ctx, struct tevent_req *req,
+     return EOK;
+ }
+ 
+-static int get_user_dn(TALLOC_CTX *memctx,
++int get_user_dn(TALLOC_CTX *memctx,
+                        struct sss_domain_info *domain,
+                        struct sdap_options *opts,
+                        const char *username,
+@@ -998,7 +1023,7 @@ static void sdap_auth4chpass_done(struct tevent_req *req)
+         case PWEXPIRE_NONE:
+             break;
+         default:
+-            DEBUG(SSSDBG_CRIT_FAILURE, "Unknow pasword expiration type.\n");
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unknown password expiration type.\n");
+                 state->pd->pam_status = PAM_SYSTEM_ERR;
+                 goto done;
+         }
+@@ -1247,25 +1272,12 @@ static void sdap_pam_auth_done(struct tevent_req *req)
+     talloc_zfree(req);
+ 
+     if (ret == EOK) {
+-        switch (pw_expire_type) {
+-        case PWEXPIRE_SHADOW:
+-            ret = check_pwexpire_shadow(pw_expire_data, time(NULL), state->pd);
+-            break;
+-        case PWEXPIRE_KERBEROS:
+-            ret = check_pwexpire_kerberos(pw_expire_data, time(NULL),
+-                                          state->pd,
+-                                          be_ctx->domain->pwd_expiration_warning);
+-            break;
+-        case PWEXPIRE_LDAP_PASSWORD_POLICY:
+-            ret = check_pwexpire_ldap(state->pd, pw_expire_data,
+-                                      be_ctx->domain->pwd_expiration_warning);
+-            break;
+-        case PWEXPIRE_NONE:
+-            break;
+-        default:
+-            DEBUG(SSSDBG_CRIT_FAILURE, "Unknow pasword expiration type.\n");
+-                state->pd->pam_status = PAM_SYSTEM_ERR;
+-                goto done;
++        ret = check_pwexpire_policy(pw_expire_type, pw_expire_data, state->pd,
++                                    be_ctx->domain->pwd_expiration_warning);
++        if (ret == EINVAL) {
++            /* Unknown password expiration type. */
++            state->pd->pam_status = PAM_SYSTEM_ERR;
++            goto done;
+         }
+     }
+ 
+diff --git a/src/providers/ldap/ldap_auth.h b/src/providers/ldap/ldap_auth.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..5fbddd7087dc65ab8bd1df5fb57492d2fc26d0bb
+--- /dev/null
++++ b/src/providers/ldap/ldap_auth.h
+@@ -0,0 +1,46 @@
++/*
++    SSSD
++
++    Copyright (C) Pavel Reichl <preichl@redhat.com> 2015
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef _LDAP_AUTH_H_
++#define _LDAP_AUTH_H_
++
++#include "config.h"
++
++enum pwexpire {
++    PWEXPIRE_NONE = 0,
++    PWEXPIRE_LDAP_PASSWORD_POLICY,
++    PWEXPIRE_KERBEROS,
++    PWEXPIRE_SHADOW
++};
++
++int get_user_dn(TALLOC_CTX *memctx,
++                struct sss_domain_info *domain,
++                struct sdap_options *opts,
++                const char *username,
++                char **user_dn,
++                enum pwexpire *user_pw_expire_type,
++                void **user_pw_expire_data);
++
++errno_t check_pwexpire_policy(enum pwexpire pw_expire_type,
++                              void *pw_expire_data,
++                              struct pam_data *pd,
++                              errno_t checkb);
++
++
++#endif /* _LDAP_AUTH_H_ */
+-- 
+2.4.0
+

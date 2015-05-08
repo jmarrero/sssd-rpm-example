@@ -1,0 +1,57 @@
+From 9d68909e27641410dced44865aff0a11f77597ef Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 3 Mar 2015 11:39:39 +0100
+Subject: [PATCH 05/99] resolv: Use the same default timeout for SRV queries as
+ previously
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When we changed the resolver code to use the TTL values from the DNS
+queries instead of harcoded ones, we changed the default value by
+accident.
+
+Add a separate SRV TTL that is backwards-compatible with the old
+harcoded value.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit eafbc66c2ff6365478e62a8df3fd005bf80e5c7b)
+---
+ src/resolv/async_resolv.c | 4 +++-
+ src/resolv/async_resolv.h | 4 ++++
+ 2 files changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/resolv/async_resolv.c b/src/resolv/async_resolv.c
+index 85c4d99a4ef3c5071353f176c78caba115286fe4..80e4922c576ce52ab895d62c822706e9e46024a0 100644
+--- a/src/resolv/async_resolv.c
++++ b/src/resolv/async_resolv.c
+@@ -1776,8 +1776,10 @@ resolv_getsrv_done(void *arg, int status, int timeouts, unsigned char *abuf, int
+     state->reply_list = reply_list;
+     ok = resolv_get_ttl(abuf, alen, &state->ttl);
+     if (ok == false) {
+-        state->ttl = RESOLV_DEFAULT_TTL;
++        DEBUG(SSSDBG_MINOR_FAILURE, "Could not read TTL, using the default..\n");
++        state->ttl = RESOLV_DEFAULT_SRV_TTL;
+     }
++    DEBUG(SSSDBG_TRACE_LIBS, "Using TTL [%"PRIu32"]\n", state->ttl);
+ 
+     tevent_req_done(req);
+     return;
+diff --git a/src/resolv/async_resolv.h b/src/resolv/async_resolv.h
+index 9b08f12ae159d377b50b9ddfe9f71397a461635d..14cbdc5023705b164ccb775991b7790accc1f2cc 100644
+--- a/src/resolv/async_resolv.h
++++ b/src/resolv/async_resolv.h
+@@ -42,6 +42,10 @@
+ #define RESOLV_DEFAULT_TTL 7200
+ #endif  /* RESOLV_DEFAULT_TTL */
+ 
++#ifndef RESOLV_DEFAULT_SRV_TTL
++#define RESOLV_DEFAULT_SRV_TTL 14400
++#endif  /* RESOLV_DEFAULT_SRV_TTL */
++
+ #include "util/util.h"
+ 
+ /*
+-- 
+2.4.0
+

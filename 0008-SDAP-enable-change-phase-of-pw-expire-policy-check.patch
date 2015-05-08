@@ -1,0 +1,258 @@
+From d3f82e944dc5dab3812700a245deec4aa3245b21 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Wed, 18 Feb 2015 01:03:40 -0500
+Subject: [PATCH 08/99] SDAP: enable change phase of pw expire policy check
+
+Implement new option which does checking password expiration policy
+in accounting phase.
+
+This allows SSSD to issue shadow expiration warning even if alternate
+authentication method is used.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2167
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit c9b0071bfcb8eb8c71e40248de46d23aceecc0f3)
+---
+ src/man/sssd-ldap.5.xml          | 27 +++++++++++++++++
+ src/providers/ldap/ldap_access.c | 12 ++++++++
+ src/providers/ldap/ldap_auth.c   |  1 +
+ src/providers/ldap/ldap_init.c   |  9 ++++++
+ src/providers/ldap/sdap_access.c | 62 +++++++++++++++++++++++++++++++++++++++-
+ src/providers/ldap/sdap_access.h |  6 ++++
+ src/util/util_errors.h           |  3 ++
+ 7 files changed, 119 insertions(+), 1 deletion(-)
+
+diff --git a/src/man/sssd-ldap.5.xml b/src/man/sssd-ldap.5.xml
+index 5b36f69a679a1362290d8fea1f4c8fc29cc548d8..9fbc47487f3513a84e14b70ad85e32d08d1b9c6f 100644
+--- a/src/man/sssd-ldap.5.xml
++++ b/src/man/sssd-ldap.5.xml
+@@ -1959,6 +1959,33 @@ ldap_access_filter = (employeeType=admin)
+                             ldap_account_expire_policy
+                         </para>
+                         <para>
++                            <emphasis>pwd_expire_policy_reject,
++                                      pwd_expire_policy_warn,
++                                      pwd_expire_policy_renew:
++                            </emphasis>
++                            These options are useful if users are interested
++                            in being warned that password is about to expire
++                            and authentication is based on using a different
++                            method than passwords - for example SSH keys.
++                       </para>
++                       <para>
++                            The difference between these options is the action
++                            taken if user password is expired:
++                            pwd_expire_policy_reject - user is denied to log in,
++                            pwd_expire_policy_warn - user is still able to log in,
++                            pwd_expire_policy_renew - user is prompted to change
++                            his password immediately.
++                        </para>
++                        <para>
++                            Note If user password is expired no explicit message
++                            is prompted by SSSD.
++                        </para>
++                        <para>
++                            Please note that 'access_provider = ldap' must
++                            be set for this feature to work. Also 'ldap_pwd_policy'
++                            must be set to an appropriate password policy.
++                        </para>
++                        <para>
+                             <emphasis>authorized_service</emphasis>: use
+                             the authorizedService attribute to determine
+                             access
+diff --git a/src/providers/ldap/ldap_access.c b/src/providers/ldap/ldap_access.c
+index 1913cd9a92342cc985d5c098f224c4fe8c58d465..7ebdb20c06c5bb5f588071761c201ad566944d7e 100644
+--- a/src/providers/ldap/ldap_access.c
++++ b/src/providers/ldap/ldap_access.c
+@@ -96,6 +96,18 @@ static void sdap_access_done(struct tevent_req *req)
+     case ERR_ACCOUNT_EXPIRED:
+         pam_status = PAM_ACCT_EXPIRED;
+         break;
++    case ERR_PASSWORD_EXPIRED:
++        pam_status = PAM_PERM_DENIED;
++        break;
++    case ERR_PASSWORD_EXPIRED_REJECT:
++        pam_status = PAM_PERM_DENIED;
++        break;
++    case ERR_PASSWORD_EXPIRED_WARN:
++        pam_status = PAM_SUCCESS;
++        break;
++    case ERR_PASSWORD_EXPIRED_RENEW:
++        pam_status = PAM_NEW_AUTHTOK_REQD;
++        break;
+     default:
+         DEBUG(SSSDBG_CRIT_FAILURE, "Error retrieving access check result.\n");
+         pam_status = PAM_SYSTEM_ERR;
+diff --git a/src/providers/ldap/ldap_auth.c b/src/providers/ldap/ldap_auth.c
+index 4035aaf58c23291eb8115ef320758ba7666ed4e2..bdcc4505dc82cf3ca4bec9ce71ec6a9c28dd54e8 100644
+--- a/src/providers/ldap/ldap_auth.c
++++ b/src/providers/ldap/ldap_auth.c
+@@ -47,6 +47,7 @@
+ #include "providers/ldap/sdap_async.h"
+ #include "providers/ldap/sdap_async_private.h"
+ #include "providers/ldap/ldap_auth.h"
++#include "providers/ldap/sdap_access.h"
+ 
+ #define LDAP_PWEXPIRE_WARNING_TIME 0
+ 
+diff --git a/src/providers/ldap/ldap_init.c b/src/providers/ldap/ldap_init.c
+index 44333a9a3a45de16aaaf83fecaea4817cebc90d4..8d5619779d38c0df5ec4761b4409c71e8976686c 100644
+--- a/src/providers/ldap/ldap_init.c
++++ b/src/providers/ldap/ldap_init.c
+@@ -423,6 +423,15 @@ int sssm_ldap_access_init(struct be_ctx *bectx,
+             access_ctx->access_rule[c] = LDAP_ACCESS_HOST;
+         } else if (strcasecmp(order_list[c], LDAP_ACCESS_LOCK_NAME) == 0) {
+             access_ctx->access_rule[c] = LDAP_ACCESS_LOCKOUT;
++        } else if (strcasecmp(order_list[c],
++                              LDAP_ACCESS_EXPIRE_POLICY_REJECT_NAME) == 0) {
++            access_ctx->access_rule[c] = LDAP_ACCESS_EXPIRE_POLICY_REJECT;
++        } else if (strcasecmp(order_list[c],
++                              LDAP_ACCESS_EXPIRE_POLICY_WARN_NAME) == 0) {
++            access_ctx->access_rule[c] = LDAP_ACCESS_EXPIRE_POLICY_WARN;
++        } else if (strcasecmp(order_list[c],
++                              LDAP_ACCESS_EXPIRE_POLICY_RENEW_NAME) == 0) {
++            access_ctx->access_rule[c] = LDAP_ACCESS_EXPIRE_POLICY_RENEW;
+         } else {
+             DEBUG(SSSDBG_CRIT_FAILURE,
+                   "Unexpected access rule name [%s].\n", order_list[c]);
+diff --git a/src/providers/ldap/sdap_access.c b/src/providers/ldap/sdap_access.c
+index a6c882cae634f080b200fe75f51867e39192bcd9..dd2fb6b92bc83ee36fc396d26e3d0d7e78021d71 100644
+--- a/src/providers/ldap/sdap_access.c
++++ b/src/providers/ldap/sdap_access.c
+@@ -39,10 +39,16 @@
+ #include "providers/ldap/sdap_async.h"
+ #include "providers/data_provider.h"
+ #include "providers/dp_backend.h"
++#include "providers/ldap/ldap_auth.h"
+ 
+ #define PERMANENTLY_LOCKED_ACCOUNT "000001010000Z"
+ #define MALFORMED_FILTER "Malformed access control filter [%s]\n"
+ 
++static errno_t perform_pwexpire_policy(TALLOC_CTX *mem_ctx,
++                                       struct sss_domain_info *domain,
++                                       struct pam_data *pd,
++                                       struct sdap_options *opts);
++
+ static errno_t sdap_save_user_cache_bool(struct sss_domain_info *domain,
+                                          const char *username,
+                                          const char *attr_name,
+@@ -237,6 +243,30 @@ static errno_t sdap_access_check_next_rule(struct sdap_access_req_ctx *state,
+                                        state->pd, state->user_entry);
+             break;
+ 
++        case LDAP_ACCESS_EXPIRE_POLICY_REJECT:
++            ret = perform_pwexpire_policy(state, state->domain, state->pd,
++                                          state->access_ctx->id_ctx->opts);
++            if (ret == ERR_PASSWORD_EXPIRED) {
++                ret = ERR_PASSWORD_EXPIRED_REJECT;
++            }
++            break;
++
++        case LDAP_ACCESS_EXPIRE_POLICY_WARN:
++            ret = perform_pwexpire_policy(state, state->domain, state->pd,
++                                          state->access_ctx->id_ctx->opts);
++            if (ret == ERR_PASSWORD_EXPIRED) {
++                ret = ERR_PASSWORD_EXPIRED_WARN;
++            }
++            break;
++
++        case LDAP_ACCESS_EXPIRE_POLICY_RENEW:
++            ret = perform_pwexpire_policy(state, state->domain, state->pd,
++                                          state->access_ctx->id_ctx->opts);
++            if (ret == ERR_PASSWORD_EXPIRED) {
++                ret = ERR_PASSWORD_EXPIRED_RENEW;
++            }
++            break;
++
+         case LDAP_ACCESS_SERVICE:
+             ret = sdap_access_service( state->pd, state->user_entry);
+             break;
+@@ -651,7 +681,6 @@ static errno_t sdap_account_expired_nds(struct pam_data *pd,
+     return EOK;
+ }
+ 
+-
+ static errno_t sdap_account_expired(struct sdap_access_ctx *access_ctx,
+                                     struct pam_data *pd,
+                                     struct ldb_message *user_entry)
+@@ -702,6 +731,37 @@ static errno_t sdap_account_expired(struct sdap_access_ctx *access_ctx,
+     return ret;
+ }
+ 
++static errno_t perform_pwexpire_policy(TALLOC_CTX *mem_ctx,
++                                       struct sss_domain_info *domain,
++                                       struct pam_data *pd,
++                                       struct sdap_options *opts)
++{
++    enum pwexpire pw_expire_type;
++    void *pw_expire_data;
++    errno_t ret;
++    char *dn;
++
++    ret = get_user_dn(mem_ctx, domain, opts, pd->user, &dn, &pw_expire_type,
++                      &pw_expire_data);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE, "get_user_dn returned %d:[%s].\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = check_pwexpire_policy(pw_expire_type, pw_expire_data, pd,
++                                domain->pwd_expiration_warning);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "check_pwexpire_policy returned %d:[%s].\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++done:
++    return ret;
++}
++
+ struct sdap_access_filter_req_ctx {
+     const char *username;
+     const char *filter;
+diff --git a/src/providers/ldap/sdap_access.h b/src/providers/ldap/sdap_access.h
+index f085e619961198b887d65ed5ee0bc5cdd90d1b20..a8c6639109bd7e6dcb325a5e8d080f743ec56d97 100644
+--- a/src/providers/ldap/sdap_access.h
++++ b/src/providers/ldap/sdap_access.h
+@@ -39,6 +39,9 @@
+ 
+ #define LDAP_ACCESS_FILTER_NAME "filter"
+ #define LDAP_ACCESS_EXPIRE_NAME "expire"
++#define LDAP_ACCESS_EXPIRE_POLICY_REJECT_NAME "pwd_expire_policy_reject"
++#define LDAP_ACCESS_EXPIRE_POLICY_WARN_NAME "pwd_expire_policy_warn"
++#define LDAP_ACCESS_EXPIRE_POLICY_RENEW_NAME "pwd_expire_policy_renew"
+ #define LDAP_ACCESS_SERVICE_NAME "authorized_service"
+ #define LDAP_ACCESS_HOST_NAME "host"
+ #define LDAP_ACCESS_LOCK_NAME "lockout"
+@@ -57,6 +60,9 @@ enum ldap_access_rule {
+     LDAP_ACCESS_SERVICE,
+     LDAP_ACCESS_HOST,
+     LDAP_ACCESS_LOCKOUT,
++    LDAP_ACCESS_EXPIRE_POLICY_REJECT,
++    LDAP_ACCESS_EXPIRE_POLICY_WARN,
++    LDAP_ACCESS_EXPIRE_POLICY_RENEW,
+     LDAP_ACCESS_LAST
+ };
+ 
+diff --git a/src/util/util_errors.h b/src/util/util_errors.h
+index 39455dc8adfe8784bd3f06382d701b7f9e97f004..97e210e31dc6501860d1490966369a0d3ebe2cc2 100644
+--- a/src/util/util_errors.h
++++ b/src/util/util_errors.h
+@@ -64,6 +64,9 @@ enum sssd_errors {
+     ERR_NETWORK_IO,
+     ERR_ACCOUNT_EXPIRED,
+     ERR_PASSWORD_EXPIRED,
++    ERR_PASSWORD_EXPIRED_REJECT,
++    ERR_PASSWORD_EXPIRED_WARN,
++    ERR_PASSWORD_EXPIRED_RENEW,
+     ERR_ACCESS_DENIED,
+     ERR_SRV_NOT_FOUND,
+     ERR_SRV_LOOKUP_ERROR,
+-- 
+2.4.0
+

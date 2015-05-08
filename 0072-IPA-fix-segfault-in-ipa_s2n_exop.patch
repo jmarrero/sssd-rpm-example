@@ -1,0 +1,31 @@
+From e31d5babfd036cf64c9179dc60bbd79f541ef89b Mon Sep 17 00:00:00 2001
+From: Aron Parsons <parsonsa@bit-sys.com>
+Date: Wed, 29 Apr 2015 03:19:32 +0000
+Subject: [PATCH 72/99] IPA: fix segfault in ipa_s2n_exop
+
+can be triggered on demand by assigning a POSIX group
+with external members sudo privileges, then dropping
+the cache and doing a sudo -U <user> -l.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit c520f40d1a2d77cf1d413451b5682297733521ed)
+---
+ src/providers/ipa/ipa_s2n_exop.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index 688fdefe8eefe29a0cd13010bb3998527f3111f4..d07923cffb49bbfeb7d500f281b1a2aff547ed1c 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -2165,7 +2165,7 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+         goto done;
+     }
+ 
+-    if (strcmp(view_name, SYSDB_DEFAULT_VIEW_NAME) != 0) {
++    if (view_name != NULL && strcmp(view_name, SYSDB_DEFAULT_VIEW_NAME) != 0) {
+         /* For the default view the data return by the extdom plugin already
+          * contains all needed data and it is not expected to have a separate
+          * override object. */
+-- 
+2.4.0
+

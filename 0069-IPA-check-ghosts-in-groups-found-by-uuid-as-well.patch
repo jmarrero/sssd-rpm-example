@@ -1,0 +1,64 @@
+From 1b2119aab14a4ea3ca6de0d29a661b2825bfec8d Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Fri, 24 Apr 2015 17:07:22 +0200
+Subject: [PATCH 69/99] IPA: check ghosts in groups found by uuid as well
+
+With views and overrides groups are not allowed to have ghost members
+anymore because the name of a member might be overridden. To achieve
+this ghost members are looked up and resolved later during group
+lookups. Currently this is only done for group lookups by name but
+should happen as well if the group is looked up by uuid.
+
+Resolves https://fedorahosted.org/sssd/ticket/2631
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 605dc7fcc848dffb7c9d270c864c70e6dff1242e)
+---
+ src/providers/ipa/ipa_id.c | 21 ++++++++++++---------
+ 1 file changed, 12 insertions(+), 9 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_id.c b/src/providers/ipa/ipa_id.c
+index 384e39a31022b1ec47c3d1abf19e8630762a5da6..38ac4904dcd97c3e241b28143e1f7b8fade37d70 100644
+--- a/src/providers/ipa/ipa_id.c
++++ b/src/providers/ipa/ipa_id.c
+@@ -789,10 +789,21 @@ static void ipa_id_get_account_info_orig_done(struct tevent_req *subreq)
+         goto fail;
+     }
+ 
++    class = ldb_msg_find_attr_as_string(state->obj_msg, SYSDB_OBJECTCLASS,
++                                        NULL);
++    if (class == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot find an objectclass.\n");
++        ret = EINVAL;
++        goto fail;
++    }
++
++
+     if (state->ipa_ctx->view_name != NULL &&
+             strcmp(state->ipa_ctx->view_name, SYSDB_DEFAULT_VIEW_NAME) != 0) {
+ 
+-        if ((state->ar->entry_type & BE_REQ_TYPE_MASK) == BE_REQ_GROUP) {
++        if ((state->ar->entry_type & BE_REQ_TYPE_MASK) == BE_REQ_GROUP
++                || ((state->ar->entry_type & BE_REQ_TYPE_MASK) == BE_REQ_BY_UUID
++                        && strcmp(class, SYSDB_GROUP_CLASS) == 0)) {
+             /* check for ghost members because ghost members are not allowed
+              * if a view other than the default view is applied.*/
+             state->ghosts = ldb_msg_find_element(state->obj_msg, SYSDB_GHOST);
+@@ -840,14 +851,6 @@ static void ipa_id_get_account_info_orig_done(struct tevent_req *subreq)
+         tevent_req_set_callback(subreq, ipa_id_get_account_info_done, req);
+         return;
+     } else {
+-        class = ldb_msg_find_attr_as_string(state->obj_msg, SYSDB_OBJECTCLASS,
+-                                            NULL);
+-        if (class == NULL) {
+-            DEBUG(SSSDBG_CRIT_FAILURE, "Cannot find an objectclass.\n");
+-            ret = EINVAL;
+-            goto fail;
+-        }
+-
+         if (strcmp(class, SYSDB_USER_CLASS) == 0) {
+             type = SYSDB_MEMBER_USER;
+         } else {
+-- 
+2.4.0
+

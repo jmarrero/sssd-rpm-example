@@ -1,0 +1,118 @@
+From 9dd8510d5d95d8ff7170f29ef4d9c603b3573cfe Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 23 Mar 2015 21:09:53 +0100
+Subject: [PATCH 44/99] Resolv: re-read SRV query every time if its TTL is 0
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We should make sure the client re-checks the SRV query each request if
+the SRV query is 0.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit 9797aa5907191cef5db8279e20ec75fd0abbe980)
+---
+ src/providers/fail_over.c      |  2 +-
+ src/tests/cmocka/test_fo_srv.c | 31 ++++++++++++++++++++++++++-----
+ 2 files changed, 27 insertions(+), 6 deletions(-)
+
+diff --git a/src/providers/fail_over.c b/src/providers/fail_over.c
+index 8142081526d7902946e756ec05774c471126545e..6d835ae0efdfdf96532e8458e12238ba17910a4f 100644
+--- a/src/providers/fail_over.c
++++ b/src/providers/fail_over.c
+@@ -275,7 +275,7 @@ get_srv_data_status(struct srv_data *data)
+         timeout = data->ttl;
+     }
+ 
+-    if (timeout && STATUS_DIFF(data, tv) > timeout) {
++    if (STATUS_DIFF(data, tv) > timeout) {
+         switch(data->srv_lookup_status) {
+         case SRV_EXPIRED:
+         case SRV_NEUTRAL:
+diff --git a/src/tests/cmocka/test_fo_srv.c b/src/tests/cmocka/test_fo_srv.c
+index 7a6321006d8383ed901fe9d5df3fddc514c53550..e5c5e4fe3b818ca2df0ab7bcd1a83719fefba191 100644
+--- a/src/tests/cmocka/test_fo_srv.c
++++ b/src/tests/cmocka/test_fo_srv.c
+@@ -200,6 +200,7 @@ struct test_fo_srv_ctx {
+     struct fo_resolve_srv_dns_ctx *srv_ctx;
+     struct fo_service *fo_svc;
+     struct sss_test_ctx *ctx;
++    int ttl;
+ };
+ 
+ int test_fo_srv_data_cmp(void *ud1, void *ud2)
+@@ -431,15 +432,23 @@ static void test_fo_srv_done4(struct tevent_req *req)
+ /* Make sure that two queries more than TTL seconds apart resolve
+  * into two different lists
+  */
++static void test_fo_srv_ttl_change_step(struct test_fo_srv_ctx *test_ctx);
+ static void test_fo_srv_before(struct tevent_req *req);
+ static void test_fo_srv_after(struct tevent_req *req);
+ 
+ void test_fo_srv_ttl_change(void **state)
+ {
+-    errno_t ret;
+-    struct tevent_req *req;
+     struct test_fo_srv_ctx *test_ctx =
+         talloc_get_type(*state, struct test_fo_srv_ctx);
++
++    test_ctx->ttl = TEST_SRV_SHORT_TTL;
++    test_fo_srv_ttl_change_step(test_ctx);
++}
++
++static void test_fo_srv_ttl_change_step(struct test_fo_srv_ctx *test_ctx)
++{
++    errno_t ret;
++    struct tevent_req *req;
+     struct ares_srv_reply *s1;
+     struct ares_srv_reply *s2;
+     char *dns_domain;
+@@ -465,7 +474,7 @@ void test_fo_srv_ttl_change(void **state)
+     dns_domain = talloc_strdup(test_ctx, "sssd.com");
+     assert_non_null(dns_domain);
+ 
+-    mock_srv_results(s1, TEST_SRV_SHORT_TTL, dns_domain);
++    mock_srv_results(s1, test_ctx->ttl, dns_domain);
+ 
+     ret = fo_add_srv_server(test_ctx->fo_svc, "_ldap", "sssd.com",
+                             "sssd.local", "tcp", test_ctx);
+@@ -527,8 +536,8 @@ static void test_fo_srv_before(struct tevent_req *req)
+     dns_domain = talloc_strdup(test_ctx, "sssd.com");
+     assert_non_null(dns_domain);
+ 
+-    mock_srv_results(s1, TEST_SRV_SHORT_TTL, dns_domain);
+-    sleep(TEST_SRV_SHORT_TTL + 1);
++    mock_srv_results(s1, test_ctx->ttl, dns_domain);
++    sleep(test_ctx->ttl + 1);
+ 
+     req = fo_resolve_service_send(test_ctx, test_ctx->ctx->ev,
+                                   test_ctx->resolv, test_ctx->fo_ctx,
+@@ -555,6 +564,15 @@ static void test_fo_srv_after(struct tevent_req *req)
+     test_ctx->ctx->done = true;
+ }
+ 
++void test_fo_srv_ttl_zero(void **state)
++{
++    struct test_fo_srv_ctx *test_ctx =
++        talloc_get_type(*state, struct test_fo_srv_ctx);
++
++    test_ctx->ttl = 0;
++    test_fo_srv_ttl_change_step(test_ctx);
++}
++
+ int main(int argc, const char *argv[])
+ {
+     int rv;
+@@ -573,6 +591,9 @@ int main(int argc, const char *argv[])
+         cmocka_unit_test_setup_teardown(test_fo_srv_ttl_change,
+                                         test_fo_srv_setup,
+                                         test_fo_srv_teardown),
++        cmocka_unit_test_setup_teardown(test_fo_srv_ttl_zero,
++                                        test_fo_srv_setup,
++                                        test_fo_srv_teardown),
+     };
+ 
+     /* Set debug level to invalid value so we can deside if -d 0 was used. */
+-- 
+2.4.0
+

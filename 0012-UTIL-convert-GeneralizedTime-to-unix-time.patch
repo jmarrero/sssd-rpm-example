@@ -1,0 +1,244 @@
+From 3cace03ac7a2c4ff6d3469a3d3128c79a1882e43 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Tue, 20 Jan 2015 16:27:41 -0500
+Subject: [PATCH 12/99] UTIL: convert GeneralizedTime to unix time
+
+New utility function *sss_utc_to_time_t* to convert GeneralizedTime to
+unix time.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ Makefile.am            |  9 +++++---
+ src/tests/util-tests.c | 57 ++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/util/util.c        | 53 ++++++++++++++++++++++++++++++++++++++++++++++
+ src/util/util.h        |  3 +++
+ src/util/util_errors.c |  1 +
+ src/util/util_errors.h |  1 +
+ 6 files changed, 121 insertions(+), 3 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 9fe60d656403e09595ced5f623f381afbd3b2a43..210ef6ffe6ebc4772fc80bed25f2a31208c020f3 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1540,15 +1540,18 @@ simple_access_tests_LDADD = \
+     libsss_test_common.la
+ 
+ util_tests_SOURCES = \
+-    src/tests/util-tests.c
++    src/tests/util-tests.c \
++    $(NULL)
+ util_tests_CFLAGS = \
+     $(AM_CFLAGS) \
+-    $(CHECK_CFLAGS)
++    $(CHECK_CFLAGS) \
++    $(NULL)
+ util_tests_LDADD = \
+     $(SSSD_LIBS) \
+     $(CHECK_LIBS) \
+     $(SSSD_INTERNAL_LTLIBS) \
+-    libsss_test_common.la
++    libsss_test_common.la \
++    $(NULL)
+ 
+ safe_format_tests_SOURCES = \
+     src/tests/safe-format-tests.c
+diff --git a/src/tests/util-tests.c b/src/tests/util-tests.c
+index 08e8b8d263c46618a0cdfb2203684305fa6dddc6..21eb02f14a7225ae9b9de4aa7f958b73f84a066d 100644
+--- a/src/tests/util-tests.c
++++ b/src/tests/util-tests.c
+@@ -28,6 +28,8 @@
+ #include <sys/types.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
++#include <stdlib.h>
++
+ #include "util/util.h"
+ #include "util/sss_utf8.h"
+ #include "util/murmurhash3.h"
+@@ -1000,6 +1002,54 @@ START_TEST(test_known_service)
+ }
+ END_TEST
+ 
++static void convert_time_tz(const char* tz)
++{
++    errno_t ret, ret2;
++    time_t unix_time;
++    const char *orig_tz = NULL;
++
++    orig_tz = getenv("TZ");
++    if (orig_tz == NULL) {
++        orig_tz = "";
++    }
++
++    if (tz) {
++        ret = setenv("TZ", tz, 1);
++        fail_if(ret == -1);
++    }
++
++    ret = sss_utc_to_time_t("20140801115742Z", "%Y%m%d%H%M%SZ", &unix_time);
++
++    /* restore */
++    if (orig_tz != NULL) {
++        ret2 = setenv("TZ", orig_tz, 1);
++        fail_if(ret2 == -1);
++    }
++    fail_unless(ret == EOK && difftime(1406894262, unix_time) == 0);
++}
++
++START_TEST(test_convert_time)
++{
++    const char *format = "%Y%m%d%H%M%SZ";
++    time_t unix_time;
++    errno_t ret;
++
++    ret = sss_utc_to_time_t("20150127133540P", format, &unix_time);
++    fail_unless(ret == ERR_TIMESPEC_NOT_SUPPORTED);
++    ret = sss_utc_to_time_t("0Z", format, &unix_time);
++    fail_unless(ret == EINVAL);
++    ret = sss_utc_to_time_t("000001010000Z", format, &unix_time);
++    fail_unless(ret == EINVAL);
++
++    /* test that results are still same no matter what timezone is set */
++    convert_time_tz(NULL);
++
++    convert_time_tz("GST-1");
++
++    convert_time_tz("GST-2");
++}
++END_TEST
++
+ Suite *util_suite(void)
+ {
+     Suite *s = suite_create("util");
+@@ -1046,10 +1096,17 @@ Suite *util_suite(void)
+     tcase_add_test(tc_atomicio, test_atomicio_read_exact_sized_file);
+     tcase_add_test(tc_atomicio, test_atomicio_read_from_empty_file);
+ 
++    TCase *tc_convert_time = tcase_create("convert_time");
++    tcase_add_checked_fixture(tc_convert_time,
++                              ck_leak_check_setup,
++                              ck_leak_check_teardown);
++    tcase_add_test(tc_convert_time, test_convert_time);
++
+     suite_add_tcase (s, tc_util);
+     suite_add_tcase (s, tc_utf8);
+     suite_add_tcase (s, tc_mh3);
+     suite_add_tcase (s, tc_atomicio);
++    suite_add_tcase (s, tc_convert_time);
+ 
+     return s;
+ }
+diff --git a/src/util/util.c b/src/util/util.c
+index 2acb8604ac0c2bc7b83ee578c7bbead9a7fd44b3..c4d8bf91f89c34b21f272a9f722eabf551aba9be 100644
+--- a/src/util/util.c
++++ b/src/util/util.c
+@@ -18,6 +18,7 @@
+     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
++#include "config.h"
+ #include <ctype.h>
+ #include <netdb.h>
+ #include <poll.h>
+@@ -26,6 +27,7 @@
+ #include <arpa/inet.h>
+ #include <talloc.h>
+ #include <dhash.h>
++#include <time.h>
+ 
+ #include "util/util.h"
+ #include "util/sss_utf8.h"
+@@ -880,3 +882,54 @@ done:
+ 
+     return ret;
+ }
++
++/* Convert GeneralizedTime (http://en.wikipedia.org/wiki/GeneralizedTime)
++ * to unix time (seconds since epoch). Use UTC time zone.
++ */
++errno_t sss_utc_to_time_t(const char *str, const char *format, time_t *_unix_time)
++{
++    char *end;
++    struct tm tm;
++    size_t len;
++    time_t ut;
++
++    if (str == NULL) {
++        return EINVAL;
++    }
++
++    len = strlen(str);
++    if (str[len-1] != 'Z') {
++        DEBUG(SSSDBG_TRACE_INTERNAL,
++              "%s does not seem to be in UTZ time zone.\n", str);
++        return ERR_TIMESPEC_NOT_SUPPORTED;
++    }
++
++    memset(&tm, 0, sizeof(tm));
++
++    end = strptime(str, format, &tm);
++    /* not all characters from format were matched */
++    if (end == NULL) {
++        DEBUG(SSSDBG_TRACE_INTERNAL,
++              "String [%s] failed to match format [%s].\n", str, format);
++        return EINVAL;
++    }
++
++    /* str is 'longer' than format */
++    if (*end != '\0') {
++        DEBUG(SSSDBG_TRACE_INTERNAL,
++              "String [%s] is longer than format [%s].\n", str, format);
++        return EINVAL;
++    }
++
++    ut = mktime(&tm);
++    if (ut == -1) {
++        DEBUG(SSSDBG_TRACE_INTERNAL,
++              "mktime failed to convert [%s].\n", str);
++        return EINVAL;
++    }
++
++    tzset();
++    ut -= timezone;
++    *_unix_time = ut;
++    return EOK;
++}
+diff --git a/src/util/util.h b/src/util/util.h
+index bf3a9a057aed77e93949370f8651af2631d91432..22a67a55855282441379477236a323362c8bdb4d 100644
+--- a/src/util/util.h
++++ b/src/util/util.h
+@@ -636,4 +636,7 @@ int set_seuser(const char *login_name, const char *seuser_name,
+                const char *mlsrange);
+ int del_seuser(const char *login_name);
+ 
++/* convert time from generalized form to unix time */
++errno_t sss_utc_to_time_t(const char *str, const char *format, time_t *unix_time);
++
+ #endif /* __SSSD_UTIL_H__ */
+diff --git a/src/util/util_errors.c b/src/util/util_errors.c
+index 16d16fc777fc3344db8a3bdfeb3633bd5db48530..bfae5cd189902ed82ba8b7db29e85a309e4bd19c 100644
+--- a/src/util/util_errors.c
++++ b/src/util/util_errors.c
+@@ -65,6 +65,7 @@ struct err_string error_to_str[] = {
+     { "LDAP search returned a referral" }, /* ERR_REFERRAL */
+     { "Error setting SELinux user context" }, /* ERR_SELINUX_CONTEXT */
+     { "Username format not allowed by re_expression" }, /* ERR_REGEX_NOMATCH */
++    { "Time specification not supported" }, /* ERR_TIMESPEC_NOT_SUPPORTED */
+ };
+ 
+ 
+diff --git a/src/util/util_errors.h b/src/util/util_errors.h
+index 97e210e31dc6501860d1490966369a0d3ebe2cc2..069d4b78aa5ed6c756affdacab99c7141b7849e4 100644
+--- a/src/util/util_errors.h
++++ b/src/util/util_errors.h
+@@ -90,6 +90,7 @@ enum sssd_errors {
+     ERR_REFERRAL,
+     ERR_SELINUX_CONTEXT,
+     ERR_REGEX_NOMATCH,
++    ERR_TIMESPEC_NOT_SUPPORTED,
+     ERR_LAST            /* ALWAYS LAST */
+ };
+ 
+-- 
+2.4.0
+

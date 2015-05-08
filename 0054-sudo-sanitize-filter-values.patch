@@ -1,0 +1,61 @@
+From 2fb2a267d0d15cce84b0ccea7e088a4b580e42fb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 9 Apr 2015 13:03:08 +0200
+Subject: [PATCH 54/99] sudo: sanitize filter values
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2613
+
+Reviewed-by: Pavel Reichl <preichl@redhat.com>
+(cherry picked from commit c526cd124515cc2d44a413dcbfd4a74ddb490150)
+---
+ src/db/sysdb_sudo.c | 15 +++++++++++++--
+ 1 file changed, 13 insertions(+), 2 deletions(-)
+
+diff --git a/src/db/sysdb_sudo.c b/src/db/sysdb_sudo.c
+index 4c50d32c779732a5fb78f23f4344ba4ba0825e84..784ac8af3ae5cb08f30eb9631c7ffa4aa92bde23 100644
+--- a/src/db/sysdb_sudo.c
++++ b/src/db/sysdb_sudo.c
+@@ -221,6 +221,7 @@ sysdb_get_sudo_filter(TALLOC_CTX *mem_ctx, const char *username,
+     TALLOC_CTX *tmp_ctx = NULL;
+     char *filter = NULL;
+     char *specific_filter = NULL;
++    char *sanitized = NULL;
+     time_t now;
+     errno_t ret;
+     int i;
+@@ -246,9 +247,14 @@ sysdb_get_sudo_filter(TALLOC_CTX *mem_ctx, const char *username,
+     }
+ 
+     if ((flags & SYSDB_SUDO_FILTER_USERNAME) && (username != NULL)) {
++        ret = sss_filter_sanitize(tmp_ctx, username, &sanitized);
++        if (ret != EOK) {
++            goto done;
++        }
++
+         specific_filter = talloc_asprintf_append(specific_filter, "(%s=%s)",
+                                                  SYSDB_SUDO_CACHE_AT_USER,
+-                                                 username);
++                                                 sanitized);
+         NULL_CHECK(specific_filter, ret, done);
+     }
+ 
+@@ -261,9 +267,14 @@ sysdb_get_sudo_filter(TALLOC_CTX *mem_ctx, const char *username,
+ 
+     if ((flags & SYSDB_SUDO_FILTER_GROUPS) && (groupnames != NULL)) {
+         for (i=0; groupnames[i] != NULL; i++) {
++            ret = sss_filter_sanitize(tmp_ctx, groupnames[i], &sanitized);
++            if (ret != EOK) {
++                goto done;
++            }
++
+             specific_filter = talloc_asprintf_append(specific_filter, "(%s=%%%s)",
+                                                      SYSDB_SUDO_CACHE_AT_USER,
+-                                                     groupnames[i]);
++                                                     sanitized);
+             NULL_CHECK(specific_filter, ret, done);
+         }
+     }
+-- 
+2.4.0
+

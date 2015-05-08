@@ -1,0 +1,257 @@
+From 182675e355aa1013f847d47d21a251250962e61f Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 10 Mar 2015 16:35:03 +0100
+Subject: [PATCH 21/99] Log reason in debug message why ldb_modify failed
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 04d138472cc086fb7961f0d378852b09961b1a33)
+---
+ src/confdb/confdb.c     |  6 +++++-
+ src/db/sysdb.c          |  5 +++++
+ src/db/sysdb_gpo.c      |  6 ++++--
+ src/db/sysdb_idmap.c    |  4 ++--
+ src/db/sysdb_ops.c      | 28 +++++++++++++++++++++++++++-
+ src/db/sysdb_services.c | 10 ++++++++++
+ src/db/sysdb_sudo.c     |  5 +++++
+ src/db/sysdb_views.c    | 14 ++++++++++----
+ 8 files changed, 68 insertions(+), 10 deletions(-)
+
+diff --git a/src/confdb/confdb.c b/src/confdb/confdb.c
+index f94de308ec8245b33b4a69af16dd99d17db8db9a..dd93410cfcac3040d5a72329929f99f43fc592f1 100644
+--- a/src/confdb/confdb.c
++++ b/src/confdb/confdb.c
+@@ -200,6 +200,9 @@ int confdb_add_param(struct confdb_ctx *cdb,
+ 
+         ret = ldb_modify(cdb->ldb, msg);
+         if (ret != LDB_SUCCESS) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  "ldb_modify failed: [%s](%d)[%s]\n",
++                  ldb_strerror(ret), ret, ldb_errstring(cdb->ldb));
+             ret = EIO;
+             goto done;
+         }
+@@ -348,7 +351,8 @@ int confdb_set_string(struct confdb_ctx *cdb,
+     lret = ldb_modify(cdb->ldb, msg);
+     if (lret != LDB_SUCCESS) {
+         DEBUG(SSSDBG_MINOR_FAILURE,
+-              "ldb_modify failed: [%s]\n", ldb_strerror(lret));
++              "ldb_modify failed: [%s](%d)[%s]\n",
++              ldb_strerror(lret), lret, ldb_errstring(cdb->ldb));
+         ret = EIO;
+         goto done;
+     }
+diff --git a/src/db/sysdb.c b/src/db/sysdb.c
+index 6be5e8026c6d24c03f133242a62acec759a24780..9da655759c0c35d52854b668693195b3360c5f8b 100644
+--- a/src/db/sysdb.c
++++ b/src/db/sysdb.c
+@@ -1636,6 +1636,11 @@ errno_t sysdb_set_bool(struct sysdb_ctx *sysdb,
+         lret = ldb_add(sysdb->ldb, msg);
+     }
+ 
++    if (lret != LDB_SUCCESS) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "ldb operation failed: [%s](%d)[%s]\n",
++              ldb_strerror(lret), lret, ldb_errstring(sysdb->ldb));
++    }
+     ret = sysdb_error_to_errno(lret);
+ 
+ done:
+diff --git a/src/db/sysdb_gpo.c b/src/db/sysdb_gpo.c
+index 2fb9b748d750b92dc990b8175869262b666306db..595051bae44c110210c76de2b583319ac42864a2 100644
+--- a/src/db/sysdb_gpo.c
++++ b/src/db/sysdb_gpo.c
+@@ -208,7 +208,8 @@ sysdb_gpo_store_gpo(struct sss_domain_info *domain,
+         lret = ldb_modify(domain->sysdb->ldb, update_msg);
+         if (lret != LDB_SUCCESS) {
+             DEBUG(SSSDBG_MINOR_FAILURE,
+-                  "Failed to modify GPO: [%s]\n", ldb_strerror(lret));
++                  "Failed to modify GPO: [%s](%d)[%s]\n",
++                  ldb_strerror(lret), lret, ldb_errstring(domain->sysdb->ldb));
+             ret = sysdb_error_to_errno(lret);
+             goto done;
+         }
+@@ -500,7 +501,8 @@ sysdb_gpo_store_gpo_result_setting(struct sss_domain_info *domain,
+         lret = ldb_modify(domain->sysdb->ldb, update_msg);
+         if (lret != LDB_SUCCESS) {
+             DEBUG(SSSDBG_MINOR_FAILURE,
+-                  "Failed to modify GPO Result: [%s]\n", ldb_strerror(lret));
++                  "Failed to modify GPO Result: [%s](%d)[%s]\n",
++                  ldb_strerror(lret), lret, ldb_errstring(domain->sysdb->ldb));
+             ret = sysdb_error_to_errno(lret);
+             goto done;
+         }
+diff --git a/src/db/sysdb_idmap.c b/src/db/sysdb_idmap.c
+index 2c3634d1cc86818007700a43dc6b919c9bf7030e..2aa00ef83f182a77b0e9b94ba8a80ef71af6518c 100644
+--- a/src/db/sysdb_idmap.c
++++ b/src/db/sysdb_idmap.c
+@@ -247,8 +247,8 @@ sysdb_idmap_store_mapping(struct sss_domain_info *domain,
+         lret = ldb_modify(domain->sysdb->ldb, update_msg);
+         if (lret != LDB_SUCCESS) {
+             DEBUG(SSSDBG_MINOR_FAILURE,
+-                  "Failed to update mapping: [%s]\n",
+-                   ldb_strerror(lret));
++                  "Failed to update mapping: [%s](%d)[%s]\n",
++                  ldb_strerror(lret), lret, ldb_errstring(domain->sysdb->ldb));
+             ret = sysdb_error_to_errno(lret);
+             goto done;
+         }
+diff --git a/src/db/sysdb_ops.c b/src/db/sysdb_ops.c
+index 6085762dcc5585114dd3049dd3a365856cb6b190..06d24f220afc28b39f3856f3f0170818e11d9cf9 100644
+--- a/src/db/sysdb_ops.c
++++ b/src/db/sysdb_ops.c
+@@ -707,7 +707,8 @@ int sysdb_set_entry_attr(struct sysdb_ctx *sysdb,
+     lret = ldb_modify(sysdb->ldb, msg);
+     if (lret != LDB_SUCCESS) {
+         DEBUG(SSSDBG_MINOR_FAILURE,
+-              "ldb_modify failed: [%s]\n", ldb_strerror(lret));
++              "ldb_modify failed: [%s](%d)[%s]\n",
++              ldb_strerror(lret), lret, ldb_errstring(sysdb->ldb));
+     }
+ 
+     ret = sysdb_error_to_errno(lret);
+@@ -969,6 +970,11 @@ int sysdb_get_new_id(struct sss_domain_info *domain,
+     }
+ 
+     ret = ldb_modify(domain->sysdb->ldb, msg);
++    if (ret != LDB_SUCCESS) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "ldb_modify failed: [%s](%d)[%s]\n",
++              ldb_strerror(ret), ret, ldb_errstring(domain->sysdb->ldb));
++    }
+     ret = sysdb_error_to_errno(ret);
+ 
+     *_id = new_id;
+@@ -1139,6 +1145,12 @@ sysdb_remove_ghost_from_group(struct sss_domain_info *dom,
+ 
+ 
+     ret = sss_ldb_modify_permissive(dom->sysdb->ldb, msg);
++    if (ret != LDB_SUCCESS) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "sss_ldb_modify_permissive failed: [%s](%d)[%s]\n",
++              ldb_strerror(ret), ret, ldb_errstring(dom->sysdb->ldb));
++    }
++
+     ret = sysdb_error_to_errno(ret);
+     if (ret != EOK) {
+         goto done;
+@@ -1706,6 +1718,11 @@ int sysdb_mod_group_member(struct sss_domain_info *domain,
+     }
+ 
+     ret = ldb_modify(domain->sysdb->ldb, msg);
++    if (ret != LDB_SUCCESS) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "ldb_modify failed: [%s](%d)[%s]\n",
++              ldb_strerror(ret), ret, ldb_errstring(domain->sysdb->ldb));
++    }
+     ret = sysdb_error_to_errno(ret);
+ 
+ fail:
+@@ -2750,6 +2767,12 @@ int sysdb_delete_user(struct sss_domain_info *domain,
+             if (ret) goto fail;
+ 
+             ret = ldb_modify(domain->sysdb->ldb, msg);
++            if (ret != LDB_SUCCESS) {
++                DEBUG(SSSDBG_MINOR_FAILURE,
++                      "ldb_modify failed: [%s](%d)[%s]\n",
++                      ldb_strerror(ret), ret,
++                      ldb_errstring(domain->sysdb->ldb));
++            }
+             ret = sysdb_error_to_errno(ret);
+             if (ret != EOK) {
+                 goto fail;
+@@ -3479,6 +3502,9 @@ errno_t sysdb_remove_attrs(struct sss_domain_info *domain,
+          */
+         lret = ldb_modify(domain->sysdb->ldb, msg);
+         if (lret != LDB_SUCCESS && lret != LDB_ERR_NO_SUCH_ATTRIBUTE) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  "ldb_modify failed: [%s](%d)[%s]\n",
++                  ldb_strerror(lret), lret, ldb_errstring(domain->sysdb->ldb));
+             ret = sysdb_error_to_errno(lret);
+             goto done;
+         }
+diff --git a/src/db/sysdb_services.c b/src/db/sysdb_services.c
+index 5f2315e72735dd4ccc1ecf7962d9cd54b38e4279..37f7ec5ff7e36605acd3b259c1622f1b1086a388 100644
+--- a/src/db/sysdb_services.c
++++ b/src/db/sysdb_services.c
+@@ -590,6 +590,11 @@ sysdb_svc_update(struct sysdb_ctx *sysdb,
+     }
+ 
+     lret = ldb_modify(sysdb->ldb, msg);
++    if (lret != LDB_SUCCESS) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "ldb_modify failed: [%s](%d)[%s]\n",
++              ldb_strerror(lret), lret, ldb_errstring(sysdb->ldb));
++    }
+     ret = sysdb_error_to_errno(lret);
+ 
+ done:
+@@ -623,6 +628,11 @@ sysdb_svc_remove_alias(struct sysdb_ctx *sysdb,
+     if (ret != EOK) goto done;
+ 
+     lret = ldb_modify(sysdb->ldb, msg);
++    if (lret != LDB_SUCCESS) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "ldb_modify failed: [%s](%d)[%s]\n",
++              ldb_strerror(lret), lret, ldb_errstring(sysdb->ldb));
++    }
+     ret = sysdb_error_to_errno(lret);
+ 
+ done:
+diff --git a/src/db/sysdb_sudo.c b/src/db/sysdb_sudo.c
+index d62234f9b18cff44e935bfef6dda612a98f09e5a..4c50d32c779732a5fb78f23f4344ba4ba0825e84 100644
+--- a/src/db/sysdb_sudo.c
++++ b/src/db/sysdb_sudo.c
+@@ -521,6 +521,11 @@ static errno_t sysdb_sudo_set_refresh_time(struct sss_domain_info *domain,
+         lret = ldb_add(domain->sysdb->ldb, msg);
+     }
+ 
++    if (lret != LDB_SUCCESS) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "ldb operation failed: [%s](%d)[%s]\n",
++              ldb_strerror(lret), lret, ldb_errstring(domain->sysdb->ldb));
++    }
+     ret = sysdb_error_to_errno(lret);
+ 
+ done:
+diff --git a/src/db/sysdb_views.c b/src/db/sysdb_views.c
+index 21c64c4818d0946785921edbe7c4047d09b0f2a2..945f16ac1753e3b4dfa0c799b00ad177b24d438c 100644
+--- a/src/db/sysdb_views.c
++++ b/src/db/sysdb_views.c
+@@ -165,8 +165,10 @@ errno_t sysdb_update_view_name(struct sysdb_ctx *sysdb,
+         ret = ldb_add(sysdb->ldb, msg);
+     }
+     if (ret != LDB_SUCCESS) {
+-        DEBUG(SSSDBG_FATAL_FAILURE, "Failed to %s view container\n",
+-                                    view_container_exists ? "modify" : "add");
++        DEBUG(SSSDBG_FATAL_FAILURE,
++              "Failed to %s view container [%s](%d)[%s]\n",
++              view_container_exists ? "modify" : "add",
++              ldb_strerror(ret), ret, ldb_errstring(sysdb->ldb));
+         ret = sysdb_error_to_errno(ret);
+         goto done;
+     }
+@@ -282,7 +284,9 @@ errno_t sysdb_invalidate_overrides(struct sysdb_ctx *sysdb)
+ 
+         ret = ldb_modify(sysdb->ldb, msg);
+         if (ret != LDB_SUCCESS && ret != LDB_ERR_NO_SUCH_ATTRIBUTE) {
+-            DEBUG(SSSDBG_OP_FAILURE, "ldb_modify failed.\n");
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "ldb_modify failed: [%s](%d)[%s]\n",
++                  ldb_strerror(ret), ret, ldb_errstring(sysdb->ldb));
+             ret = sysdb_error_to_errno(ret);
+             goto done;
+         }
+@@ -303,7 +307,9 @@ errno_t sysdb_invalidate_overrides(struct sysdb_ctx *sysdb)
+ 
+         ret = ldb_modify(sysdb->ldb, msg);
+         if (ret != LDB_SUCCESS && ret != LDB_ERR_NO_SUCH_ATTRIBUTE) {
+-            DEBUG(SSSDBG_OP_FAILURE, "ldb_modify failed.\n");
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "ldb_modify failed: [%s](%d)[%s]\n",
++                  ldb_strerror(ret), ret, ldb_errstring(sysdb->ldb));
+             ret = sysdb_error_to_errno(ret);
+             goto done;
+         }
+-- 
+2.4.0
+

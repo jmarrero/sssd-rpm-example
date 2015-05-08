@@ -1,0 +1,57 @@
+From f5fa6265e747c582e783f1b867cc96e9afc84d79 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 9 Feb 2015 19:16:30 +0100
+Subject: [PATCH 87/99] BUILD: Remove detection of type Py_ssize_t
+
+The type Py_ssize_t is defined in python >= 2.6
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ src/external/python.m4 |  5 -----
+ src/util/sss_python.h  | 14 --------------
+ 2 files changed, 19 deletions(-)
+
+diff --git a/src/external/python.m4 b/src/external/python.m4
+index 241de9fd0e401c40f8136861e7c7070c8a50cddd..858af3c197603fcda100eddcffc396dad674a9e6 100644
+--- a/src/external/python.m4
++++ b/src/external/python.m4
+@@ -62,11 +62,6 @@ AC_DEFUN([AM_CHECK_PYTHON_COMPAT],
+     CPPFLAGS="$CPPFLAGS $PYTHON_INCLUDES"
+     LIBS="$LIBS $PYTHON_LIBS"
+ 
+-    AC_CHECK_TYPE(Py_ssize_t,
+-                  [ AC_DEFINE_UNQUOTED(HAVE_PY_SSIZE_T, 1, [Native Py_ssize_t type]) ],
+-                  [],
+-                  [[#include <Python.h>]])
+-
+     AC_CHECK_FUNCS([PySet_New PySet_Add PyErr_NewExceptionWithDoc])
+     AC_CHECK_DECLS([PySet_Check, PyModule_AddIntMacro, PyUnicode_FromString], [], [], [[#include <Python.h>]])
+ 
+diff --git a/src/util/sss_python.h b/src/util/sss_python.h
+index 828bd22ec44fe9493bfaa246b072777b70c7b585..cf8c848482d82e0060cbfe748c05bd09c7492c4f 100644
+--- a/src/util/sss_python.h
++++ b/src/util/sss_python.h
+@@ -25,20 +25,6 @@
+ #define PYNUMBER_ASLONG(what) PyInt_AsLong(what)
+ #endif
+ 
+-/* Py_ssize_t compatibility for python < 2.5 as per
+- * http://www.python.org/dev/peps/pep-0353/ */
+-#ifndef HAVE_PY_SSIZE_T
+-typedef int Py_ssize_t;
+-#endif
+-
+-#ifndef PY_SSIZE_T_MAX
+-#define PY_SSIZE_T_MAX INT_MAX
+-#endif
+-
+-#ifndef PY_SSIZE_T_MIN
+-#define PY_SSIZE_T_MIN INT_MIN
+-#endif
+-
+ /* Wrappers providing the subset of C API for python's set objects we use */
+ PyObject *sss_python_set_new(void);
+ int sss_python_set_add(PyObject *set, PyObject *key);
+-- 
+2.4.0
+

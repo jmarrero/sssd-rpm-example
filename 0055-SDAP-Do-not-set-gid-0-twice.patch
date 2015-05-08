@@ -1,0 +1,49 @@
+From cf7047634308c431f4cfbff1d88564668d2a33c7 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 10 Apr 2015 14:33:35 +0200
+Subject: [PATCH 55/99] SDAP: Do not set gid 0 twice
+
+The gid o was added to sysdb attrs directly in sdap_save_group for 1st time
+and for second time in the function sdap_store_group_with_gid,
+which was called every time from function sdap_save_group
+
+[sysdb_set_entry_attr] (0x0080): ldb_modify failed:
+    [Attribute or value exists](20)[attribute 'gidNumber': value #1
+    on 'name=domainlocalgroup1_dom2-493341@sssdad_tree.com,cn=groups,cn=sssdad_tree.com,cn=sysdb' provided more than once]
+[sysdb_set_entry_attr] (0x0040): Error: 17 (File exists)
+[sysdb_store_group] (0x1000): sysdb_set_group_attr failed.
+[sysdb_store_group] (0x0400): Error: 17 (File exists)
+[sdap_store_group_with_gid] (0x0040):
+    Could not store group domainlocalgroup1_dom2-493341@sssdad_tree.com
+[sdap_save_group] (0x0080): Could not store group with GID: [File exists]
+[sdap_save_group] (0x0080):
+    Failed to save group [domainlocalgroup1_dom2-493341@sssdad_tree.com]: [File exists]
+[sdap_save_groups] (0x0040): Failed to store group 0. Ignoring.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 5d864e7a9d0e1e6fb7dd8158c5b8bfb71040b908)
+---
+ src/providers/ldap/sdap_async_groups.c | 7 -------
+ 1 file changed, 7 deletions(-)
+
+diff --git a/src/providers/ldap/sdap_async_groups.c b/src/providers/ldap/sdap_async_groups.c
+index f9613ddd72d1e1796bc6a034daf98275b07a5c79..454d302eabf32e0837a7a4ba03063a360524b412 100644
+--- a/src/providers/ldap/sdap_async_groups.c
++++ b/src/providers/ldap/sdap_async_groups.c
+@@ -599,13 +599,6 @@ static int sdap_save_group(TALLOC_CTX *memctx,
+             gid = 0;
+             DEBUG(SSSDBG_TRACE_FUNC, "Filtering AD group [%s].\n",
+                                       group_name);
+-            ret = sysdb_attrs_add_uint32(group_attrs,
+-                                         opts->group_map[SDAP_AT_GROUP_GID].sys_name, 0);
+-            if (ret != EOK) {
+-                DEBUG(SSSDBG_CRIT_FAILURE,
+-                      "Failed to add a GID to non-posix group!\n");
+-                return ret;
+-            }
+             ret = sysdb_attrs_add_bool(group_attrs, SYSDB_POSIX, false);
+             if (ret != EOK) {
+                 DEBUG(SSSDBG_OP_FAILURE,
+-- 
+2.4.0
+

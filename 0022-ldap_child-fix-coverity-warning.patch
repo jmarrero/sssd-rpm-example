@@ -1,0 +1,58 @@
+From 7e6f4793f18a2d549b1d1a8c7b6217468b293bc6 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Mon, 9 Mar 2015 05:45:20 -0400
+Subject: [PATCH 22/99] ldap_child: fix coverity warning
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In ldap_child_get_tgt_sync() variable 'ret' got overriden in done
+section without ever before being read.
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 6ccda8691123bb27f5f2a88a0c80174af3e0fd0a)
+---
+ src/providers/ldap/ldap_child.c | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ldap/ldap_child.c b/src/providers/ldap/ldap_child.c
+index 8f034affa48095b6e512c866f8a3c33465e5c595..82481d6e75c86f7be49625a669691b235589d9a7 100644
+--- a/src/providers/ldap/ldap_child.c
++++ b/src/providers/ldap/ldap_child.c
+@@ -391,14 +391,20 @@ static krb5_error_code ldap_child_get_tgt_sync(TALLOC_CTX *memctx,
+     ccname_file = talloc_asprintf(tmp_ctx, "%s/ccache_%s",
+                                   DB_PATH, realm_name);
+     if (ccname_file == NULL) {
+-        ret = ENOMEM;
++        krberr = ENOMEM;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "talloc_asprintf failed: %s:[%d].\n",
++              strerror(krberr), krberr);
+         goto done;
+     }
+ 
+     ccname_file_dummy = talloc_asprintf(tmp_ctx, "%s/ccache_%s_XXXXXX",
+                                         DB_PATH, realm_name);
+     if (ccname_file_dummy == NULL) {
+-        ret = ENOMEM;
++        krberr = ENOMEM;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "talloc_asprintf failed: %s:[%d].\n",
++              strerror(krberr), krberr);
+         goto done;
+     }
+ 
+@@ -407,6 +413,10 @@ static krb5_error_code ldap_child_get_tgt_sync(TALLOC_CTX *memctx,
+     umask(old_umask);
+     if (fd == -1) {
+         ret = errno;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "mkstemp failed: %s:[%d].\n",
++              strerror(ret), ret);
++        krberr = KRB5KRB_ERR_GENERIC;
+         goto done;
+     }
+     /* We only care about creating a unique file name here, we don't
+-- 
+2.4.0
+

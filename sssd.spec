@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.4
-Release: 6%{?dist}
+Release: 7%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -36,26 +36,105 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-BUILD-Remove-unused-libraries-for-pysss.so.patch
-Patch0002: 0002-BUILD-Remove-unused-variables.patch
-Patch0003: 0003-BUILD-Remove-detection-of-type-Py_ssize_t.patch
-Patch0004: 0004-UTIL-Remove-python-wrapper-sss_python_set_new.patch
-Patch0005: 0005-UTIL-Remove-python-wrapper-sss_python_set_add.patch
-Patch0006: 0006-UTIL-Remove-python-wrapper-sss_python_set_check.patch
-Patch0007: 0007-UTIL-Remove-compatibility-macro-PyModule_AddIntMacro.patch
-Patch0008: 0008-UTIL-Remove-python-wrapper-sss_python_unicode_from_s.patch
-Patch0009: 0009-BUILD-Use-python-config-for-detection-FLAGS.patch
-Patch0010: 0010-SPEC-Use-new-convention-for-python-packages.patch
-Patch0011: 0011-SPEC-Move-python-bindings-to-separate-packages.patch
-Patch0012: 0012-BUILD-Add-possibility-to-build-python-2-3-bindings.patch
-Patch0013: 0013-TESTS-Run-python-tests-with-all-supported-python-ver.patch
-Patch0014: 0014-SPEC-Replace-python_-macros-with-python2_.patch
-Patch0015: 0015-SPEC-Build-python3-bindings-on-available-platforms.patch
-Patch0016: 0016-selinux-Delete-existing-user-mapping-on-empty-defaul.patch
-Patch0017: 0017-selinux-Handle-setup-with-empty-default-and-no-confi.patch
-Patch0018: 0018-selinux-Disconnect-before-closing-the-handle.patch
-Patch0019: 0019-selinux-Begin-and-end-the-transaction-on-the-same-ne.patch
-Patch0020: 0020-selinux-Only-call-semanage-if-the-context-actually-c.patch
+Patch0001: 0001-PAM-do-not-reject-abruptly.patch
+Patch0002: 0002-PAM-new-option-pam_account_expired_message.patch
+Patch0003: 0003-PAM-warn-all-services-about-account-expiration.patch
+Patch0004: 0004-PAM-check-return-value-of-confdb_get_string.patch
+Patch0005: 0005-resolv-Use-the-same-default-timeout-for-SRV-queries-.patch
+Patch0006: 0006-FO-Use-SRV-TTL-in-fail-over-code.patch
+Patch0007: 0007-SDAP-refactor-pwexpire-policy.patch
+Patch0008: 0008-SDAP-enable-change-phase-of-pw-expire-policy-check.patch
+Patch0009: 0009-LDAP-unlink-ccname_file_dummy-if-there-is-an-error.patch
+Patch0010: 0010-selinux-Delete-existing-user-mapping-on-empty-defaul.patch
+Patch0011: 0011-ldap_child-initialized-ccname_file_dummy.patch
+Patch0012: 0012-UTIL-convert-GeneralizedTime-to-unix-time.patch
+Patch0013: 0013-SDAP-Lock-out-ssh-keys-when-account-naturally-expire.patch
+Patch0014: 0014-SDAP-fix-minor-neglect-in-is_account_locked.patch
+Patch0015: 0015-be_refresh-refresh-all-domains-in-backend.patch
+Patch0016: 0016-sdap_handle_acct_req_send-remove-be_req.patch
+Patch0017: 0017-be_refresh-refactor-netgroups-refresh.patch
+Patch0018: 0018-be_refresh-add-sdap_refresh_init.patch
+Patch0019: 0019-be_refresh-support-users.patch
+Patch0020: 0020-be_refresh-support-groups.patch
+Patch0021: 0021-Log-reason-in-debug-message-why-ldb_modify-failed.patch
+Patch0022: 0022-ldap_child-fix-coverity-warning.patch
+Patch0023: 0023-NSS-Handle-ENOENT-when-doing-initgroups-by-UPN.patch
+Patch0024: 0024-MAN-libkrb5-and-SSSD-use-different-expansions.patch
+Patch0025: 0025-DEBUG-Add-missing-strings-for-error-messages.patch
+Patch0026: 0026-test-Check-ERR_LAST.patch
+Patch0027: 0027-PAM-use-the-logon_name-as-the-key-for-the-PAM-initgr.patch
+Patch0028: 0028-pam_initgr_check_timeout-add-debug-output.patch
+Patch0029: 0029-ipa-do-not-treat-missing-sub-domain-users-as-error.patch
+Patch0030: 0030-ipa-make-sure-extdom-expo-data-is-available.patch
+Patch0031: 0031-ipa_selinux-Fix-warning-may-be-used-uninitialized.patch
+Patch0032: 0032-LDAP-AD-do-not-resolve-group-members-during-tokenGro.patch
+Patch0033: 0033-IPA-idviews-check-if-view-name-is-set.patch
+Patch0034: 0034-selinux-Handle-setup-with-empty-default-and-no-confi.patch
+Patch0035: 0035-IPA-make-sure-output-variable-is-set.patch
+Patch0036: 0036-IPA-set-EINVAL-if-dn-can-t-be-linearized.patch
+Patch0037: 0037-GPO-error-out-instead-of-leaving-array-element-unini.patch
+Patch0038: 0038-LDAP-remove-unused-code.patch
+Patch0039: 0039-memberof-Do-not-create-request-with-0-attribute-valu.patch
+Patch0040: 0040-tests-convert-all-unit-tests-to-cmocka-1.0-or-later.patch
+Patch0041: 0041-RPM-BuildRequire-libcmocka-1.0.patch
+Patch0042: 0042-build-Only-run-cmocka-tests-if-cmocka-1.0-or-newer-i.patch
+Patch0043: 0043-sdap-properly-handle-binary-objectGuid-attribute.patch
+Patch0044: 0044-Resolv-re-read-SRV-query-every-time-if-its-TTL-is-0.patch
+Patch0045: 0045-IPA-Use-custom-error-codes-when-validating-HBAC-rule.patch
+Patch0046: 0046-IPA-Drop-useless-sysdb-parameter.patch
+Patch0047: 0047-IPA-Only-treat-malformed-HBAC-rules-as-fatal-if-deny.patch
+Patch0048: 0048-IPA-Deprecate-the-ipa_hbac_treat_deny_as-option.patch
+Patch0049: 0049-LDAP-fix-a-typo-in-debug-message.patch
+Patch0050: 0050-MAN-Update-ppolicy-description.patch
+Patch0051: 0051-CLIENT-Clear-errno-with-enabled-sss-default-nss-plug.patch
+Patch0052: 0052-GPO-Check-return-value-of-ad_gpo_store_policy_settin.patch
+Patch0053: 0053-enumeration-fix-talloc-context.patch
+Patch0054: 0054-sudo-sanitize-filter-values.patch
+Patch0055: 0055-SDAP-Do-not-set-gid-0-twice.patch
+Patch0056: 0056-SDAP-Extract-filtering-AD-group-to-function.patch
+Patch0057: 0057-SDAP-Filter-ad-groups-in-initgroups.patch
+Patch0058: 0058-selinux-Disconnect-before-closing-the-handle.patch
+Patch0059: 0059-selinux-Begin-and-end-the-transaction-on-the-same-ne.patch
+Patch0060: 0060-selinux-Only-call-semanage-if-the-context-actually-c.patch
+Patch0061: 0061-Option-filter_users-had-no-effect-for-retrieving-sud.patch
+Patch0062: 0062-AD-Clean-up-ad_access_gpo.patch
+Patch0063: 0063-AD-Always-get-domain-specific-ID-connection.patch
+Patch0064: 0064-AD-GPO-Always-look-up-GPOs-from-machine-domain.patch
+Patch0065: 0065-tests-Use-cmocka-1.0-API-in-test_sysdb_utils.patch
+Patch0066: 0066-sysdb-Add-cache_expire-to-the-default-sysdb_search_o.patch
+Patch0067: 0067-IPA-do-not-try-to-save-override-data-for-the-default.patch
+Patch0068: 0068-IPA-use-sysdb_attrs_add_string_safe-to-add-group-mem.patch
+Patch0069: 0069-IPA-check-ghosts-in-groups-found-by-uuid-as-well.patch
+Patch0070: 0070-simple-access-provider-make-user-grp-res-more-robust.patch
+Patch0071: 0071-IPA-allow-initgroups-by-SID-for-AD-users.patch
+Patch0072: 0072-IPA-fix-segfault-in-ipa_s2n_exop.patch
+Patch0073: 0073-autofs-fix-Cannot-allocate-memory-with-FQDNs.patch
+Patch0074: 0074-GPO-Do-not-ignore-missing-attrs-for-GPOs.patch
+Patch0075: 0075-sss_nss_idmap-tests-Use-different-prepared-buffers-f.patch
+Patch0076: 0076-SDAP-Fix-id-mapping-with-disabled-subdomains.patch
+Patch0077: 0077-IPA-do-initgroups-if-extdom-exop-supports-it.patch
+Patch0078: 0078-IPA-update-initgr-expire-timestamp-conditionally.patch
+Patch0079: 0079-IPA-enhance-ipa_initgr_get_overrides_send.patch
+Patch0080: 0080-IPA-search-for-overrides-during-initgroups-in-sever-.patch
+Patch0081: 0081-IPA-do-not-add-domain-name-unconditionally.patch
+Patch0082: 0082-NSS-check-for-overrides-before-calling-backend.patch
+Patch0083: 0083-IPA-allow-initgroups-by-UUID-for-FreeIPA-users.patch
+Patch0084: 0084-SPEC-Fix-cyclic-dependencies-between-sssd-krb5-commo.patch
+Patch0085: 0085-BUILD-Remove-unused-libraries-for-pysss.so.patch
+Patch0086: 0086-BUILD-Remove-unused-variables.patch
+Patch0087: 0087-BUILD-Remove-detection-of-type-Py_ssize_t.patch
+Patch0088: 0088-UTIL-Remove-python-wrapper-sss_python_set_new.patch
+Patch0089: 0089-UTIL-Remove-python-wrapper-sss_python_set_add.patch
+Patch0090: 0090-UTIL-Remove-python-wrapper-sss_python_set_check.patch
+Patch0091: 0091-UTIL-Remove-compatibility-macro-PyModule_AddIntMacro.patch
+Patch0092: 0092-UTIL-Remove-python-wrapper-sss_python_unicode_from_s.patch
+Patch0093: 0093-BUILD-Use-python-config-for-detection-FLAGS.patch
+Patch0094: 0094-SPEC-Use-new-convention-for-python-packages.patch
+Patch0095: 0095-SPEC-Move-python-bindings-to-separate-packages.patch
+Patch0096: 0096-BUILD-Add-possibility-to-build-python-2-3-bindings.patch
+Patch0097: 0097-TESTS-Run-python-tests-with-all-supported-python-ver.patch
+Patch0098: 0098-SPEC-Replace-python_-macros-with-python2_.patch
+Patch0099: 0099-SPEC-Build-python3-bindings-on-available-platforms.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -1015,6 +1094,9 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Fri May 08 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.4-7
+- Backport patches from upstream 1.12.5 prerelease - contains many fixes
+
 * Wed Apr 15 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.4-6
 - Fix slow login with ipa and SELinux
 - Resolves: upstream #2624 - Only set the selinux context if the context

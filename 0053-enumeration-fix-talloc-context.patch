@@ -1,0 +1,51 @@
+From 81bb9be1ae0b2a4ebe960f136a52576abcdfbbac Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 25 Mar 2015 12:08:04 +0100
+Subject: [PATCH 53/99] enumeration: fix talloc context
+
+If for some reason ptask fails (e.g. timeout), req is talloc freed
+but because subreq is attached to ectx which is permanent it is
+finished anyway. Then a crash occures when we are trying to access
+callback data.
+
+The same happens in sdap_dom_enum_ex_send.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2611
+
+Reviewed-by: Pavel Reichl <preichl@redhat.com>
+(cherry picked from commit 725bb2a9901c4f673b107ed179f5d68ec443ca63)
+---
+ src/providers/ldap/ldap_id_enum.c    | 2 +-
+ src/providers/ldap/sdap_async_enum.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ldap/ldap_id_enum.c b/src/providers/ldap/ldap_id_enum.c
+index 13d2a62544b3956165ef9eb480fb5b813c890fd4..1aec91a99a322911fcc5d2a3e8a89cd98bbc7a96 100644
+--- a/src/providers/ldap/ldap_id_enum.c
++++ b/src/providers/ldap/ldap_id_enum.c
+@@ -133,7 +133,7 @@ ldap_enumeration_send(TALLOC_CTX *mem_ctx,
+     state->dom = ectx->sdom->dom;
+     state->id_ctx = talloc_get_type_abort(ectx->pvt, struct sdap_id_ctx);
+ 
+-    subreq = sdap_dom_enum_send(ectx, ev, state->id_ctx, ectx->sdom,
++    subreq = sdap_dom_enum_send(state, ev, state->id_ctx, ectx->sdom,
+                                 state->id_ctx->conn);
+     if (subreq == NULL) {
+         /* The ptask API will reschedule the enumeration on its own on
+diff --git a/src/providers/ldap/sdap_async_enum.c b/src/providers/ldap/sdap_async_enum.c
+index 1cc09abdf1aa14e3d1690ea1abe32604ae4ff1cd..35afc55f809669a44aa2beda7d87dfe62d6ec10b 100644
+--- a/src/providers/ldap/sdap_async_enum.c
++++ b/src/providers/ldap/sdap_async_enum.c
+@@ -91,7 +91,7 @@ sdap_dom_enum_ex_send(TALLOC_CTX *memctx,
+     int t;
+     errno_t ret;
+ 
+-    req = tevent_req_create(ctx, &state, struct sdap_dom_enum_ex_state);
++    req = tevent_req_create(memctx, &state, struct sdap_dom_enum_ex_state);
+     if (req == NULL) return NULL;
+ 
+     state->ev = ev;
+-- 
+2.4.0
+

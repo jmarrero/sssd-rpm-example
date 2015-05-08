@@ -1,0 +1,38 @@
+From bdb7e7f514629696e73902b2af3a93839be3e8a4 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 24 Mar 2015 11:17:20 +0100
+Subject: [PATCH 65/99] tests: Use cmocka-1.0+ API in test_sysdb_utils
+
+Reviewed-by: Pavel Reichl <preichl@redhat.com>
+(cherry picked from commit e2405de14e2fb3d58af4108ecc2726818e6c7c71)
+---
+ src/tests/cmocka/test_sysdb_utils.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/tests/cmocka/test_sysdb_utils.c b/src/tests/cmocka/test_sysdb_utils.c
+index d217314ccb9234f8d0d329d87c5dc9e847acbcf0..1e9baa88cd82e7631a1de3db7f567f1f050ca67b 100644
+--- a/src/tests/cmocka/test_sysdb_utils.c
++++ b/src/tests/cmocka/test_sysdb_utils.c
+@@ -106,8 +106,8 @@ int main(int argc, const char *argv[])
+         POPT_TABLEEND
+     };
+ 
+-    const UnitTest tests[] = {
+-        unit_test(test_sysdb_handle_original_uuid),
++    const struct CMUnitTest tests[] = {
++        cmocka_unit_test(test_sysdb_handle_original_uuid),
+     };
+ 
+     /* Set debug level to invalid value so we can deside if -d 0 was used. */
+@@ -128,7 +128,7 @@ int main(int argc, const char *argv[])
+     DEBUG_CLI_INIT(debug_level);
+ 
+     tests_set_cwd();
+-    rv = run_tests(tests);
++    rv = cmocka_run_group_tests(tests, NULL, NULL);
+ 
+     return rv;
+ }
+-- 
+2.4.0
+

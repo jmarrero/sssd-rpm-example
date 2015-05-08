@@ -1,0 +1,51 @@
+From b54376696a0f41b8187718c3589307dd1d9d1d4f Mon Sep 17 00:00:00 2001
+From: Michal Zidek <mzidek@redhat.com>
+Date: Tue, 10 Mar 2015 17:30:48 +0100
+Subject: [PATCH 25/99] DEBUG: Add missing strings for error messages
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We had more error codes than corresponding
+messages. Also order of two messages was
+wrong.
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/util/util_errors.c | 3 +++
+ src/util/util_errors.h | 2 +-
+ 2 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/util/util_errors.c b/src/util/util_errors.c
+index bfae5cd189902ed82ba8b7db29e85a309e4bd19c..180d2e713b3cefdfdaabd9b3acc736c2aeaccbdf 100644
+--- a/src/util/util_errors.c
++++ b/src/util/util_errors.c
+@@ -42,6 +42,9 @@ struct err_string error_to_str[] = {
+     { "Network I/O Error" }, /* ERR_NETWORK_IO */
+     { "Account Expired" }, /* ERR_ACCOUNT_EXPIRED */
+     { "Password Expired" }, /* ERR_PASSWORD_EXPIRED */
++    { "Password Expired (reject access)" }, /* ERR_PASSWORD_EXPIRED_REJECT */
++    { "Password Expired (warn user)" }, /* ERR_PASSWORD_EXPIRED_WARN */
++    { "Password Expired (ask for new password)" }, /* ERR_PASSWORD_EXPIRED_RENEW */
+     { "Host Access Denied" }, /* ERR_ACCESS_DENIED */
+     { "SRV record not found" }, /* ERR_SRV_NOT_FOUND */
+     { "SRV lookup error" }, /* ERR_SRV_LOOKUP_ERROR */
+diff --git a/src/util/util_errors.h b/src/util/util_errors.h
+index 069d4b78aa5ed6c756affdacab99c7141b7849e4..5ebce631d4520944b387d20028e4f32613c1d3a8 100644
+--- a/src/util/util_errors.h
++++ b/src/util/util_errors.h
+@@ -53,10 +53,10 @@ enum sssd_errors {
+     ERR_INVALID_CRED_TYPE,
+     ERR_NO_CREDS,
+     ERR_CREDS_EXPIRED,
++    ERR_CREDS_EXPIRED_CCACHE,
+     ERR_CREDS_INVALID,
+     ERR_NO_CACHED_CREDS,
+     ERR_CACHED_CREDS_EXPIRED,
+-    ERR_CREDS_EXPIRED_CCACHE,
+     ERR_AUTH_DENIED,
+     ERR_AUTH_FAILED,
+     ERR_CHPASS_DENIED,
+-- 
+2.4.0
+

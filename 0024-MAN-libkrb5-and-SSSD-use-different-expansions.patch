@@ -1,0 +1,40 @@
+From e66ff0a610aa9342f16e61018963b2c7f1d60812 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Wed, 14 Jan 2015 12:06:01 -0500
+Subject: [PATCH 24/99] MAN: libkrb5 and SSSD use different expansions
+
+Users often wrongly use SSSD expansions in libkrb5 expansion template
+for principals. State explicitly it won't work.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2528
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 33b8bf140b1d82d2626eeeaaea29af49dcdb3c99)
+---
+ src/man/sssd-krb5.5.xml | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/man/sssd-krb5.5.xml b/src/man/sssd-krb5.5.xml
+index a774dce35fb6271fdb1c015adba4ff8576465010..9f61f8f707c6a97548919e8a67c37c9b135c756c 100644
+--- a/src/man/sssd-krb5.5.xml
++++ b/src/man/sssd-krb5.5.xml
+@@ -222,6 +222,15 @@
+                             defined by krb5.conf.
+                         </para>
+                         <para>
++                          NOTE: Please be aware that libkrb5 ccache expansion
++                          template from
++                          <citerefentry>
++                                <refentrytitle>krb5.conf</refentrytitle>
++                                <manvolnum>5</manvolnum>
++                          </citerefentry>
++                          uses different expansion sequences than SSSD.
++                        </para>
++                        <para>
+                             Default: (from libkrb5)
+                         </para>
+                     </listitem>
+-- 
+2.4.0
+

@@ -1,0 +1,32 @@
+From 371c5f40199b6389bd3cbfd05654b2213caecfc1 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Fri, 6 Mar 2015 04:38:05 -0500
+Subject: [PATCH 14/99] SDAP: fix minor neglect in is_account_locked()
+
+It would be better to return explicit error code, although access is
+still denied and error message printed.
+
+Relates:
+https://fedorahosted.org/sssd/ticket/2534
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ldap/sdap_access.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/providers/ldap/sdap_access.c b/src/providers/ldap/sdap_access.c
+index 4a45ff419be9a31224e00cf0fb4ea021953bbbc3..0b251121335841b357e55deac608f50e24311285 100644
+--- a/src/providers/ldap/sdap_access.c
++++ b/src/providers/ldap/sdap_access.c
+@@ -1767,6 +1767,8 @@ is_account_locked(const char *pwdAccountLockedTime,
+     default:
+         DEBUG(SSSDBG_MINOR_FAILURE,
+               "Unexpected value of password policy mode: %d.\n", pwpol_mode);
++        ret = EINVAL;
++        goto done;
+     }
+ 
+     ret = EOK;
+-- 
+2.4.0
+

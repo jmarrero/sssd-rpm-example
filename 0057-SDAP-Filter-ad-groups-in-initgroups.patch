@@ -1,0 +1,50 @@
+From 49895bb18508a4f4b83b99d9875e99e17c81285b Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 13 Apr 2015 09:50:29 +0200
+Subject: [PATCH 57/99] SDAP: Filter ad groups in initgroups
+
+Function sdap_add_incomplete_groups stored domain local groups
+from subdomain as POSIX group, which should not be done.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2614
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit b9fbeb75e7a4f50f98d979a70a710f9221892483)
+---
+ src/providers/ldap/sdap_async_initgroups.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/src/providers/ldap/sdap_async_initgroups.c b/src/providers/ldap/sdap_async_initgroups.c
+index 96617aecc4e9c948bbbdccb1ba75e81577a19c70..ae617b9c4c6899d0b85dcc4c4b6b971d0f235b88 100644
+--- a/src/providers/ldap/sdap_async_initgroups.c
++++ b/src/providers/ldap/sdap_async_initgroups.c
+@@ -51,6 +51,7 @@ errno_t sdap_add_incomplete_groups(struct sysdb_ctx *sysdb,
+     time_t now;
+     char *sid_str = NULL;
+     bool use_id_mapping;
++    bool need_filter;
+     char *tmp_name;
+ 
+     /* There are no groups in LDAP but we should add user to groups ?? */
+@@ -210,6 +211,17 @@ errno_t sdap_add_incomplete_groups(struct sysdb_ctx *sysdb,
+                     uuid = NULL;
+                 }
+ 
++                ret = sdap_check_ad_group_type(domain, opts, ldap_groups[ai],
++                                               groupname, &need_filter);
++                if (ret != EOK) {
++                    goto done;
++                }
++
++                if (need_filter) {
++                    posix = false;
++                    gid = 0;
++                }
++
+                 DEBUG(SSSDBG_TRACE_INTERNAL,
+                       "Adding fake group %s to sysdb\n", groupname);
+                 ret = sysdb_add_incomplete_group(domain, groupname, gid,
+-- 
+2.4.0
+

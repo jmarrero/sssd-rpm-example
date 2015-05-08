@@ -1,0 +1,26 @@
+From e8f5e135b4d389a1ae224da174c15dfe66b30810 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Thu, 19 Mar 2015 10:21:21 -0400
+Subject: [PATCH 36/99] IPA: set EINVAL if dn can't be linearized
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 131da4d9f40e0e407d7bcae18ff16507976bc6c7)
+---
+ src/providers/ipa/ipa_s2n_exop.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index c7fd1009b14bcfa7502236bbf707fcbe72f537c1..a844ee99d25ec28bb02ec7b7fd0afa722b6ac189 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -1293,6 +1293,7 @@ static errno_t process_members(struct sss_domain_info *domain,
+                 dn_str = ldb_dn_get_linearized(msg->dn);
+                 if (dn_str == NULL) {
+                     DEBUG(SSSDBG_OP_FAILURE, "ldb_dn_get_linearized failed.\n");
++                    ret = EINVAL;
+                     goto done;
+                 }
+ 
+-- 
+2.4.0
+

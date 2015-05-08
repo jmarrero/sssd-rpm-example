@@ -1,0 +1,205 @@
+From 85287a6b897d818d279171a83aa3c8a0de66f13b Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 22 Apr 2015 16:57:37 +0200
+Subject: [PATCH 71/99] IPA: allow initgroups by SID for AD users
+
+If a user from a trusted AD domain is search with the help of an
+override name the SID from the override anchor is used to search the
+user in AD. Currently the initgroups request only allows searches by
+name.  With this patch a SID can be used as well.
+
+Resolves https://fedorahosted.org/sssd/ticket/2632
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit f70a1adbfc30b9acc302027439fb8157e0c6ea2a)
+---
+ src/db/sysdb_search.c                      | 24 ++++++++++++++++--------
+ src/providers/data_provider.h              |  1 +
+ src/providers/ipa/ipa_subdomains_id.c      | 13 +++++++++++++
+ src/providers/ldap/ldap_id.c               | 15 +++++++++++++--
+ src/providers/ldap/sdap_async_initgroups.c |  2 ++
+ src/tests/sysdb-tests.c                    | 12 +++++++++++-
+ 6 files changed, 56 insertions(+), 11 deletions(-)
+
+diff --git a/src/db/sysdb_search.c b/src/db/sysdb_search.c
+index 677257405fae51774d4cd0c17516238e74fb7592..da0c6d90c6b3a88cfa928aaffa2c8eb843cb1a74 100644
+--- a/src/db/sysdb_search.c
++++ b/src/db/sysdb_search.c
+@@ -1589,7 +1589,7 @@ done:
+ 
+ errno_t sysdb_get_real_name(TALLOC_CTX *mem_ctx,
+                             struct sss_domain_info *domain,
+-                            const char *name_or_upn,
++                            const char *name_or_upn_or_sid,
+                             const char **_cname)
+ {
+     errno_t ret;
+@@ -1603,20 +1603,28 @@ errno_t sysdb_get_real_name(TALLOC_CTX *mem_ctx,
+         return ENOMEM;
+     }
+ 
+-    ret = sysdb_getpwnam(tmp_ctx, domain, name_or_upn, &res);
++    ret = sysdb_getpwnam(tmp_ctx, domain, name_or_upn_or_sid, &res);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "Cannot canonicalize username\n");
+         goto done;
+     }
+ 
+     if (res->count == 0) {
+-        ret = sysdb_search_user_by_upn(tmp_ctx, domain, name_or_upn, NULL,
+-                                       &msg);
++        ret = sysdb_search_user_by_upn(tmp_ctx, domain, name_or_upn_or_sid,
++                                       NULL, &msg);
+         if (ret != EOK) {
+-            /* User cannot be found in cache */
+-            DEBUG(SSSDBG_OP_FAILURE, "Cannot find user [%s] in cache\n",
+-                                     name_or_upn);
+-            goto done;
++            if (ret == ENOENT) {
++                ret = sysdb_search_user_by_sid_str(tmp_ctx, domain,
++                                                   name_or_upn_or_sid, NULL,
++                                                   &msg);
++            }
++
++            if (ret != EOK) {
++                /* User cannot be found in cache */
++                DEBUG(SSSDBG_OP_FAILURE, "Cannot find user [%s] in cache\n",
++                                         name_or_upn_or_sid);
++                goto done;
++            }
+         }
+     } else if (res->count == 1) {
+         msg = res->msgs[0];
+diff --git a/src/providers/data_provider.h b/src/providers/data_provider.h
+index 5df493e9d1ae21ada6f5fd6198a6d9c36680d044..89fb06a0d6f791a8ae50f9d8b4b69d6176912c6c 100644
+--- a/src/providers/data_provider.h
++++ b/src/providers/data_provider.h
+@@ -150,6 +150,7 @@
+ #define DP_SEC_ID_LEN (sizeof(DP_SEC_ID) - 1)
+ 
+ #define EXTRA_NAME_IS_UPN "U"
++#define EXTRA_NAME_IS_SID "S"
+ #define EXTRA_INPUT_MAYBE_WITH_VIEW "V"
+ 
+ /* AUTH related common data and functions */
+diff --git a/src/providers/ipa/ipa_subdomains_id.c b/src/providers/ipa/ipa_subdomains_id.c
+index 0508e14b690c144f4bace9ed14a326ac724eb910..15776d2e13af158058a874f761671a5801cf3d6a 100644
+--- a/src/providers/ipa/ipa_subdomains_id.c
++++ b/src/providers/ipa/ipa_subdomains_id.c
+@@ -201,6 +201,7 @@ static void ipa_subdomain_account_got_override(struct tevent_req *subreq)
+     }
+ 
+     if (state->override_attrs != NULL) {
++        DEBUG(SSSDBG_TRACE_ALL, "Processing override.\n");
+         ret = sysdb_attrs_get_string(state->override_attrs,
+                                      SYSDB_OVERRIDE_ANCHOR_UUID,
+                                      &anchor);
+@@ -219,6 +220,16 @@ static void ipa_subdomain_account_got_override(struct tevent_req *subreq)
+                 DEBUG(SSSDBG_OP_FAILURE, "get_be_acct_req_for_sid failed.\n");
+                 goto fail;
+             }
++
++            if (state->ipa_server_mode
++                    && (state->ar->entry_type & BE_REQ_TYPE_MASK)
++                                                         == BE_REQ_INITGROUPS) {
++                DEBUG(SSSDBG_TRACE_ALL,
++                      "Switching back to BE_REQ_INITGROUPS.\n");
++                ar->entry_type = BE_REQ_INITGROUPS;
++                ar->filter_type = BE_FILTER_SECID;
++                ar->attr_type = BE_ATTR_CORE;
++            }
+         } else {
+             DEBUG(SSSDBG_CRIT_FAILURE,
+                   "Unsupported override anchor type [%s].\n", anchor);
+@@ -1125,6 +1136,8 @@ static errno_t ipa_get_ad_apply_override_step(struct tevent_req *req)
+ 
+     /* Replace ID with name in search filter */
+     if ((entry_type == BE_REQ_USER && state->ar->filter_type == BE_FILTER_IDNUM)
++            || (entry_type == BE_REQ_INITGROUPS
++                    && state->ar->filter_type == BE_FILTER_SECID)
+             || entry_type == BE_REQ_BY_SECID) {
+         if (state->obj_msg == NULL) {
+             ret = get_object_from_cache(state, state->obj_dom, state->ar,
+diff --git a/src/providers/ldap/ldap_id.c b/src/providers/ldap/ldap_id.c
+index 55bb3c9fbd6f623e7795d7399c9e5ac4d5192e85..c2686d249ddf5448c3589c4d8afe32caf09c90a4 100644
+--- a/src/providers/ldap/ldap_id.c
++++ b/src/providers/ldap/ldap_id.c
+@@ -1391,7 +1391,8 @@ sdap_handle_acct_req_send(TALLOC_CTX *mem_ctx,
+         break;
+ 
+     case BE_REQ_INITGROUPS: /* init groups for user */
+-        if (ar->filter_type != BE_FILTER_NAME) {
++        if (ar->filter_type != BE_FILTER_NAME
++                && ar->filter_type != BE_FILTER_SECID) {
+             ret = EINVAL;
+             state->err = "Invalid filter type";
+             goto done;
+@@ -1401,11 +1402,21 @@ sdap_handle_acct_req_send(TALLOC_CTX *mem_ctx,
+             state->err = "Invalid attr type";
+             goto done;
+         }
++        if (ar->filter_type == BE_FILTER_SECID && ar->extra_value != NULL
++                && strcmp(ar->extra_value, EXTRA_NAME_IS_SID) != 0) {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "Unexpected extra value [%s] for BE_FILTER_SECID.\n",
++                  ar->extra_value);
++            ret = EINVAL;
++            state->err = "Invalid extra value";
++            goto done;
++        }
+ 
+         subreq = groups_by_user_send(state, be_ctx->ev, id_ctx,
+                                      sdom, conn,
+                                      ar->filter_value,
+-                                     ar->extra_value,
++                                     (ar->filter_type == BE_FILTER_SECID)
++                                        ? EXTRA_NAME_IS_SID : ar->extra_value,
+                                      noexist_delete);
+         break;
+ 
+diff --git a/src/providers/ldap/sdap_async_initgroups.c b/src/providers/ldap/sdap_async_initgroups.c
+index ae617b9c4c6899d0b85dcc4c4b6b971d0f235b88..5c5be5eabd7006b457291062519cdad9626f13fa 100644
+--- a/src/providers/ldap/sdap_async_initgroups.c
++++ b/src/providers/ldap/sdap_async_initgroups.c
+@@ -2716,6 +2716,8 @@ struct tevent_req *sdap_get_initgr_send(TALLOC_CTX *memctx,
+ 
+     if (extra_value && strcmp(extra_value, EXTRA_NAME_IS_UPN) == 0) {
+         search_attr =  state->opts->user_map[SDAP_AT_USER_PRINC].name;
++    } else if (extra_value && strcmp(extra_value, EXTRA_NAME_IS_SID) == 0) {
++        search_attr =  state->opts->user_map[SDAP_AT_USER_OBJECTSID].name;
+     } else {
+         search_attr =  state->opts->user_map[SDAP_AT_USER_NAME].name;
+     }
+diff --git a/src/tests/sysdb-tests.c b/src/tests/sysdb-tests.c
+index 7c2c6d208127b0b6f9025435619b027246c6dd35..0185beeaf03d0fc72c9ead22bc73887c701d964f 100644
+--- a/src/tests/sysdb-tests.c
++++ b/src/tests/sysdb-tests.c
+@@ -3577,6 +3577,10 @@ START_TEST(test_sysdb_get_real_name)
+     ret = sysdb_attrs_add_string(user_attrs, SYSDB_UPN, "foo@bar");
+     fail_unless(ret == EOK, "sysdb_attrs_add_string failed.");
+ 
++    ret = sysdb_attrs_add_string(user_attrs, SYSDB_SID_STR,
++                                 "S-1-5-21-123-456-789-111");
++    fail_unless(ret == EOK, "sysdb_attrs_add_string failed.");
++
+     ret = sysdb_store_user(test_ctx->domain, "RealName",
+                            NULL, 22345, 0, "gecos",
+                            "/home/realname", "/bin/bash",
+@@ -3592,7 +3596,13 @@ START_TEST(test_sysdb_get_real_name)
+     ret = sysdb_get_real_name(test_ctx, test_ctx->domain, "foo@bar", &str);
+     fail_unless(ret == EOK, "sysdb_get_real_name failed.");
+     fail_unless(strcmp(str, "RealName") == 0, "Expected [%s], got [%s].",
+-                                              "foo@bar", str);
++                                              "RealName", str);
++
++    ret = sysdb_get_real_name(test_ctx, test_ctx->domain,
++                              "S-1-5-21-123-456-789-111", &str);
++    fail_unless(ret == EOK, "sysdb_get_real_name failed.");
++    fail_unless(strcmp(str, "RealName") == 0, "Expected [%s], got [%s].",
++                                              "RealName", str);
+ 
+ }
+ END_TEST
+-- 
+2.4.0
+

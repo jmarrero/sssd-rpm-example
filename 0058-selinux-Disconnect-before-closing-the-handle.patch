@@ -1,0 +1,70 @@
+From 816d3cc041e276b138057aacb81d1a2bfb25add6 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 10 Apr 2015 10:55:22 +0200
+Subject: [PATCH 58/99] selinux: Disconnect before closing the handle
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+libsemanage documentation says:
+~~~~
+be sure that a semanage_disconnect() was previously called if the handle
+was connected.
+~~~~
+
+Otherwise we get a memory leak.
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+(cherry picked from commit aa00d67b2a8e07c9080e7798defdc6c774c93465)
+---
+ src/util/sss_semanage.c | 13 ++++++++++---
+ 1 file changed, 10 insertions(+), 3 deletions(-)
+
+diff --git a/src/util/sss_semanage.c b/src/util/sss_semanage.c
+index b85831c3d3f262f49b19082e96aa62ccf3afeaa8..d141de1c671e6d62a731e56b10ee14069f27ae87 100644
+--- a/src/util/sss_semanage.c
++++ b/src/util/sss_semanage.c
+@@ -68,6 +68,13 @@ static void sss_semanage_error_callback(void *varg,
+     free(message);
+ }
+ 
++static void sss_semanage_close(semanage_handle_t *handle)
++{
++    /* Calling disconnect on a disconnected handle is safe */
++    semanage_disconnect(handle);
++    semanage_handle_destroy(handle);
++}
++
+ static semanage_handle_t *sss_semanage_init(void)
+ {
+     int ret;
+@@ -110,7 +117,7 @@ static semanage_handle_t *sss_semanage_init(void)
+ 
+     return handle;
+ fail:
+-    semanage_handle_destroy(handle);
++    sss_semanage_close(handle);
+     return NULL;
+ }
+ 
+@@ -278,7 +285,7 @@ int set_seuser(const char *login_name, const char *seuser_name,
+     ret = EOK;
+ done:
+     semanage_seuser_key_free(key);
+-    semanage_handle_destroy(handle);
++    sss_semanage_close(handle);
+     return ret;
+ }
+ 
+@@ -350,7 +357,7 @@ int del_seuser(const char *login_name)
+ 
+     ret = EOK;
+ done:
+-    semanage_handle_destroy(handle);
++    sss_semanage_close(handle);
+     return ret;
+ }
+ 
+-- 
+2.4.0
+

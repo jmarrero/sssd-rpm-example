@@ -1,0 +1,224 @@
+From 20b08bcfd6740316f528ca84d3a69be9a6535945 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Fri, 13 Feb 2015 13:16:04 +0100
+Subject: [PATCH 15/99] be_refresh: refresh all domains in backend
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit b0d3164ca2bd842e176268c26935c5ce54f7f76e)
+---
+ src/providers/dp_refresh.c        | 82 ++++++++++++++++++++++++---------------
+ src/providers/dp_refresh.h        |  1 +
+ src/providers/ldap/ldap_common.h  |  1 +
+ src/providers/ldap/sdap_refresh.c | 15 +++++--
+ 4 files changed, 64 insertions(+), 35 deletions(-)
+
+diff --git a/src/providers/dp_refresh.c b/src/providers/dp_refresh.c
+index 817b6213ca47bba3fa34ce28fdcd1621d349b651..bd02d0cd99f9a061109f0c17797c6e018d602dc5 100644
+--- a/src/providers/dp_refresh.c
++++ b/src/providers/dp_refresh.c
+@@ -117,6 +117,7 @@ typedef errno_t
+ 
+ 
+ struct be_refresh_cb {
++    const char *name;
+     bool enabled;
+     be_refresh_get_values_t get_values;
+     be_refresh_send_t send_fn;
+@@ -137,6 +138,7 @@ struct be_refresh_ctx *be_refresh_ctx_init(TALLOC_CTX *mem_ctx)
+         return NULL;
+     }
+ 
++    ctx->callbacks[BE_REFRESH_TYPE_NETGROUPS].name = "netgroups";
+     ctx->callbacks[BE_REFRESH_TYPE_NETGROUPS].get_values \
+         = be_refresh_get_netgroups;
+ 
+@@ -171,6 +173,8 @@ struct be_refresh_state {
+     struct be_ctx *be_ctx;
+     struct be_refresh_ctx *ctx;
+     struct be_refresh_cb *cb;
++
++    struct sss_domain_info *domain;
+     enum be_refresh_type index;
+     time_t period;
+ };
+@@ -197,6 +201,7 @@ struct tevent_req *be_refresh_send(TALLOC_CTX *mem_ctx,
+ 
+     state->ev = ev;
+     state->be_ctx = be_ctx;
++    state->domain = be_ctx->domain;
+     state->period = be_ptask_get_period(be_ptask);
+     state->ctx = talloc_get_type(pvt, struct be_refresh_ctx);
+     if (state->ctx == NULL) {
+@@ -235,47 +240,62 @@ static errno_t be_refresh_step(struct tevent_req *req)
+ 
+     state = tevent_req_data(req, struct be_refresh_state);
+ 
+-    state->cb = &state->ctx->callbacks[state->index];
+-    while (state->index != BE_REFRESH_TYPE_SENTINEL && !state->cb->enabled) {
+-        state->index++;
++    while (state->domain != NULL) {
++        /* find first enabled callback */
+         state->cb = &state->ctx->callbacks[state->index];
+-    }
++        while (state->index != BE_REFRESH_TYPE_SENTINEL && !state->cb->enabled) {
++            state->index++;
++            state->cb = &state->ctx->callbacks[state->index];
++        }
+ 
+-    if (state->index == BE_REFRESH_TYPE_SENTINEL) {
+-        ret = EOK;
+-        goto done;
+-    }
++        /* if not found than continue with next domain */
++        if (state->index == BE_REFRESH_TYPE_SENTINEL) {
++            state->domain = get_next_domain(state->domain, false);
++            continue;
++        }
+ 
+-    if (state->cb->get_values == NULL || state->cb->send_fn == NULL
+-        || state->cb->recv_fn == NULL) {
+-        ret = EINVAL;
+-        goto done;
+-    }
++        if (state->cb->get_values == NULL || state->cb->send_fn == NULL
++            || state->cb->recv_fn == NULL) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Invalid parameters!\n");
++            ret = ERR_INTERNAL;
++            goto done;
++        }
+ 
+-    ret = state->cb->get_values(state, state->be_ctx->domain, state->period,
+-                                &values);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to obtain DN list [%d]: %s\n",
+-                                    ret, sss_strerror(ret));
+-        goto done;
+-    }
++        ret = state->cb->get_values(state, state->domain, state->period,
++                                    &values);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to obtain DN list [%d]: %s\n",
++                                        ret, sss_strerror(ret));
++            goto done;
++        }
+ 
+-    subreq = state->cb->send_fn(state, state->ev, state->be_ctx,
+-                             values, state->cb->pvt);
+-    if (subreq == NULL) {
+-        ret = ENOMEM;
+-        goto done;
+-    }
++        DEBUG(SSSDBG_TRACE_FUNC, "Refreshing %s in domain %s\n",
++              state->cb->name, state->domain->name);
++
++        subreq = state->cb->send_fn(state, state->ev, state->be_ctx,
++                                    state->domain, values, state->cb->pvt);
++        if (subreq == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
+ 
+-    /* make the list disappear with subreq */
+-    talloc_steal(subreq, values);
++        /* make the list disappear with subreq */
++        talloc_steal(subreq, values);
+ 
+-    tevent_req_set_callback(subreq, be_refresh_done, req);
++        tevent_req_set_callback(subreq, be_refresh_done, req);
++
++        state->index++;
++        ret = EAGAIN;
++        goto done;
++    }
+ 
+-    state->index++;
+-    ret = EAGAIN;
++    ret = EOK;
+ 
+ done:
++    if (ret != EOK && ret != EAGAIN) {
++        talloc_free(values);
++    }
++
+     return ret;
+ }
+ 
+diff --git a/src/providers/dp_refresh.h b/src/providers/dp_refresh.h
+index 0c4d4a08e935b269f53867b0fe9946eabe521a4f..d7c775fff78455cc016a0419ee4b9b00ba8ec3f7 100644
+--- a/src/providers/dp_refresh.h
++++ b/src/providers/dp_refresh.h
+@@ -36,6 +36,7 @@ typedef struct tevent_req *
+ (*be_refresh_send_t)(TALLOC_CTX *mem_ctx,
+                      struct tevent_context *ev,
+                      struct be_ctx *be_ctx,
++                     struct sss_domain_info *domain,
+                      char **values,
+                      void *pvt);
+ 
+diff --git a/src/providers/ldap/ldap_common.h b/src/providers/ldap/ldap_common.h
+index 889d5b118861e4ea3f51ab8a8ea5c5947e2560b9..c377b7c2a5303c5b1cd53778b17b249b7dd38080 100644
+--- a/src/providers/ldap/ldap_common.h
++++ b/src/providers/ldap/ldap_common.h
+@@ -327,6 +327,7 @@ sdap_id_ctx_new(TALLOC_CTX *mem_ctx, struct be_ctx *bectx,
+ struct tevent_req *sdap_refresh_netgroups_send(TALLOC_CTX *mem_ctx,
+                                                struct tevent_context *ev,
+                                                struct be_ctx *be_ctx,
++                                               struct sss_domain_info *domain,
+                                                char **names,
+                                                void *pvt);
+ 
+diff --git a/src/providers/ldap/sdap_refresh.c b/src/providers/ldap/sdap_refresh.c
+index fb2dbc781d9faa7e218339aa3ef0424e9bd59d7d..0b9753ee5b5de45c09eec7025f2f70c51d72ecde 100644
+--- a/src/providers/ldap/sdap_refresh.c
++++ b/src/providers/ldap/sdap_refresh.c
+@@ -27,6 +27,7 @@
+ struct sdap_refresh_netgroups_state {
+     struct tevent_context *ev;
+     struct sdap_id_ctx *id_ctx;
++    struct sdap_domain *sdom;
+     char **names;
+     size_t index;
+ };
+@@ -37,6 +38,7 @@ static void sdap_refresh_netgroups_done(struct tevent_req *subreq);
+ struct tevent_req *sdap_refresh_netgroups_send(TALLOC_CTX *mem_ctx,
+                                                struct tevent_context *ev,
+                                                struct be_ctx *be_ctx,
++                                               struct sss_domain_info *domain,
+                                                char **names,
+                                                void *pvt)
+ {
+@@ -51,13 +53,19 @@ struct tevent_req *sdap_refresh_netgroups_send(TALLOC_CTX *mem_ctx,
+         return NULL;
+     }
+ 
++    if (names == NULL) {
++        ret = EOK;
++        goto immediately;
++    }
++
+     state->ev = ev;
+     state->id_ctx = talloc_get_type(pvt, struct sdap_id_ctx);
+     state->names = names;
+     state->index = 0;
+ 
+-    if (names == NULL) {
+-        ret = EOK;
++    state->sdom = sdap_domain_get(state->id_ctx->opts, domain);
++    if (state->sdom == NULL) {
++        ret = ERR_DOMAIN_NOT_FOUND;
+         goto immediately;
+     }
+ 
+@@ -107,8 +115,7 @@ static errno_t sdap_refresh_netgroups_step(struct tevent_req *req)
+     DEBUG(SSSDBG_TRACE_FUNC, "Issuing refresh of netgroup %s\n", name);
+ 
+     subreq = ldap_netgroup_get_send(state, state->ev, state->id_ctx,
+-                                    state->id_ctx->opts->sdom,
+-                                    state->id_ctx->conn,
++                                    state->sdom, state->id_ctx->conn,
+                                     name, true);
+     if (subreq == NULL) {
+         ret = ENOMEM;
+-- 
+2.4.0
+

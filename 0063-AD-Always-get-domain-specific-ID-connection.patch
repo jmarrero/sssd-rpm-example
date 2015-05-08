@@ -1,0 +1,69 @@
+From 89a706acf3131bbe8c0aefa9c740dd44e892754f Mon Sep 17 00:00:00 2001
+From: Stephen Gallagher <sgallagh@redhat.com>
+Date: Tue, 14 Apr 2015 21:50:36 -0400
+Subject: [PATCH 63/99] AD: Always get domain-specific ID connection
+
+ad_get_dom_ldap_conn() assumed that ad_ctx->ldap_ctx always points at
+the LDAP connection for the primary domain, however it turns out that
+this is not always the case. It's currently unclear why, but this
+connection can sometimes be pointing at a subdomain. Since the value of
+subdom_id_ctx->ldap_ctx always points to the correct domain (including
+the primary domain case), there's no benefit to trying to shortcut to
+the ad_ctx->ldap_ctx when performing this lookup.
+
+This patch also makes a minor tweak to the tests so that the primary
+domain passes the sdap_domain_get() check for validity (since it needs
+to have a private member assigned).
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit e2bd4f8a41b72aea0712ad21ad02ccebb707f536)
+---
+ src/providers/ad/ad_common.c      | 18 +++++++-----------
+ src/tests/cmocka/test_ad_common.c |  1 +
+ 2 files changed, 8 insertions(+), 11 deletions(-)
+
+diff --git a/src/providers/ad/ad_common.c b/src/providers/ad/ad_common.c
+index 120878977d08aab04bbd9e3cf87a00a4b018b6e4..5eeb8dd74d1df89a1a0afa50560b8341b0088778 100644
+--- a/src/providers/ad/ad_common.c
++++ b/src/providers/ad/ad_common.c
+@@ -1140,18 +1140,14 @@ ad_get_dom_ldap_conn(struct ad_id_ctx *ad_ctx, struct sss_domain_info *dom)
+     struct sdap_domain *sdom;
+     struct ad_id_ctx *subdom_id_ctx;
+ 
+-    if (IS_SUBDOMAIN(dom)) {
+-        sdom = sdap_domain_get(ad_ctx->sdap_id_ctx->opts, dom);
+-        if (sdom == NULL || sdom->pvt == NULL) {
+-            DEBUG(SSSDBG_CRIT_FAILURE, "No ID ctx available for [%s].\n",
+-                                        dom->name);
+-            return NULL;
+-        }
+-        subdom_id_ctx = talloc_get_type(sdom->pvt, struct ad_id_ctx);
+-        conn = subdom_id_ctx->ldap_ctx;
+-    } else {
+-        conn = ad_ctx->ldap_ctx;
++    sdom = sdap_domain_get(ad_ctx->sdap_id_ctx->opts, dom);
++    if (sdom == NULL || sdom->pvt == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "No ID ctx available for [%s].\n",
++                                    dom->name);
++        return NULL;
+     }
++    subdom_id_ctx = talloc_get_type(sdom->pvt, struct ad_id_ctx);
++    conn = subdom_id_ctx->ldap_ctx;
+ 
+     return conn;
+ }
+diff --git a/src/tests/cmocka/test_ad_common.c b/src/tests/cmocka/test_ad_common.c
+index 19a4d395ba3fc4eae6601b3ad7056c41384a5c4f..1c44bc34b9350c4c7bca1dfb3fedd3184d7f14f2 100644
+--- a/src/tests/cmocka/test_ad_common.c
++++ b/src/tests/cmocka/test_ad_common.c
+@@ -94,6 +94,7 @@ ad_common_test_setup(void **state)
+ 
+     ret = sdap_domain_add(ad_ctx->sdap_id_ctx->opts, test_ctx->dom, &sdom);
+     assert_int_equal(ret, EOK);
++    sdom->pvt = ad_ctx;
+ 
+     subdom_ad_ctx = talloc_zero(test_ctx, struct ad_id_ctx);
+     assert_non_null(subdom_ad_ctx);
+-- 
+2.4.0
+

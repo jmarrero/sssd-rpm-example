@@ -1,0 +1,86 @@
+From ecbcf8d863aa8888bc3ee7b642ba9a82d8015a08 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 9 Feb 2015 19:19:55 +0100
+Subject: [PATCH 88/99] UTIL: Remove python wrapper sss_python_set_new
+
+The function PySet_New is available in python >= 2.6
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ src/external/python.m4 |  2 +-
+ src/python/pyhbac.c    |  4 ++--
+ src/util/sss_python.c  | 10 ----------
+ src/util/sss_python.h  |  1 -
+ 4 files changed, 3 insertions(+), 14 deletions(-)
+
+diff --git a/src/external/python.m4 b/src/external/python.m4
+index 858af3c197603fcda100eddcffc396dad674a9e6..440d2f97740e43c31c9a530daecb7c5ded92a0dd 100644
+--- a/src/external/python.m4
++++ b/src/external/python.m4
+@@ -62,7 +62,7 @@ AC_DEFUN([AM_CHECK_PYTHON_COMPAT],
+     CPPFLAGS="$CPPFLAGS $PYTHON_INCLUDES"
+     LIBS="$LIBS $PYTHON_LIBS"
+ 
+-    AC_CHECK_FUNCS([PySet_New PySet_Add PyErr_NewExceptionWithDoc])
++    AC_CHECK_FUNCS([PySet_Add PyErr_NewExceptionWithDoc])
+     AC_CHECK_DECLS([PySet_Check, PyModule_AddIntMacro, PyUnicode_FromString], [], [], [[#include <Python.h>]])
+ 
+     CPPFLAGS="$save_CPPFLAGS"
+diff --git a/src/python/pyhbac.c b/src/python/pyhbac.c
+index c46f7c6b300df9eb82fa411673da3d77504080cd..58d906d138464c9f25e6b513ad41b985b510baa2 100644
+--- a/src/python/pyhbac.c
++++ b/src/python/pyhbac.c
+@@ -303,7 +303,7 @@ HbacRuleElement_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+         return NULL;
+     }
+ 
+-    self->category = sss_python_set_new();
++    self->category = PySet_New(NULL);
+     self->names = PyList_New(0);
+     self->groups = PyList_New(0);
+     if (!self->names || !self->groups || !self->category) {
+@@ -945,7 +945,7 @@ py_hbac_rule_validate(HbacRuleObject *self, PyObject *args)
+     }
+ 
+     py_is_valid = PyBool_FromLong(is_valid);
+-    py_missing = sss_python_set_new();
++    py_missing = PySet_New(NULL);
+     if (!py_missing || !py_is_valid) {
+         PyErr_NoMemory();
+         goto fail;
+diff --git a/src/util/sss_python.c b/src/util/sss_python.c
+index 19717a55c986b6831234addfbf91a529d652f592..dad2a46d86f4243fb4a2d1fad94e49f66db23f0c 100644
+--- a/src/util/sss_python.c
++++ b/src/util/sss_python.c
+@@ -21,16 +21,6 @@
+ #include "src/util/sss_python.h"
+ #include "config.h"
+ 
+-PyObject *
+-sss_python_set_new(void)
+-{
+-#ifdef HAVE_PYSET_NEW
+-    return PySet_New(NULL);
+-#else
+-    return PyObject_CallObject((PyObject *) &PySet_Type, NULL);
+-#endif
+-}
+-
+ int
+ sss_python_set_add(PyObject *set, PyObject *key)
+ {
+diff --git a/src/util/sss_python.h b/src/util/sss_python.h
+index cf8c848482d82e0060cbfe748c05bd09c7492c4f..6851a64e816ccf3bb84321bbeb9946ad2fbfbc41 100644
+--- a/src/util/sss_python.h
++++ b/src/util/sss_python.h
+@@ -26,7 +26,6 @@
+ #endif
+ 
+ /* Wrappers providing the subset of C API for python's set objects we use */
+-PyObject *sss_python_set_new(void);
+ int sss_python_set_add(PyObject *set, PyObject *key);
+ bool sss_python_set_check(PyObject *set);
+ 
+-- 
+2.4.0
+

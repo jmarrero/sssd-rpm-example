@@ -1,0 +1,61 @@
+From 226224c91971247f60a86d9c46dd1402f5c29e8a Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Fri, 17 Apr 2015 18:22:10 +0200
+Subject: [PATCH 81/99] IPA: do not add domain name unconditionally
+
+Depending on the server-side configuration the extdom plugin can return
+short or fully qualified names for IPA objects. The client must handle
+the names according to its own configuration and not add the domain part
+of the fully-qualified name unconditionally.
+
+Resolves https://fedorahosted.org/sssd/ticket/2647
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 3fe2e555edd3963d72483600e5d9616873afd00a)
+---
+ src/providers/ipa/ipa_s2n_exop.c | 2 ++
+ src/tests/cmocka/test_utils.c    | 1 +
+ src/util/domain_info_utils.c     | 2 +-
+ 3 files changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index daebd68853c2d8671b752edb8f2639f795093014..fa00691af579659905e43e71503bd36bf0415bad 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -1724,6 +1724,8 @@ static errno_t get_groups_dns(TALLOC_CTX *mem_ctx, struct sss_domain_info *dom,
+             ret = ENOMEM;
+             goto done;
+         }
++
++        DEBUG(SSSDBG_TRACE_ALL, "Added [%s][%s].\n", name_list[c], dn_list[c]);
+     }
+ 
+     *_dn_list = talloc_steal(mem_ctx, dn_list);
+diff --git a/src/tests/cmocka/test_utils.c b/src/tests/cmocka/test_utils.c
+index 4cc6ec85add6bb8f9ae17ddc9af38b0316c9d49f..933e7cd462c11c8ff0f048ec434c8a45f5827e0c 100644
+--- a/src/tests/cmocka/test_utils.c
++++ b/src/tests/cmocka/test_utils.c
+@@ -1063,6 +1063,7 @@ void test_fix_domain_in_name_list(void **state)
+     sd->name = talloc_strdup(sd, "TesT.CasE.DoM");
+     assert_non_null(sd->name);
+     sd->names = dom->names;
++    sd->fqnames = true;
+     DLIST_ADD(dom->subdomains, sd);
+     sd->parent = dom;
+ 
+diff --git a/src/util/domain_info_utils.c b/src/util/domain_info_utils.c
+index e76c1cefb49334bf70ef9709b3986134f7ef565c..9fb2110eb34c7e7f5d9933f1aabed43970be1149 100644
+--- a/src/util/domain_info_utils.c
++++ b/src/util/domain_info_utils.c
+@@ -831,7 +831,7 @@ errno_t fix_domain_in_name_list(TALLOC_CTX *mem_ctx,
+                 goto done;
+             }
+ 
+-            out[c] = sss_tc_fqname(out, head->names, out_domain, in_name);
++            out[c] = sss_get_domain_name(out, in_name, out_domain);
+         }
+ 
+         if (out[c] == NULL) {
+-- 
+2.4.0
+

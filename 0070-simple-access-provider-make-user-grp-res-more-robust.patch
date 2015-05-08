@@ -1,0 +1,117 @@
+From 45a089a7bcf54e27fb46dc1a2c08c21ac07db96a Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Mon, 20 Apr 2015 11:33:29 -0400
+Subject: [PATCH 70/99] simple-access-provider: make user grp res more robust
+
+Not all user groups need to be resolved if group deny list is empty.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2519
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 82a958e6592c4a4078e45b7197bbe4751b70f511)
+---
+ src/providers/simple/simple_access_check.c | 26 ++++++++++++++++++++++----
+ src/util/util_errors.c                     |  1 +
+ src/util/util_errors.h                     |  1 +
+ 3 files changed, 24 insertions(+), 4 deletions(-)
+
+diff --git a/src/providers/simple/simple_access_check.c b/src/providers/simple/simple_access_check.c
+index c8217f6d4ef2560931d3151276085eb2a6028be5..14d833be2bccda9ded3b04b881b09fd0be6684bf 100644
+--- a/src/providers/simple/simple_access_check.c
++++ b/src/providers/simple/simple_access_check.c
+@@ -395,6 +395,8 @@ struct simple_check_groups_state {
+ 
+     const char **group_names;
+     size_t num_names;
++
++    bool failed_to_resolve_groups;
+ };
+ 
+ static void simple_check_get_groups_next(struct tevent_req *subreq);
+@@ -430,6 +432,7 @@ simple_check_get_groups_send(TALLOC_CTX *mem_ctx,
+ 
+     state->ev = ev;
+     state->ctx = ctx;
++    state->failed_to_resolve_groups = false;
+ 
+     DEBUG(SSSDBG_TRACE_LIBS, "Looking up groups for user %s\n", username);
+ 
+@@ -548,11 +551,10 @@ static void simple_check_get_groups_next(struct tevent_req *subreq)
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Could not resolve name of group with GID %"SPRIgid"\n",
+               state->lookup_groups[state->giter].gid);
+-        tevent_req_error(req, ret);
+-        return;
++        state->failed_to_resolve_groups = true;
++    } else {
++        state->num_names++;
+     }
+-
+-    state->num_names++;
+     state->giter++;
+ 
+     if (state->giter < state->num_groups) {
+@@ -686,6 +688,9 @@ simple_check_get_groups_recv(struct tevent_req *req,
+     TEVENT_REQ_RETURN_ON_ERROR(req);
+ 
+     *_group_names = talloc_steal(mem_ctx, state->group_names);
++    if (state->failed_to_resolve_groups) {
++        return ERR_SIMPLE_GROUPS_MISSING;
++    }
+     return EOK;
+ }
+ 
+@@ -775,12 +780,25 @@ static void simple_access_check_done(struct tevent_req *subreq)
+ 
+     /* We know the names now. Run the check. */
+     ret = simple_check_get_groups_recv(subreq, state, &state->group_names);
++
+     talloc_zfree(subreq);
+     if (ret == ENOENT) {
+         /* If the user wasn't found, just shortcut */
+         state->access_granted = false;
+         tevent_req_done(req);
+         return;
++    } else if (ret == ERR_SIMPLE_GROUPS_MISSING) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Could not collect groups of user %s\n", state->username);
++        if (state->ctx->deny_groups == NULL) {
++            DEBUG(SSSDBG_TRACE_FUNC,
++                  "But no deny groups were defined so we can continue.\n");
++        } else {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "Some deny groups were defined, we can't continue\n");
++            tevent_req_error(req, ret);
++            return;
++        }
+     } else if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Could not collect groups of user %s\n", state->username);
+diff --git a/src/util/util_errors.c b/src/util/util_errors.c
+index b481210aa21e05eda3a4c5b0699836d085baa892..4f9a2e7001695e0babe8342c497480b325f3322a 100644
+--- a/src/util/util_errors.c
++++ b/src/util/util_errors.c
+@@ -71,6 +71,7 @@ struct err_string error_to_str[] = {
+     { "Time specification not supported" }, /* ERR_TIMESPEC_NOT_SUPPORTED */
+     { "Malformed cache entry" }, /* ERR_MALFORMED_ENTRY */
+     { "Unexpected cache entry type" }, /* ERR_UNEXPECTED_ENTRY_TYPE */
++    { "Failed to resolve one of user groups." }, /* ERR_SIMPLE_GROUPS_MISSING */
+     { "ERR_LAST" } /* ERR_LAST */
+ };
+ 
+diff --git a/src/util/util_errors.h b/src/util/util_errors.h
+index b6a667fffbbddc77de53e501e185defbd30b23e0..5842a71550a7d14342f976c69f117f41bee1f531 100644
+--- a/src/util/util_errors.h
++++ b/src/util/util_errors.h
+@@ -93,6 +93,7 @@ enum sssd_errors {
+     ERR_TIMESPEC_NOT_SUPPORTED,
+     ERR_MALFORMED_ENTRY,
+     ERR_UNEXPECTED_ENTRY_TYPE,
++    ERR_SIMPLE_GROUPS_MISSING,
+     ERR_LAST            /* ALWAYS LAST */
+ };
+ 
+-- 
+2.4.0
+

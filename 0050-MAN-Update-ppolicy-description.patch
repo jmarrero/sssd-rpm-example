@@ -1,0 +1,40 @@
+From b025247b620206d31917cd5fb40943b1f2c55201 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Thu, 26 Mar 2015 12:38:32 -0400
+Subject: [PATCH 50/99] MAN: Update ppolicy description
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2612
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+(cherry picked from commit 1426ee8756a1df4ec0651417dce92e1dcc8a246d)
+---
+ src/man/sssd-ldap.5.xml | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/src/man/sssd-ldap.5.xml b/src/man/sssd-ldap.5.xml
+index 00da3964af7619f19525e76c4f1292586dd60f54..7de0faef29b3112383a7f7863912b542a6c5e1ca 100644
+--- a/src/man/sssd-ldap.5.xml
++++ b/src/man/sssd-ldap.5.xml
+@@ -1959,11 +1959,14 @@ ldap_access_filter = (employeeType=admin)
+                             If set, this option denies access in case that ldap
+                             attribute 'pwdAccountLockedTime' is present and has
+                             value of '000001010000Z' or represents any time in the past.
+-                            The value of 'pwdAccountLockedTime' attribute
+-                            must end with 'Z' as only UTC time zone is
+-                            currently suported. Please see the option
+-                            ldap_pwdlockout_dn.
+ 
++                            The value of the 'pwdAccountLockedTime' attribute
++                            must end with 'Z', which denotes the UTC time zone.
++                            Other time zones are not currently supported and
++                            will result in "access-denied" when users attempt
++                            to log in.
++
++                            Please see the option ldap_pwdlockout_dn.
+                             Please note that 'access_provider = ldap' must
+                             be set for this feature to work.
+                         </para>
+-- 
+2.4.0
+

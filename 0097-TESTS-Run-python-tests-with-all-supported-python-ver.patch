@@ -1,0 +1,146 @@
+From 9240213bf2bf604bdd2cf9a91fb410326865805f Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 23 Feb 2015 22:56:55 +0100
+Subject: [PATCH 97/99] TESTS: Run python tests with all supported python
+ versions
+
+This patch add simple bash wrappers for python tests.
+They are executed either with python2 or python3.
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ Makefile.am                        | 23 ++++++++++++++++++-----
+ src/config/SSSDConfigTest.py2.sh   |  5 +++++
+ src/config/SSSDConfigTest.py3.sh   |  5 +++++
+ src/tests/pyhbac-test.py2.sh       |  5 +++++
+ src/tests/pyhbac-test.py3.sh       |  5 +++++
+ src/tests/pysss_murmur-test.py2.sh |  5 +++++
+ src/tests/pysss_murmur-test.py3.sh |  5 +++++
+ 7 files changed, 48 insertions(+), 5 deletions(-)
+ create mode 100755 src/config/SSSDConfigTest.py2.sh
+ create mode 100755 src/config/SSSDConfigTest.py3.sh
+ create mode 100755 src/tests/pyhbac-test.py2.sh
+ create mode 100755 src/tests/pyhbac-test.py3.sh
+ create mode 100755 src/tests/pysss_murmur-test.py2.sh
+ create mode 100755 src/tests/pysss_murmur-test.py3.sh
+
+diff --git a/Makefile.am b/Makefile.am
+index 027d627586aad212ce7f62d6e6b01b7da2ea2126..99729ff6041a29dc79de7f90511d60420af8fd19 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -250,13 +250,20 @@ endif # HAVE_CMOCKA
+ 
+ PYTHON_TESTS =
+ 
+-if BUILD_PYTHON_BINDINGS
+-PYTHON_TESTS += src/config/SSSDConfigTest.py \
+-                src/tests/pyhbac-test.py \
+-                src/tests/pysss_murmur-test.py
++if BUILD_PYTHON2_BINDINGS
++PYTHON_TESTS += src/config/SSSDConfigTest.py2.sh \
++                src/tests/pyhbac-test.py2.sh \
++                src/tests/pysss_murmur-test.py2.sh \
++                $(NULL)
++endif
++if BUILD_PYTHON3_BINDINGS
++PYTHON_TESTS += src/config/SSSDConfigTest.py3.sh \
++                src/tests/pyhbac-test.py3.sh \
++                src/tests/pysss_murmur-test.py3.sh \
++                $(NULL)
+ endif
+ 
+-TEST_EXTENSIONS = .py
++TEST_EXTENSIONS = .sh
+ TESTS = \
+     $(PYTHON_TESTS) \
+     $(non_interactive_cmocka_based_tests) \
+@@ -325,6 +332,8 @@ dist_noinst_SCRIPTS = \
+     src/config/SSSDConfig/ipachangeconf.py \
+     src/config/SSSDConfig/__init__.py \
+     src/config/SSSDConfigTest.py \
++    src/config/SSSDConfigTest.py2.sh \
++    src/config/SSSDConfigTest.py3.sh \
+     src/config/SSSDConfig/sssd_upgrade_config.py \
+     contrib/rhel/update_debug_levels.py \
+     contrib/fedora/bashrc_sssd \
+@@ -335,7 +344,11 @@ dist_noinst_SCRIPTS = \
+     contrib/ci/run \
+     contrib/ci/valgrind-condense \
+     src/tests/pyhbac-test.py \
++    src/tests/pyhbac-test.py2.sh \
++    src/tests/pyhbac-test.py3.sh \
+     src/tests/pysss_murmur-test.py \
++    src/tests/pysss_murmur-test.py2.sh \
++    src/tests/pysss_murmur-test.py3.sh \
+     src/tests/python-test.py \
+     $(NULL)
+ 
+diff --git a/src/config/SSSDConfigTest.py2.sh b/src/config/SSSDConfigTest.py2.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..7bbd82af3997b295d48f8ea6d1d59afd5eaba43f
+--- /dev/null
++++ b/src/config/SSSDConfigTest.py2.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++
++SCRIPT=$(readlink -f "$0")
++SCRIPT_PATH=$(dirname "$SCRIPT")
++exec python2 $SCRIPT_PATH/SSSDConfigTest.py
+diff --git a/src/config/SSSDConfigTest.py3.sh b/src/config/SSSDConfigTest.py3.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..89b9f0720473904fe093ee4c065ae01579ee94ef
+--- /dev/null
++++ b/src/config/SSSDConfigTest.py3.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++
++SCRIPT=$(readlink -f "$0")
++SCRIPT_PATH=$(dirname "$SCRIPT")
++exec python3 $SCRIPT_PATH/SSSDConfigTest.py
+diff --git a/src/tests/pyhbac-test.py2.sh b/src/tests/pyhbac-test.py2.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..48cd16908eaf9cf2c61f8e5fda1d954f116c68cc
+--- /dev/null
++++ b/src/tests/pyhbac-test.py2.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++
++SCRIPT=$(readlink -f "$0")
++SCRIPT_PATH=$(dirname "$SCRIPT")
++exec python2 $SCRIPT_PATH/pyhbac-test.py
+diff --git a/src/tests/pyhbac-test.py3.sh b/src/tests/pyhbac-test.py3.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..862c7b23a87ea9d0b747dca12466175f0fd00b76
+--- /dev/null
++++ b/src/tests/pyhbac-test.py3.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++
++SCRIPT=$(readlink -f "$0")
++SCRIPT_PATH=$(dirname "$SCRIPT")
++exec python3 $SCRIPT_PATH/pyhbac-test.py
+diff --git a/src/tests/pysss_murmur-test.py2.sh b/src/tests/pysss_murmur-test.py2.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..714459786c19b69f738e91df77d9423eba2b72fd
+--- /dev/null
++++ b/src/tests/pysss_murmur-test.py2.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++
++SCRIPT=$(readlink -f "$0")
++SCRIPT_PATH=$(dirname "$SCRIPT")
++exec python2 $SCRIPT_PATH/pysss_murmur-test.py
+diff --git a/src/tests/pysss_murmur-test.py3.sh b/src/tests/pysss_murmur-test.py3.sh
+new file mode 100755
+index 0000000000000000000000000000000000000000..00b352ad3e15ba7d53885b86129bf76ede7ca4e6
+--- /dev/null
++++ b/src/tests/pysss_murmur-test.py3.sh
+@@ -0,0 +1,5 @@
++#!/bin/sh
++
++SCRIPT=$(readlink -f "$0")
++SCRIPT_PATH=$(dirname "$SCRIPT")
++exec python3 $SCRIPT_PATH/pysss_murmur-test.py
+-- 
+2.4.0
+

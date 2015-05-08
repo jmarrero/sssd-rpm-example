@@ -1,0 +1,76 @@
+From 9e030a229277cfb598fd80e861e6bb0b7cfdec9c Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 7 Apr 2015 10:53:12 +0200
+Subject: [PATCH 51/99] CLIENT: Clear errno with enabled sss-default-nss-plugin
+
+Although errno was cleared in function sss_nss_make_request
+some sss glic functions set errno with value of output argument errnop.
+
+Reproducer:
+* sssd compiled with enabled option sss-default-nss-plugin
+* sss is the last value in group (/etc/nsswitch.conf)
+* sssd-client is installed but sssd is stopped.
+
+C-program:
+  #include <stdio.h>
+  #include <stdlib.h>
+  #include <errno.h>
+  #include <grp.h>
+
+  int main(int argc, char *argv[])
+  {
+      struct group *p_group;
+
+      setgrent();
+      while (1) {
+          errno = 0;  /* initialize for  getgrent() */
+          p_group = getgrent();
+          if (p_group == NULL) {
+              if (errno == 0) {
+                      break;   /* end of groups */
+              } else {
+                  perror("getgrent");
+                  printf("getgrent error %d \n", errno);
+                  endgrent();
+                  exit(-2);
+              }
+          }
+          printf("getgrent() OK group(%d) = %s \n",
+                 p_group->gr_gid, p_group->gr_name);
+      }
+
+      exit(0);
+  }
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2619
+
+Reviewed-by: Pavel Reichl <preichl@redhat.com>
+(cherry picked from commit d51bc5f43fffa516446ef62c2b860be9fa939c9d)
+---
+ src/sss_client/common.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/sss_client/common.c b/src/sss_client/common.c
+index 1b0fb1223f3509ef0b5aaf4a53851b868e12d6f0..383572bada613e745ed198de2260a7fd27e43544 100644
+--- a/src/sss_client/common.c
++++ b/src/sss_client/common.c
+@@ -725,6 +725,7 @@ enum nss_status sss_nss_make_request(enum sss_cli_command cmd,
+     ret = sss_cli_check_socket(errnop, SSS_NSS_SOCKET_NAME);
+     if (ret != SSS_STATUS_SUCCESS) {
+ #ifdef NONSTANDARD_SSS_NSS_BEHAVIOUR
++        *errnop = 0;
+         errno = 0;
+         return NSS_STATUS_NOTFOUND;
+ #else
+@@ -741,6 +742,7 @@ enum nss_status sss_nss_make_request(enum sss_cli_command cmd,
+     case SSS_STATUS_UNAVAIL:
+     default:
+ #ifdef NONSTANDARD_SSS_NSS_BEHAVIOUR
++        *errnop = 0;
+         errno = 0;
+         return NSS_STATUS_NOTFOUND;
+ #else
+-- 
+2.4.0
+

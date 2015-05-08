@@ -1,0 +1,239 @@
+From bdd031d274659263db5f28408d8b75c63d3485a0 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 13 Apr 2015 09:44:35 +0200
+Subject: [PATCH 56/99] SDAP: Extract filtering AD group to function
+
+Patch remove code duplication.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit bad2fc8133d941e5a6c8d8016c9689e039265c61)
+---
+ Makefile.am                                   |  2 +
+ src/providers/ldap/sdap_ad_groups.c           | 68 +++++++++++++++++++++++++++
+ src/providers/ldap/sdap_async_groups.c        | 40 ++++++----------
+ src/providers/ldap/sdap_async_nested_groups.c | 31 ++++--------
+ src/providers/ldap/sdap_async_private.h       |  7 +++
+ 5 files changed, 101 insertions(+), 47 deletions(-)
+ create mode 100644 src/providers/ldap/sdap_ad_groups.c
+
+diff --git a/Makefile.am b/Makefile.am
+index df34840747bdcc3e2cc68ac1a3ca448b4aa67433..973f8cb35d75982c1b66f94af96a9e4cfe39d467 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1886,6 +1886,7 @@ nestedgroups_tests_SOURCES = \
+     src/providers/ldap/sdap_idmap.c \
+     src/tests/cmocka/test_nested_groups.c \
+     src/providers/ldap/sdap_async_nested_groups.c \
++    src/providers/ldap/sdap_ad_groups.c \
+     $(NULL)
+ nestedgroups_tests_CFLAGS = \
+     $(AM_CFLAGS) \
+@@ -2412,6 +2413,7 @@ libsss_ldap_common_la_SOURCES = \
+     src/providers/ldap/sdap_async_connection.c \
+     src/providers/ldap/sdap_async_netgroups.c \
+     src/providers/ldap/sdap_async_services.c \
++    src/providers/ldap/sdap_ad_groups.c \
+     src/providers/ldap/sdap_child_helpers.c \
+     src/providers/ldap/sdap_fd_events.c \
+     src/providers/ldap/sdap_id_op.c \
+diff --git a/src/providers/ldap/sdap_ad_groups.c b/src/providers/ldap/sdap_ad_groups.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..0e36328b9b52643a2ec698b2a41f2a56a8ff69b6
+--- /dev/null
++++ b/src/providers/ldap/sdap_ad_groups.c
+@@ -0,0 +1,68 @@
++/*
++    SSSD
++
++    AD groups helper routines
++
++    Authors:
++        Lukas Slebodnik <lslebodn@redhat.com>
++
++    Copyright (C) 2013 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "db/sysdb.h"
++#include "providers/ldap/sdap.h"
++#include "providers/ldap/sdap_async_private.h"
++
++/* ==Group-Parsing Routines=============================================== */
++
++errno_t sdap_check_ad_group_type(struct sss_domain_info *dom,
++                                 struct sdap_options *opts,
++                                 struct sysdb_attrs *group_attrs,
++                                 const char *group_name,
++                                 bool *_need_filter)
++{
++    int32_t ad_group_type;
++    errno_t ret = EOK;
++    *_need_filter = false;
++
++    if (opts->schema_type == SDAP_SCHEMA_AD) {
++        ret = sysdb_attrs_get_int32_t(group_attrs, SYSDB_GROUP_TYPE,
++                                      &ad_group_type);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_get_int32_t failed.\n");
++            return ret;
++        }
++
++        DEBUG(SSSDBG_TRACE_ALL,
++              "AD group [%s] has type flags %#x.\n",
++              group_name, ad_group_type);
++
++        /* Only security groups from AD are considered for POSIX groups.
++         * Additionally only global and universal group are taken to account
++         * for trusted domains. */
++        if (!(ad_group_type & SDAP_AD_GROUP_TYPE_SECURITY)
++            || (IS_SUBDOMAIN(dom)
++                && (!((ad_group_type & SDAP_AD_GROUP_TYPE_GLOBAL)
++                      || (ad_group_type & SDAP_AD_GROUP_TYPE_UNIVERSAL))))) {
++            DEBUG(SSSDBG_TRACE_FUNC,
++                  "Filtering AD group [%s].\n", group_name);
++
++            *_need_filter = true;
++        }
++    }
++
++    return ret;
++}
+diff --git a/src/providers/ldap/sdap_async_groups.c b/src/providers/ldap/sdap_async_groups.c
+index 454d302eabf32e0837a7a4ba03063a360524b412..fb1912d2b4fae1bdaf5f94d8f72c8f8deca2b17f 100644
+--- a/src/providers/ldap/sdap_async_groups.c
++++ b/src/providers/ldap/sdap_async_groups.c
+@@ -510,9 +510,9 @@ static int sdap_save_group(TALLOC_CTX *memctx,
+     TALLOC_CTX *tmpctx = NULL;
+     bool posix_group;
+     bool use_id_mapping;
++    bool need_filter;
+     char *sid_str;
+     struct sss_domain_info *subdomain;
+-    int32_t ad_group_type;
+ 
+     tmpctx = talloc_new(NULL);
+     if (!tmpctx) {
+@@ -579,32 +579,20 @@ static int sdap_save_group(TALLOC_CTX *memctx,
+     DEBUG(SSSDBG_TRACE_FUNC, "Processing group %s\n", group_name);
+ 
+     posix_group = true;
+-    if (opts->schema_type == SDAP_SCHEMA_AD) {
+-        ret = sysdb_attrs_get_int32_t(attrs, SYSDB_GROUP_TYPE, &ad_group_type);
+-        if (ret != EOK) {
+-            DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_get_int32_t failed.\n");
+-            goto done;
+-        }
++    ret = sdap_check_ad_group_type(dom, opts, attrs, group_name,
++                                   &need_filter);
++    if (ret != EOK) {
++        goto done;
++    }
++    if (need_filter) {
++        posix_group = false;
++        gid = 0;
+ 
+-        DEBUG(SSSDBG_TRACE_ALL, "AD group [%s] has type flags %#x.\n",
+-                                 group_name, ad_group_type);
+-        /* Only security groups from AD are considered for POSIX groups.
+-         * Additionally only global and universal group are taken to account
+-         * for trusted domains. */
+-        if (!(ad_group_type & SDAP_AD_GROUP_TYPE_SECURITY)
+-                || (IS_SUBDOMAIN(dom)
+-                    && (!((ad_group_type & SDAP_AD_GROUP_TYPE_GLOBAL)
+-                        || (ad_group_type & SDAP_AD_GROUP_TYPE_UNIVERSAL))))) {
+-            posix_group = false;
+-            gid = 0;
+-            DEBUG(SSSDBG_TRACE_FUNC, "Filtering AD group [%s].\n",
+-                                      group_name);
+-            ret = sysdb_attrs_add_bool(group_attrs, SYSDB_POSIX, false);
+-            if (ret != EOK) {
+-                DEBUG(SSSDBG_OP_FAILURE,
+-                      "Error: Failed to mark group as non-posix!\n");
+-                return ret;
+-            }
++        ret = sysdb_attrs_add_bool(group_attrs, SYSDB_POSIX, false);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "Error: Failed to mark group as non-posix!\n");
++            return ret;
+         }
+     }
+ 
+diff --git a/src/providers/ldap/sdap_async_nested_groups.c b/src/providers/ldap/sdap_async_nested_groups.c
+index 1eba35ae8ac90acac8a2d46e8cc5f2b57e3a9256..08e199869ad16c3b19d998a2a28eae9a0dd0a371 100644
+--- a/src/providers/ldap/sdap_async_nested_groups.c
++++ b/src/providers/ldap/sdap_async_nested_groups.c
+@@ -240,32 +240,21 @@ sdap_nested_group_hash_group(struct sdap_nested_group_ctx *group_ctx,
+ {
+     struct sdap_attr_map *map = group_ctx->opts->group_map;
+     gid_t gid;
+-    errno_t ret = ENOENT;
+-    int32_t ad_group_type;
++    errno_t ret;
+     bool posix_group = true;
+     bool use_id_mapping;
+     bool can_find_gid;
++    bool need_filter;
+ 
+-    if (group_ctx->opts->schema_type == SDAP_SCHEMA_AD) {
+-        ret = sysdb_attrs_get_int32_t(group, SYSDB_GROUP_TYPE, &ad_group_type);
+-        if (ret != EOK) {
+-            DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_get_int32_t failed.\n");
+-            return ret;
+-        }
++    ret = sdap_check_ad_group_type(group_ctx->domain, group_ctx->opts,
++                                   group, "", &need_filter);
++    if (ret != EOK) {
++        return ret;
++    }
+ 
+-        DEBUG(SSSDBG_TRACE_ALL, "AD group has type flags %#x.\n",
+-                                 ad_group_type);
+-        /* Only security groups from AD are considered for POSIX groups.
+-         * Additionally only global and universal group are taken to account
+-         * for trusted domains. */
+-        if (!(ad_group_type & SDAP_AD_GROUP_TYPE_SECURITY)
+-                || (IS_SUBDOMAIN(group_ctx->domain)
+-                    && (!((ad_group_type & SDAP_AD_GROUP_TYPE_GLOBAL)
+-                        || (ad_group_type & SDAP_AD_GROUP_TYPE_UNIVERSAL))))) {
+-            posix_group = false;
+-            gid = 0;
+-            DEBUG(SSSDBG_TRACE_FUNC, "Filtering AD group.\n");
+-        }
++    if (need_filter) {
++        posix_group = false;
++        gid = 0;
+     }
+ 
+     use_id_mapping = sdap_idmap_domain_has_algorithmic_mapping(
+diff --git a/src/providers/ldap/sdap_async_private.h b/src/providers/ldap/sdap_async_private.h
+index 3995a2ac357c52f546696284d71d2127d0302409..db542eaf869efcd53d0937bef3fc6e99cc78b938 100644
+--- a/src/providers/ldap/sdap_async_private.h
++++ b/src/providers/ldap/sdap_async_private.h
+@@ -138,4 +138,11 @@ errno_t sdap_add_incomplete_groups(struct sysdb_ctx *sysdb,
+                                    char **groupnames,
+                                    struct sysdb_attrs **ldap_groups,
+                                    int ldap_groups_count);
++
++/* from sdap_async_nested_groups.c */
++errno_t sdap_check_ad_group_type(struct sss_domain_info *dom,
++                                 struct sdap_options *opts,
++                                 struct sysdb_attrs *group_attrs,
++                                 const char *group_name,
++                                 bool *_need_filter);
+ #endif /* _SDAP_ASYNC_PRIVATE_H_ */
+-- 
+2.4.0
+

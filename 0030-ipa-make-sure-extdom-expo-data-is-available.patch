@@ -1,0 +1,30 @@
+From 052e37d891612ea4637c6de99cc4982383d65947 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 4 Mar 2015 14:08:09 +0100
+Subject: [PATCH 30/99] ipa: make sure extdom expo data is available
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 7ee9ac32485483beece872d6fcb3096fa77a004b)
+---
+ src/providers/ipa/ipa_s2n_exop.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index d5e94806115df8fc6c6fcb9af9782f51119ba7f0..d3502443c59b96fa854fff199833cf1239a8955e 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -165,6 +165,11 @@ static void ipa_s2n_exop_done(struct sdap_op *op,
+         ret = ERR_NETWORK_IO;
+         goto done;
+     }
++    if (retdata == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Missing exop result data.\n");
++        ret = EINVAL;
++        goto done;
++    }
+ 
+     state->retoid = talloc_strdup(state, retoid);
+     if (state->retoid == NULL) {
+-- 
+2.4.0
+

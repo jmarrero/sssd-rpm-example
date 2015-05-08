@@ -1,0 +1,50 @@
+From 2c7b61d223667868d284711fc0800cb9d34177e9 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 17 Mar 2015 11:08:05 +0100
+Subject: [PATCH 33/99] IPA idviews: check if view name is set
+
+When working with older FreeIPA releases the view name might not always
+been set. This patch add checks to might sure it is only dereferenced
+when set.
+
+Resolves https://fedorahosted.org/sssd/ticket/2604
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 8be0cf3eea892e13410c13abb030322599ca1b4f)
+---
+ src/providers/ipa/ipa_s2n_exop.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index d3502443c59b96fa854fff199833cf1239a8955e..89fe0ce2289e58e0199a394a1377758569f463f7 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -1036,7 +1036,8 @@ static void ipa_s2n_get_fqlist_next(struct tevent_req *subreq)
+         goto fail;
+     }
+ 
+-    if (strcmp(state->ipa_ctx->view_name, SYSDB_DEFAULT_VIEW_NAME) == 0) {
++    if (state->ipa_ctx->view_name == NULL ||
++            strcmp(state->ipa_ctx->view_name, SYSDB_DEFAULT_VIEW_NAME) == 0) {
+         ret = ipa_s2n_get_fqlist_save_step(req);
+         if (ret == EOK) {
+             tevent_req_done(req);
+@@ -1611,6 +1612,7 @@ static void ipa_s2n_get_user_done(struct tevent_req *subreq)
+     }
+ 
+     if (ret == ENOENT
++            || state->ipa_ctx->view_name == NULL
+             || strcmp(state->ipa_ctx->view_name,
+                       SYSDB_DEFAULT_VIEW_NAME) == 0) {
+         ret = ipa_s2n_save_objects(state->dom, state->req_input, state->attrs,
+@@ -2220,6 +2222,7 @@ static void ipa_s2n_get_fqlist_done(struct tevent_req  *subreq)
+     }
+ 
+     if (state->override_attrs == NULL
++            && state->ipa_ctx->view_name != NULL
+             && strcmp(state->ipa_ctx->view_name,
+                       SYSDB_DEFAULT_VIEW_NAME) != 0) {
+         subreq = ipa_get_ad_override_send(state, state->ev,
+-- 
+2.4.0
+
