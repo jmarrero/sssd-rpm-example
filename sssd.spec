@@ -199,9 +199,7 @@ BuildRequires: diffstat
 BuildRequires: findutils
 BuildRequires: glib2-devel
 BuildRequires: selinux-policy-targeted
-%ifarch %{ix86} x86_64 %{arm}
-BuildRequires: libcmocka-devel
-%endif
+BuildRequires: libcmocka-devel >= 1.0.0
 %if (0%{?fedora} >= 20)
 BuildRequires: uid_wrapper
 BuildRequires: nss_wrapper
@@ -770,6 +768,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/%{name}/libsss_child.so
 %{_libdir}/%{name}/libsss_crypt.so
 %{_libdir}/%{name}/libsss_debug.so
+%{_libdir}/%{name}/libsss_krb5_common.so
 %{_libdir}/%{name}/libsss_ldap_common.so
 %{_libdir}/%{name}/libsss_util.so
 %{_libdir}/%{name}/libsss_semanage.so
@@ -823,7 +822,6 @@ rm -rf $RPM_BUILD_ROOT
 %files krb5-common
 %defattr(-,root,root,-)
 %doc COPYING
-%{_libdir}/%{name}/libsss_krb5_common.so
 %{_libexecdir}/%{servicename}/ldap_child
 %{_libexecdir}/%{servicename}/krb5_child
 
