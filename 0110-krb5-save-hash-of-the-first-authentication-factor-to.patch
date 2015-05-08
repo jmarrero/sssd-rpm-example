@@ -1,0 +1,76 @@
+From a6eb7ef2ee5e07dc4b8b1cc15423d4774bfd7bd1 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 24 Mar 2015 15:53:17 +0100
+Subject: [PATCH 110/114] krb5: save hash of the first authentication factor to
+ the cache
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit c5ae04b2da970a3991f21173acae3e892198ce0c)
+---
+ src/providers/krb5/krb5_auth.c | 26 +++++++++++++++++++++++---
+ 1 file changed, 23 insertions(+), 3 deletions(-)
+
+diff --git a/src/providers/krb5/krb5_auth.c b/src/providers/krb5/krb5_auth.c
+index 651a9201756be8bc80199636b494b2773cff9c3e..b003a8a000117722078d299127cf60337a016ca5 100644
+--- a/src/providers/krb5/krb5_auth.c
++++ b/src/providers/krb5/krb5_auth.c
+@@ -265,6 +265,9 @@ static void krb5_auth_store_creds(struct sss_domain_info *domain,
+                                   struct pam_data *pd)
+ {
+     const char *password = NULL;
++    const char *fa2;
++    size_t password_len;
++    size_t fa2_len = 0;
+     int ret = EOK;
+ 
+     switch(pd->cmd) {
+@@ -276,7 +279,20 @@ static void krb5_auth_store_creds(struct sss_domain_info *domain,
+             break;
+         case SSS_PAM_AUTHENTICATE:
+         case SSS_PAM_CHAUTHTOK_PRELIM:
+-            ret = sss_authtok_get_password(pd->authtok, &password, NULL);
++            if (sss_authtok_get_type(pd->authtok) == SSS_AUTHTOK_TYPE_2FA) {
++                ret = sss_authtok_get_2fa(pd->authtok, &password, &password_len,
++                                          &fa2, &fa2_len);
++                if (ret == EOK && password_len <
++                                      domain->cache_credentials_min_ff_length) {
++                    DEBUG(SSSDBG_FATAL_FAILURE,
++                          "First factor is too short to be cache, "
++                          "minimum length is [%u].\n",
++                          domain->cache_credentials_min_ff_length);
++                    ret = EINVAL;
++                }
++            } else {
++                ret = sss_authtok_get_password(pd->authtok, &password, NULL);
++            }
+             break;
+         case SSS_PAM_CHAUTHTOK:
+             ret = sss_authtok_get_password(pd->newauthtok, &password, NULL);
+@@ -302,7 +318,8 @@ static void krb5_auth_store_creds(struct sss_domain_info *domain,
+         return;
+     }
+ 
+-    ret = sysdb_cache_password(domain, pd->user, password);
++    ret = sysdb_cache_password_ex(domain, pd->user, password,
++                                  sss_authtok_get_type(pd->authtok), fa2_len);
+     if (ret) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Failed to cache password, offline auth may not work."
+@@ -1018,7 +1035,10 @@ static void krb5_auth_done(struct tevent_req *subreq)
+         goto done;
+     }
+ 
+-    if (state->be_ctx->domain->cache_credentials == TRUE && !res->otp) {
++    if (state->be_ctx->domain->cache_credentials == TRUE
++            && (!res->otp
++                || (res->otp && sss_authtok_get_type(pd->authtok) ==
++                                                       SSS_AUTHTOK_TYPE_2FA))) {
+         krb5_auth_store_creds(state->domain, pd);
+     }
+ 
+-- 
+2.4.0
+

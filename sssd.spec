@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 1.12.4
-Release: 7%{?dist}
+Release: 8%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -135,6 +135,21 @@ Patch0096: 0096-BUILD-Add-possibility-to-build-python-2-3-bindings.patch
 Patch0097: 0097-TESTS-Run-python-tests-with-all-supported-python-ver.patch
 Patch0098: 0098-SPEC-Replace-python_-macros-with-python2_.patch
 Patch0099: 0099-SPEC-Build-python3-bindings-on-available-platforms.patch
+Patch0100: 0100-ad_opts-Use-different-default-attribute-for-group-na.patch
+Patch0101: 0101-Add-leak-check-and-command-line-option-to-test_autht.patch
+Patch0102: 0102-utils-add-sss_authtok_-gs-et_2fa.patch
+Patch0103: 0103-pam-handle-2FA-authentication-token-in-the-responder.patch
+Patch0104: 0104-Add-pre-auth-request.patch
+Patch0105: 0105-krb5-child-add-preauth-and-split-2fa-token-support.patch
+Patch0106: 0106-IPA-create-preauth-indicator-file-at-startup.patch
+Patch0107: 0107-pam_sss-add-pre-auth-and-2fa-support.patch
+Patch0108: 0108-Add-cache_credentials_minimal_first_factor_length-co.patch
+Patch0109: 0109-sysdb-add-sysdb_cache_password_ex.patch
+Patch0110: 0110-krb5-save-hash-of-the-first-authentication-factor-to.patch
+Patch0111: 0111-krb5-try-delayed-online-authentication-only-for-sing.patch
+Patch0112: 0112-2FA-offline-auth.patch
+Patch0113: 0113-pam_sss-move-message-encoding-into-separate-file.patch
+Patch0114: 0114-PAM-add-PAM-responder-unit-test.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -1092,6 +1107,14 @@ if [ $1 -eq 0 ]; then
 fi
 
 %changelog
+* Fri May 08 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.4-8
+- Backport important patches from upstream 1.13 prerelease
+- Resolves: rhbz#1060325 - Does sssd-ad use the most suitable
+                           attribute for group name
+- Resolves: upstream #2335 - Investigate using the krb5 responder
+                             for driving the PAM conversation with OTPs
+- Enable cmocka tests for secondary architectures
+
 * Fri May 08 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.4-7
 - Backport patches from upstream 1.12.5 prerelease - contains many fixes
 
