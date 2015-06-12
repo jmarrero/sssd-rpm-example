@@ -20,6 +20,8 @@
 %endif
 
 
+%global libwbc_alternatives_version 0.12
+%global libwbc_lib_version %{libwbc_alternatives_version}.0
 %global libwbc_alternatives_suffix %nil
 %if 0%{?__isa_bits} == 64
 %global libwbc_alternatives_suffix -64
@@ -27,7 +29,7 @@
 
 Name: sssd
 Version: 1.12.5
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -510,6 +512,7 @@ The SSSD libwbclient implementation.
 Summary: Development libraries for the SSSD libwbclient implementation
 Group:  Development/Libraries
 License: GPLv3+ and LGPLv3+
+Requires: sssd-libwbclient = %{version}-%{release}
 Conflicts: libwbclient-devel < 4.2.0-0.2.rc2
 
 %description libwbclient-devel
@@ -579,6 +582,13 @@ rm -rf $RPM_BUILD_ROOT
 sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
 
 make install DESTDIR=$RPM_BUILD_ROOT
+
+if [ ! -f %{buildroot}/%{_libdir}/%{name}/modules/libwbclient.so.%{libwbc_lib_version}
+]
+then
+    echo "Expected libwbclient version not found, please check if version has changed."
+    exit -1
+fi
 
 # Prepare language files
 /usr/lib/rpm/find-lang.sh $RPM_BUILD_ROOT sssd
@@ -996,33 +1006,41 @@ fi
 
 %postun -n libsss_nss_idmap -p /sbin/ldconfig
 
-%post libwbclient
-%{_sbindir}/update-alternatives --install %{_libdir}/libwbclient.so.0.11 \
-                                libwbclient.so.0.11%{libwbc_alternatives_suffix} \
-                                %{_libdir}/%{name}/modules/libwbclient.so.0.11.0 5
+%posttrans libwbclient
+# Alternatives was removed only if package was uninstalled
+# However in cease of package upgrade and soname bump the
+# the old alternative was not removed.
+# This is a workaround/fix for unused alternative
+%{_sbindir}/update-alternatives \
+    --remove libwbclient.so.0.11%{libwbc_alternatives_suffix} \
+             %{_libdir}/%{name}/modules/libwbclient.so.0.11.0
+
+%{_sbindir}/update-alternatives \
+    --install %{_libdir}/libwbclient.so.%{libwbc_alternatives_version} \
+              libwbclient.so.%{libwbc_alternatives_version}%{libwbc_alternatives_suffix} \
+              %{_libdir}/%{name}/modules/libwbclient.so.%{libwbc_lib_version} 5
 /sbin/ldconfig
 
 %preun libwbclient
-if [ $1 -eq 0 ]; then
-        %{_sbindir}/update-alternatives --remove \
-                                libwbclient.so.0.11%{libwbc_alternatives_suffix} \
-                                %{_libdir}/%{name}/modules/libwbclient.so.0.11.0
-fi
+%{_sbindir}/update-alternatives \
+    --remove libwbclient.so.%{libwbc_alternatives_version}%{libwbc_alternatives_suffix} \
+             %{_libdir}/%{name}/modules/libwbclient.so.%{libwbc_lib_version}
 /sbin/ldconfig
 
-%post libwbclient-devel
+%posttrans libwbclient-devel
 %{_sbindir}/update-alternatives --install %{_libdir}/libwbclient.so \
                                 libwbclient.so%{libwbc_alternatives_suffix} \
                                 %{_libdir}/%{name}/modules/libwbclient.so 5
 
 %preun libwbclient-devel
-if [ $1 -eq 0 ]; then
-        %{_sbindir}/update-alternatives --remove \
+%{_sbindir}/update-alternatives --remove \
                                 libwbclient.so%{libwbc_alternatives_suffix} \
                                 %{_libdir}/%{name}/modules/libwbclient.so
-fi
 
 %changelog
+* Fri Jun 12 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.5-3
+- Fix libwbclient alternatives
+
 * Fri Jun 12 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.5-2
 - Backport important patches from upstream 1.13 prerelease
 
