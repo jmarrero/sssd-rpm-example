@@ -1,0 +1,160 @@
+From 099738f89b0887a7aaaf542440383b6808ffd2db Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 9 Feb 2015 19:38:42 +0100
+Subject: [PATCH 08/30] UTIL: Remove python wrapper
+ sss_python_unicode_from_string
+
+The function PyUnicode_FromString is available in python >= 2.6
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ src/external/python.m4 |  3 +--
+ src/python/pyhbac.c    | 18 +++++++++---------
+ src/util/sss_python.c  | 10 ----------
+ src/util/sss_python.h  |  3 ---
+ 4 files changed, 10 insertions(+), 24 deletions(-)
+
+diff --git a/src/external/python.m4 b/src/external/python.m4
+index ac427268d4ff8828314cefb43ce2af72d34bc295..d59233aa01ac591cfc86be974d8ae26ebbe4635d 100644
+--- a/src/external/python.m4
++++ b/src/external/python.m4
+@@ -54,7 +54,7 @@ AC_DEFUN([AM_CHECK_PYTHON_HEADERS],
+ 
+ 
+ dnl Checks for a couple of functions we use that may not be defined
+-dnl in some older python versions used e.g. on RHEL5
++dnl in some older python (< 2.6) versions used e.g. on RHEL6
+ AC_DEFUN([AM_CHECK_PYTHON_COMPAT],
+ [AC_REQUIRE([AM_CHECK_PYTHON_HEADERS])
+     save_CPPFLAGS="$CPPFLAGS"
+@@ -63,7 +63,6 @@ AC_DEFUN([AM_CHECK_PYTHON_COMPAT],
+     LIBS="$LIBS $PYTHON_LIBS"
+ 
+     AC_CHECK_FUNCS([PyErr_NewExceptionWithDoc])
+-    AC_CHECK_DECLS([PyUnicode_FromString], [], [], [[#include <Python.h>]])
+ 
+     CPPFLAGS="$save_CPPFLAGS"
+     LIBS="$save_LIBS"
+diff --git a/src/python/pyhbac.c b/src/python/pyhbac.c
+index bbdf2b9fb75e2be0d46749faa6aaf0698a5d5ebb..2ccff6856b5bb5fbbb4803633ae549481ebb6035 100644
+--- a/src/python/pyhbac.c
++++ b/src/python/pyhbac.c
+@@ -493,7 +493,7 @@ HbacRuleElement_repr(HbacRuleElement *self)
+     uint32_t category;
+     PyObject *o, *format, *args;
+ 
+-    format = sss_python_unicode_from_string("<category %lu names [%s] groups [%s]>");
++    format = PyUnicode_FromString("<category %lu names [%s] groups [%s]>");
+     if (format == NULL) {
+         return NULL;
+     }
+@@ -651,7 +651,7 @@ HbacRule_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+         return NULL;
+     }
+ 
+-    self->name = sss_python_unicode_from_string("");
++    self->name = PyUnicode_FromString("");
+     if (self->name == NULL) {
+         Py_DECREF(self);
+         PyErr_NoMemory();
+@@ -869,7 +869,7 @@ HbacRule_repr(HbacRuleObject *self)
+     PyObject *srchosts_repr;
+     PyObject *o, *format, *args;
+ 
+-    format = sss_python_unicode_from_string("<name %s enabled %d "
++    format = PyUnicode_FromString("<name %s enabled %d "
+                                             "users %s services %s "
+                                             "targethosts %s srchosts %s>");
+     if (format == NULL) {
+@@ -1149,7 +1149,7 @@ HbacRequestElement_new(PyTypeObject *type, PyObject *args, PyObject *kwds)
+         return NULL;
+     }
+ 
+-    self->name = sss_python_unicode_from_string("");
++    self->name = PyUnicode_FromString("");
+     if (self->name == NULL) {
+         PyErr_NoMemory();
+         Py_DECREF(self);
+@@ -1291,7 +1291,7 @@ HbacRequestElement_repr(HbacRequestElement *self)
+     char *strgroups;
+     PyObject *o, *format, *args;
+ 
+-    format = sss_python_unicode_from_string("<name %s groups [%s]>");
++    format = PyUnicode_FromString("<name %s groups [%s]>");
+     if (format == NULL) {
+         return NULL;
+     }
+@@ -1609,7 +1609,7 @@ py_hbac_evaluate(HbacRequest *self, PyObject *args)
+     eres = hbac_evaluate(rules, hbac_req, &info);
+     switch (eres) {
+     case HBAC_EVAL_ALLOW:
+-        self->rule_name = sss_python_unicode_from_string(info->rule_name);
++        self->rule_name = PyUnicode_FromString(info->rule_name);
+         if (!self->rule_name) {
+             PyErr_NoMemory();
+             goto fail;
+@@ -1662,7 +1662,7 @@ HbacRequest_repr(HbacRequest *self)
+     PyObject *srchost_repr;
+     PyObject *o, *format, *args;
+ 
+-    format = sss_python_unicode_from_string("<user %s service %s "
++    format = PyUnicode_FromString("<user %s service %s "
+                                             "targethost %s srchost %s>");
+     if (format == NULL) {
+         return NULL;
+@@ -1853,7 +1853,7 @@ py_hbac_result_string(PyObject *module, PyObject *args)
+         return Py_None;
+     }
+ 
+-    return sss_python_unicode_from_string(str);
++    return PyUnicode_FromString(str);
+ }
+ 
+ PyDoc_STRVAR(py_hbac_error_string__doc__,
+@@ -1877,7 +1877,7 @@ py_hbac_error_string(PyObject *module, PyObject *args)
+         return Py_None;
+     }
+ 
+-    return sss_python_unicode_from_string(str);
++    return PyUnicode_FromString(str);
+ }
+ 
+ static PyMethodDef pyhbac_module_methods[] = {
+diff --git a/src/util/sss_python.c b/src/util/sss_python.c
+index ba78bf9689c903713229395a49e5f3686e5e6f10..560effc26d474bdb367784083cb354bb57ead412 100644
+--- a/src/util/sss_python.c
++++ b/src/util/sss_python.c
+@@ -22,16 +22,6 @@
+ #include "config.h"
+ 
+ PyObject *
+-sss_python_unicode_from_string(const char *u)
+-{
+-#ifdef HAVE_PYUNICODE_FROMSTRING
+-    return PyUnicode_FromString(u);
+-#else
+-    return PyUnicode_DecodeUTF8(u, strlen(u), NULL);
+-#endif
+-}
+-
+-PyObject *
+ sss_exception_with_doc(char *name, char *doc, PyObject *base, PyObject *dict)
+ {
+ #ifdef HAVE_PYERR_NEWEXCEPTIONWITHDOC
+diff --git a/src/util/sss_python.h b/src/util/sss_python.h
+index 5521aa5cfd84acffc65edbe76a264b1f2a52e9fd..7e2bac33656dcbac91bb4f4d32ec9fbc44bb4e52 100644
+--- a/src/util/sss_python.h
++++ b/src/util/sss_python.h
+@@ -25,9 +25,6 @@
+ #define PYNUMBER_ASLONG(what) PyInt_AsLong(what)
+ #endif
+ 
+-/* Unicode compatibility */
+-PyObject *sss_python_unicode_from_string(const char *u);
+-
+ /* Exceptions compatibility */
+ PyObject *
+ sss_exception_with_doc(char *name, char *doc, PyObject *base, PyObject *dict);
+-- 
+2.4.3
+

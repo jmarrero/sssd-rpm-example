@@ -1,0 +1,91 @@
+From 023ce335f80d03631c98e41cd6802bda09fb555a Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 10 Feb 2015 18:07:05 +0100
+Subject: [PATCH 14/30] SPEC: Replace python_ macros with python2_
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ contrib/sssd.spec.in | 34 ++++++++++++++++++++--------------
+ 1 file changed, 20 insertions(+), 14 deletions(-)
+
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index c50eebd193de5815eca55824670a319603b54501..6235bcf46fed96befbe035c7fe93026955dd0c3e 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -1,8 +1,14 @@
+ %global rhel7_minor %(%{__grep} -o "7.[0-9]*" /etc/redhat-release |%{__sed} -s 's/7.//')
+ 
++%if 0%{?rhel} && 0%{?rhel} <= 6
++%{!?__python2: %global __python2 /usr/bin/python2}
++%{!?python2_sitelib: %global python2_sitelib %(%{__python2} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())")}
++%{!?python2_sitearch: %global python2_sitearch %(%{__python2} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib(1))")}
++%endif
++
+ # Fedora and RHEL 6+
+ # we don't want to provide private python extension libs
+-%define __provides_exclude_from %{python_sitearch}/.*\.so$
++%define __provides_exclude_from %{python2_sitearch}/.*\.so$
+ 
+ %if (0%{?fedora} || 0%{?rhel} >= 7)
+     %global use_systemd 1
+@@ -528,9 +534,9 @@ rm -Rf ${RPM_BUILD_ROOT}/%{_docdir}/%{name}
+ 
+ # Older versions of rpmbuild can only handle one -f option
+ # So we need to append to the sssd*.lang file
+-for file in `ls $RPM_BUILD_ROOT/%{python_sitelib}/*.egg-info 2> /dev/null`
++for file in `ls $RPM_BUILD_ROOT/%{python2_sitelib}/*.egg-info 2> /dev/null`
+ do
+-    echo %{python_sitelib}/`basename $file` >> python_sssdconfig.lang
++    echo %{python2_sitelib}/`basename $file` >> python2_sssdconfig.lang
+ done
+ 
+ touch sssd.lang
+@@ -773,20 +779,20 @@ rm -rf $RPM_BUILD_ROOT
+ %{_mandir}/man8/sss_debuglevel.8*
+ %{_mandir}/man8/sss_seed.8*
+ 
+-%files -n python-sssdconfig -f python_sssdconfig.lang
++%files -n python-sssdconfig -f python2_sssdconfig.lang
+ %defattr(-,root,root,-)
+-%dir %{python_sitelib}/SSSDConfig
+-%{python_sitelib}/SSSDConfig/*.py*
++%dir %{python2_sitelib}/SSSDConfig
++%{python2_sitelib}/SSSDConfig/*.py*
+ 
+ %files -n python-sss
+ %defattr(-,root,root,-)
+-%{python_sitearch}/pysss.so
+-%{python_sitearch}/_py2sss.so
++%{python2_sitearch}/pysss.so
++%{python2_sitearch}/_py2sss.so
+ 
+ %files -n python-sss-murmur
+ %defattr(-,root,root,-)
+-%{python_sitearch}/pysss_murmur.so
+-%{python_sitearch}/_py2sss_murmur.so
++%{python2_sitearch}/pysss_murmur.so
++%{python2_sitearch}/_py2sss_murmur.so
+ 
+ %files -n libsss_idmap
+ %defattr(-,root,root,-)
+@@ -826,13 +832,13 @@ rm -rf $RPM_BUILD_ROOT
+ 
+ %files -n python-libsss_nss_idmap
+ %defattr(-,root,root,-)
+-%{python_sitearch}/pysss_nss_idmap.so
+-%{python_sitearch}/_py2sss_nss_idmap.so
++%{python2_sitearch}/pysss_nss_idmap.so
++%{python2_sitearch}/_py2sss_nss_idmap.so
+ 
+ %files -n python-libipa_hbac
+ %defattr(-,root,root,-)
+-%{python_sitearch}/pyhbac.so
+-%{python_sitearch}/_py2hbac.so
++%{python2_sitearch}/pyhbac.so
++%{python2_sitearch}/_py2hbac.so
+ 
+ %files libwbclient
+ %defattr(-,root,root,-)
+-- 
+2.4.3
+

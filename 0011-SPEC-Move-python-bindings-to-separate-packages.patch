@@ -1,0 +1,83 @@
+From 2641bd5495cdebe2652f26bbd3a5a93013446ef2 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 10 Feb 2015 16:50:12 +0100
+Subject: [PATCH 11/30] SPEC: Move python bindings to separate packages
+
+Some pyhton bindings pysss and pysss_murmur was in package sssd-common.
+Therefore package sssd-common had python as a dependency.
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ contrib/sssd.spec.in | 35 +++++++++++++++++++++++++++++++++--
+ 1 file changed, 33 insertions(+), 2 deletions(-)
+
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index c9e62b301aa9ac4109041a7a4425e13d4ad236ba..2dbcd9e40c03e46e4e132a4ef4560044e88ea853 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -196,6 +196,9 @@ Summary: Userspace tools for use with the SSSD
+ Group: Applications/System
+ License: GPLv3+
+ Requires: sssd-common = %{version}-%{release}
++# required by sss_obfuscate
++Requires: python-sss = %{version}-%{release}
++Requires: python-sssdconfig = %{version}-%{release}
+ 
+ %description tools
+ Provides userspace tools for manipulating users, groups, and nested groups in
+@@ -215,6 +218,28 @@ BuildArch: noarch
+ %description -n python-sssdconfig
+ Provides python files for manipulation SSSD and IPA configuration files.
+ 
++%package -n python-sss
++Summary: Python bindings for sssd
++Group: Development/Libraries
++License: LGPLv3+
++Requires: sssd-common = %{version}-%{release}
++
++%description -n python-sss
++Provides python module for manipulating users, groups, and nested groups in
++SSSD when using id_provider = local in /etc/sssd/sssd.conf.
++
++Also provides several other useful python bindings:
++    * function for retrieving list of groups user belongs to.
++    * class for obfuscation of passwords
++
++%package -n python-sss-murmur
++Summary: Python bindings for murmur hash function
++Group: Development/Libraries
++License: LGPLv3+
++
++%description -n python-sss-murmur
++Provides python module for calculating the murmur hash version 3
++
+ %package ldap
+ Summary: The LDAP back end of the SSSD
+ Group: Applications/System
+@@ -638,8 +663,6 @@ rm -rf $RPM_BUILD_ROOT
+ %{_mandir}/man8/sss_cache.8*
+ %{_mandir}/man1/sss_ssh_authorizedkeys.1*
+ %{_mandir}/man1/sss_ssh_knownhostsproxy.1*
+-%{python_sitearch}/pysss.so
+-%{python_sitearch}/pysss_murmur.so
+ 
+ %files ldap -f sssd_ldap.lang
+ %defattr(-,root,root,-)
+@@ -755,6 +778,14 @@ rm -rf $RPM_BUILD_ROOT
+ %dir %{python_sitelib}/SSSDConfig
+ %{python_sitelib}/SSSDConfig/*.py*
+ 
++%files -n python-sss
++%defattr(-,root,root,-)
++%{python_sitearch}/pysss.so
++
++%files -n python-sss-murmur
++%defattr(-,root,root,-)
++%{python_sitearch}/pysss_murmur.so
++
+ %files -n libsss_idmap
+ %defattr(-,root,root,-)
+ %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
+-- 
+2.4.3
+

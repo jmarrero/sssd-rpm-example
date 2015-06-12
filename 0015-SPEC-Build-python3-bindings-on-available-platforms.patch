@@ -1,0 +1,378 @@
+From 61bf76430dac157452e44da5fa66a4c4f268a806 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 10 Feb 2015 19:39:45 +0100
+Subject: [PATCH 15/30] SPEC: Build python3 bindings on available platforms
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2574
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ contrib/ci/configure.sh  |   6 ++
+ contrib/ci/deps.sh       |   1 +
+ contrib/sssd.spec.in     | 144 ++++++++++++++++++++++++++++++++++++++++++++---
+ src/conf_macros.m4       |   2 +-
+ src/tests/dlopen-tests.c |  14 +++--
+ 5 files changed, 154 insertions(+), 13 deletions(-)
+
+diff --git a/contrib/ci/configure.sh b/contrib/ci/configure.sh
+index 8af273043a77556a2eee10224ff2a0baaf53d497..d5d4c791a35f3583416efd904ad5804bcbebf4c8 100644
+--- a/contrib/ci/configure.sh
++++ b/contrib/ci/configure.sh
+@@ -35,9 +35,15 @@ if [[ "$DISTRO_BRANCH" == -redhat-redhatenterprise*-6.*- ]]; then
+     CONFIGURE_ARG_LIST+=(
+         "--disable-cifs-idmap-plugin"
+         "--with-syslog=syslog"
++        "--without-python3-bindings"
+     )
+ fi
+ 
++if [[ "$DISTRO_BRANCH" == -redhat-redhatenterprise*-7.*- ]]; then
++    CONFIGURE_ARG_LIST+=(
++        "--without-python3-bindings"
++    )
++fi
+ declare -r -a CONFIGURE_ARG_LIST
+ 
+ fi # _CONFIGURE_SH
+diff --git a/contrib/ci/deps.sh b/contrib/ci/deps.sh
+index 0cdb9962987edddf4dd2fff659e3262bbd50b045..4e0ce1e0328927f42b3849d9c39180b4064a9d4b 100644
+--- a/contrib/ci/deps.sh
++++ b/contrib/ci/deps.sh
+@@ -92,6 +92,7 @@ if [[ "$DISTRO_BRANCH" == -debian-* ]]; then
+         libxml2-utils
+         make
+         python-dev
++        python3-dev
+         samba-dev
+         systemd
+         xml-core
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index 6235bcf46fed96befbe035c7fe93026955dd0c3e..2d9c9b18c38f78956b516cb70cd42b9c62ccff8e 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -9,6 +9,7 @@
+ # Fedora and RHEL 6+
+ # we don't want to provide private python extension libs
+ %define __provides_exclude_from %{python2_sitearch}/.*\.so$
++%define __provides_exclude_from %{python3_sitearch}/.*\.so$
+ 
+ %if (0%{?fedora} || 0%{?rhel} >= 7)
+     %global use_systemd 1
+@@ -44,6 +45,12 @@
+     %global with_krb5_localauth_plugin 1
+ %endif
+ 
++%if (0%{?fedora})
++    %global with_python3 1
++%else
++    %global with_python3_option --without-python3-bindings
++%endif
++
+ Name: @PACKAGE_NAME@
+ Version: @PACKAGE_VERSION@
+ Release: 0@PRERELEASE_VERSION@%{?dist}
+@@ -65,7 +72,11 @@ Requires: sssd-ipa = %{version}-%{release}
+ Requires: sssd-common-pac = %{version}-%{release}
+ Requires: sssd-ad = %{version}-%{release}
+ Requires: sssd-proxy = %{version}-%{release}
++%if (0%{?with_python3} == 1)
++Requires: python3-sssdconfig = %{version}-%{release}
++%else
+ Requires: python-sssdconfig = %{version}-%{release}
++%endif
+ 
+ %global servicename sssd
+ %global sssdstatedir %{_localstatedir}/lib/sss
+@@ -106,6 +117,9 @@ BuildRequires: krb5-devel
+ %endif
+ BuildRequires: c-ares-devel
+ BuildRequires: python-devel
++%if (0%{?with_python3} == 1)
++BuildRequires: python3-devel
++%endif
+ BuildRequires: check-devel
+ BuildRequires: doxygen
+ BuildRequires: libselinux-devel
+@@ -203,8 +217,13 @@ Group: Applications/System
+ License: GPLv3+
+ Requires: sssd-common = %{version}-%{release}
+ # required by sss_obfuscate
++%if (0%{?with_python3} == 1)
++Requires: python3-sss = %{version}-%{release}
++Requires: python3-sssdconfig = %{version}-%{release}
++%else
+ Requires: python-sss = %{version}-%{release}
+ Requires: python-sssdconfig = %{version}-%{release}
++%endif
+ 
+ %description tools
+ Provides userspace tools for manipulating users, groups, and nested groups in
+@@ -222,29 +241,66 @@ License: GPLv3+
+ BuildArch: noarch
+ 
+ %description -n python-sssdconfig
+-Provides python files for manipulation SSSD and IPA configuration files.
++Provides python2 files for manipulation SSSD and IPA configuration files.
++
++%if (0%{?with_python3} == 1)
++%package -n python3-sssdconfig
++Summary: SSSD and IPA configuration file manipulation classes and functions
++Group: Applications/System
++License: GPLv3+
++BuildArch: noarch
++
++%description -n python3-sssdconfig
++Provides python3 files for manipulation SSSD and IPA configuration files.
++%endif
+ 
+ %package -n python-sss
+-Summary: Python bindings for sssd
++Summary: Python2 bindings for sssd
+ Group: Development/Libraries
+ License: LGPLv3+
+ Requires: sssd-common = %{version}-%{release}
+ 
+ %description -n python-sss
+-Provides python module for manipulating users, groups, and nested groups in
++Provides python2 module for manipulating users, groups, and nested groups in
+ SSSD when using id_provider = local in /etc/sssd/sssd.conf.
+ 
+-Also provides several other useful python bindings:
++Also provides several other useful python2 bindings:
+     * function for retrieving list of groups user belongs to.
+     * class for obfuscation of passwords
+ 
++%if (0%{?with_python3} == 1)
++%package -n python3-sss
++Summary: Python3 bindings for sssd
++Group: Development/Libraries
++License: LGPLv3+
++Requires: sssd-common = %{version}-%{release}
++
++%description -n python3-sss
++Provides python3 module for manipulating users, groups, and nested groups in
++SSSD when using id_provider = local in /etc/sssd/sssd.conf.
++
++Also provides several other useful python3 bindings:
++    * function for retrieving list of groups user belongs to.
++    * class for obfuscation of passwords
++%endif
++
+ %package -n python-sss-murmur
+-Summary: Python bindings for murmur hash function
++Summary: Python2 bindings for murmur hash function
+ Group: Development/Libraries
+ License: LGPLv3+
+ 
+ %description -n python-sss-murmur
+-Provides python module for calculating the murmur hash version 3
++Provides python2 module for calculating the murmur hash version 3
++
++%if (0%{?with_python3} == 1)
++%package -n python3-sss-murmur
++Summary: Python3 bindings for murmur hash function
++Group: Development/Libraries
++License: LGPLv3+
++
++%description -n python3-sss-murmur
++Provides python3 module for calculating the murmur hash version 3
++%endif
+ 
+ %package ldap
+ Summary: The LDAP back end of the SSSD
+@@ -371,7 +427,7 @@ Requires: libipa_hbac = %{version}-%{release}
+ Utility library to validate FreeIPA HBAC rules for authorization requests
+ 
+ %package -n python-libipa_hbac
+-Summary: Python bindings for the FreeIPA HBAC Evaluator library
++Summary: Python2 bindings for the FreeIPA HBAC Evaluator library
+ Group: Development/Libraries
+ License: LGPLv3+
+ Requires: libipa_hbac = %{version}-%{release}
+@@ -382,6 +438,18 @@ Obsoletes: libipa_hbac-python < 1.12.90
+ The python-libipa_hbac contains the bindings so that libipa_hbac can be
+ used by Python applications.
+ 
++%if (0%{?with_python3} == 1)
++%package -n python3-libipa_hbac
++Summary: Python3 bindings for the FreeIPA HBAC Evaluator library
++Group: Development/Libraries
++License: LGPLv3+
++Requires: libipa_hbac = %{version}-%{release}
++
++%description -n python3-libipa_hbac
++The python3-libipa_hbac contains the bindings so that libipa_hbac can be
++used by Python applications.
++%endif
++
+ %package -n libsss_nss_idmap
+ Summary: Library for SID based lookups
+ Group: Development/Libraries
+@@ -402,7 +470,7 @@ Requires: libsss_nss_idmap = %{version}-%{release}
+ Utility library for SID based lookups
+ 
+ %package -n python-libsss_nss_idmap
+-Summary: Python bindings for libsss_nss_idmap
++Summary: Python2 bindings for libsss_nss_idmap
+ Group: Development/Libraries
+ License: LGPLv3+
+ Requires: libsss_nss_idmap = %{version}-%{release}
+@@ -413,6 +481,18 @@ Obsoletes: libsss_nss_idmap-python < 1.12.90
+ The python-libsss_nss_idmap contains the bindings so that libsss_nss_idmap can
+ be used by Python applications.
+ 
++%if (0%{?with_python3} == 1)
++%package -n python3-libsss_nss_idmap
++Summary: Python3 bindings for libsss_nss_idmap
++Group: Development/Libraries
++License: LGPLv3+
++Requires: libsss_nss_idmap = %{version}-%{release}
++
++%description -n python3-libsss_nss_idmap
++The python3-libsss_nss_idmap contains the bindings so that libsss_nss_idmap can
++be used by Python applications.
++%endif
++
+ %package dbus
+ Summary: The D-Bus responder of the SSSD
+ Group: Applications/System
+@@ -495,6 +575,7 @@ autoreconf -ivf
+     %{with_initscript} \
+     %{?with_syslog} \
+     %{?with_cifs_utils_plugin_option} \
++    %{?with_python3_option} \
+     %{?experimental}
+ 
+ make %{?_smp_mflags} all
+@@ -509,6 +590,10 @@ unset CK_TIMEOUT_MULTIPLIER
+ %install
+ rm -rf $RPM_BUILD_ROOT
+ 
++%if (0%{?with_python3} == 1)
++sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
++%endif
++
+ make install DESTDIR=$RPM_BUILD_ROOT
+ 
+ # Prepare language files
+@@ -539,6 +624,13 @@ do
+     echo %{python2_sitelib}/`basename $file` >> python2_sssdconfig.lang
+ done
+ 
++%if (0%{?with_python3} == 1)
++for file in `ls $RPM_BUILD_ROOT/%{python3_sitelib}/*.egg-info 2> /dev/null`
++do
++    echo %{python3_sitelib}/`basename $file` >> python3_sssdconfig.lang
++done
++%endif
++
+ touch sssd.lang
+ touch sssd_tools.lang
+ touch sssd_client.lang
+@@ -784,16 +876,38 @@ rm -rf $RPM_BUILD_ROOT
+ %dir %{python2_sitelib}/SSSDConfig
+ %{python2_sitelib}/SSSDConfig/*.py*
+ 
++%if (0%{?with_python3} == 1)
++%files -n python3-sssdconfig -f python3_sssdconfig.lang
++%defattr(-,root,root,-)
++%dir %{python3_sitelib}/SSSDConfig
++%{python3_sitelib}/SSSDConfig/*.py*
++%{python3_sitelib}/SSSDConfig/__pycache__/*.py*
++%endif
++
+ %files -n python-sss
+ %defattr(-,root,root,-)
+ %{python2_sitearch}/pysss.so
+ %{python2_sitearch}/_py2sss.so
+ 
++%if (0%{?with_python3} == 1)
++%files -n python3-sss
++%defattr(-,root,root,-)
++%{python3_sitearch}/pysss.so
++%{python3_sitearch}/_py3sss.so
++%endif
++
+ %files -n python-sss-murmur
+ %defattr(-,root,root,-)
+ %{python2_sitearch}/pysss_murmur.so
+ %{python2_sitearch}/_py2sss_murmur.so
+ 
++%if (0%{?with_python3} == 1)
++%files -n python3-sss-murmur
++%defattr(-,root,root,-)
++%{python3_sitearch}/pysss_murmur.so
++%{python3_sitearch}/_py3sss_murmur.so
++%endif
++
+ %files -n libsss_idmap
+ %defattr(-,root,root,-)
+ %doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
+@@ -835,11 +949,25 @@ rm -rf $RPM_BUILD_ROOT
+ %{python2_sitearch}/pysss_nss_idmap.so
+ %{python2_sitearch}/_py2sss_nss_idmap.so
+ 
++%if (0%{?with_python3} == 1)
++%files -n python3-libsss_nss_idmap
++%defattr(-,root,root,-)
++%{python3_sitearch}/pysss_nss_idmap.so
++%{python3_sitearch}/_py3sss_nss_idmap.so
++%endif
++
+ %files -n python-libipa_hbac
+ %defattr(-,root,root,-)
+ %{python2_sitearch}/pyhbac.so
+ %{python2_sitearch}/_py2hbac.so
+ 
++%if (0%{?with_python3} == 1)
++%files -n python3-libipa_hbac
++%defattr(-,root,root,-)
++%{python3_sitearch}/pyhbac.so
++%{python3_sitearch}/_py3hbac.so
++%endif
++
+ %files libwbclient
+ %defattr(-,root,root,-)
+ %{_libdir}/%{name}/modules/libwbclient.so.*
+diff --git a/src/conf_macros.m4 b/src/conf_macros.m4
+index 48d1e6e7d6d1189c86d626a4509d919143aa6821..86876fab8115c49f38ebef4e3037a8ba36a5b92e 100644
+--- a/src/conf_macros.m4
++++ b/src/conf_macros.m4
+@@ -383,7 +383,7 @@ AC_DEFUN([WITH_PYTHON3_BINDINGS],
+                                 [Whether to build python3 bindings [yes]])
+                 ],
+                 [],
+-                [with_python3_bindings=no]
++                [with_python3_bindings=yes]
+                )
+     if test x"$with_python3_bindings" = xyes; then
+         AC_SUBST([HAVE_PYTHON3_BINDINGS], [1])
+diff --git a/src/tests/dlopen-tests.c b/src/tests/dlopen-tests.c
+index 5cc6cae693f09adae12df0d2267e0868ae2f74c0..e808f23e7560241e3fc158d71da2dbdbe1543dfc 100644
+--- a/src/tests/dlopen-tests.c
++++ b/src/tests/dlopen-tests.c
+@@ -96,10 +96,16 @@ struct so {
+     { "libdlopen_test_providers.so", { LIBPFX"libdlopen_test_providers.so",
+                                        NULL } },
+ #ifdef HAVE_PYTHON_BINDINGS
+-    { "pyhbac.so", { LIBPFX"pyhbac.so", NULL } },
+-    { "pysss.so", { LIBPFX"pysss.so", NULL } },
+-    { "pysss_murmur.so", { LIBPFX"pysss_murmur.so", NULL } },
+-    { "pysss_nss_idmap.so", { LIBPFX"pysss_nss_idmap.so", NULL } },
++    { "_py2hbac.so", { LIBPFX"_py2hbac.so", NULL } },
++    { "_py2sss.so", { LIBPFX"_py2sss.so", NULL } },
++    { "_py2sss_murmur.so", { LIBPFX"_py2sss_murmur.so", NULL } },
++    { "_py2sss_nss_idmap.so", { LIBPFX"_py2sss_nss_idmap.so", NULL } },
++#endif
++#ifdef HAVE_PYTHON_BINDINGS
++    { "_py3hbac.so", { LIBPFX"_py3hbac.so", NULL } },
++    { "_py3sss.so", { LIBPFX"_py3sss.so", NULL } },
++    { "_py3sss_murmur.so", { LIBPFX"_py3sss_murmur.so", NULL } },
++    { "_py3sss_nss_idmap.so", { LIBPFX"_py3sss_nss_idmap.so", NULL } },
+ #endif
+ #ifdef HAVE_CONFIG_LIB
+     { "libsss_config.so", { LIBPFX"libsss_config.so", NULL } },
+-- 
+2.4.3
+

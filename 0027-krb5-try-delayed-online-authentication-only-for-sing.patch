@@ -1,0 +1,36 @@
+From c1fce215b02fca5ed9df19bf66aaff3b52ed777b Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 25 Mar 2015 12:04:57 +0100
+Subject: [PATCH 27/30] krb5: try delayed online authentication only for single
+ factor auth
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 2d0e7658198d1aa6e3926bf967ff683660249114)
+---
+ src/providers/krb5/krb5_auth.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/providers/krb5/krb5_auth.c b/src/providers/krb5/krb5_auth.c
+index 5a946de4dba5081ed3b082e54af84e73b567a22f..2cfb3a805ea1472cc725aca068edcc69b036daba 100644
+--- a/src/providers/krb5/krb5_auth.c
++++ b/src/providers/krb5/krb5_auth.c
+@@ -263,6 +263,13 @@ static void krb5_auth_cache_creds(struct krb5_ctx *krb5_ctx,
+     const char *password = NULL;
+     errno_t ret;
+ 
++    if (sss_authtok_get_type(pd->authtok) != SSS_AUTHTOK_TYPE_PASSWORD) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "Delayed authentication is only available for password "
++              "authentication (single factor).\n");
++        return;
++    }
++
+     ret = sss_authtok_get_password(pd->authtok, &password, NULL);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_FATAL_FAILURE,
+-- 
+2.4.3
+

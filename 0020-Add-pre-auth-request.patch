@@ -1,0 +1,112 @@
+From 81f4c515c85e6cb389a26a8cb10d8b2b8f6ee470 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 24 Mar 2015 17:24:50 +0100
+Subject: [PATCH 20/30] Add pre-auth request
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit fb045f6e5a9a7f8936ad6f89c28862dcd035a4fe)
+---
+ src/providers/data_provider_be.c | 1 +
+ src/providers/dp_pam_data_util.c | 2 ++
+ src/providers/ipa/ipa_auth.c     | 1 +
+ src/providers/krb5/krb5_auth.c   | 2 ++
+ src/responder/pam/pamsrv_cmd.c   | 7 +++++++
+ src/sss_client/sss_cli.h         | 4 ++++
+ 6 files changed, 17 insertions(+)
+
+diff --git a/src/providers/data_provider_be.c b/src/providers/data_provider_be.c
+index 805f3ee81964ee7e7339627bb4d2a47c25218c73..1dbb63f61de07d81426832bb0304e1d5f15a4c98 100644
+--- a/src/providers/data_provider_be.c
++++ b/src/providers/data_provider_be.c
+@@ -1374,6 +1374,7 @@ static int be_pam_handler(struct sbus_request *dbus_req, void *user_data)
+ 
+     switch (pd->cmd) {
+         case SSS_PAM_AUTHENTICATE:
++        case SSS_PAM_PREAUTH:
+             target = BET_AUTH;
+             break;
+         case SSS_PAM_ACCT_MGMT:
+diff --git a/src/providers/dp_pam_data_util.c b/src/providers/dp_pam_data_util.c
+index 313948b369cf605c91eb608b9a394d32a1e128d1..8724bf936f3f46fb8393c8a3da57215a73b4191a 100644
+--- a/src/providers/dp_pam_data_util.c
++++ b/src/providers/dp_pam_data_util.c
+@@ -43,6 +43,8 @@ static const char *pamcmd2str(int cmd) {
+         return "PAM_CHAUTHTOK";
+     case SSS_PAM_CHAUTHTOK_PRELIM:
+         return "PAM_CHAUTHTOK_PRELIM";
++    case SSS_PAM_PREAUTH:
++        return "SSS_PAM_PREAUTH";
+     default:
+         return "UNKNOWN";
+     }
+diff --git a/src/providers/ipa/ipa_auth.c b/src/providers/ipa/ipa_auth.c
+index f9a0706be7c7fee2b8431cabad82e3c559795db4..f8badbdd16bfc4761ea177fdf5179ff2d4158080 100644
+--- a/src/providers/ipa/ipa_auth.c
++++ b/src/providers/ipa/ipa_auth.c
+@@ -208,6 +208,7 @@ void ipa_auth(struct be_req *be_req)
+ 
+     switch (state->pd->cmd) {
+         case SSS_PAM_AUTHENTICATE:
++        case SSS_PAM_PREAUTH:
+             state->ipa_auth_ctx = talloc_get_type(
+                                     be_ctx->bet_info[BET_AUTH].pvt_bet_data,
+                                     struct ipa_auth_ctx);
+diff --git a/src/providers/krb5/krb5_auth.c b/src/providers/krb5/krb5_auth.c
+index 9f136041e98b9df607676c5d79799193038130ee..c0cfaf7cfae5e4aa897bf4fd915fb294c6c24161 100644
+--- a/src/providers/krb5/krb5_auth.c
++++ b/src/providers/krb5/krb5_auth.c
+@@ -497,6 +497,8 @@ struct tevent_req *krb5_auth_send(TALLOC_CTX *mem_ctx,
+                 goto done;
+             }
+             break;
++        case SSS_PAM_PREAUTH:
++            break;
+         default:
+             DEBUG(SSSDBG_CONF_SETTINGS, "Unexpected pam task %d.\n", pd->cmd);
+             state->pam_status = PAM_SYSTEM_ERR;
+diff --git a/src/responder/pam/pamsrv_cmd.c b/src/responder/pam/pamsrv_cmd.c
+index 2ca5aa789ab98aea9005b891be1a36ea91ab40f4..c7eb697f29b6de9f7edaaf7715a58d2b7afdc733 100644
+--- a/src/responder/pam/pamsrv_cmd.c
++++ b/src/responder/pam/pamsrv_cmd.c
+@@ -1454,6 +1454,12 @@ static int pam_cmd_chauthtok_prelim(struct cli_ctx *cctx) {
+     return pam_forwarder(cctx, SSS_PAM_CHAUTHTOK_PRELIM);
+ }
+ 
++static int pam_cmd_preauth(struct cli_ctx *cctx)
++{
++    DEBUG(SSSDBG_CONF_SETTINGS, "entering pam_cmd_preauth\n");
++    return pam_forwarder(cctx, SSS_PAM_PREAUTH);
++}
++
+ struct cli_protocol_version *register_cli_protocol_version(void)
+ {
+     static struct cli_protocol_version pam_cli_protocol_version[] = {
+@@ -1477,6 +1483,7 @@ struct sss_cmd_table *get_pam_cmds(void)
+         {SSS_PAM_CLOSE_SESSION, pam_cmd_close_session},
+         {SSS_PAM_CHAUTHTOK, pam_cmd_chauthtok},
+         {SSS_PAM_CHAUTHTOK_PRELIM, pam_cmd_chauthtok_prelim},
++        {SSS_PAM_PREAUTH, pam_cmd_preauth},
+         {SSS_CLI_NULL, NULL}
+     };
+ 
+diff --git a/src/sss_client/sss_cli.h b/src/sss_client/sss_cli.h
+index 9a19d7d47d0a9d7dabeac36dc2c866c3420ef501..2895659b9c3ed4ab520ca90846379c22fd9567f7 100644
+--- a/src/sss_client/sss_cli.h
++++ b/src/sss_client/sss_cli.h
+@@ -220,6 +220,10 @@ enum sss_cli_command {
+     SSS_CMD_RENEW            = 0x00F8, /**< Renew a credential with a limited
+                                         * lifetime, e.g. a Kerberos Ticket
+                                         * Granting Ticket (TGT) */
++    SSS_PAM_PREAUTH          = 0x00F9, /**< Request which can be run before
++                                        * an authentication request to find
++                                        * out which authentication methods
++                                        * are available for the given user. */
+ 
+ /* PAC responder calls */
+     SSS_PAC_ADD_PAC_USER     = 0x0101,
+-- 
+2.4.3
+

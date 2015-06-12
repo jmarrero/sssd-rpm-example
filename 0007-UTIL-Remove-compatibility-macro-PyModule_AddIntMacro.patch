@@ -1,0 +1,45 @@
+From 61311b000c5d36322a35103cee2eb304875d235f Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 9 Feb 2015 19:33:44 +0100
+Subject: [PATCH 07/30] UTIL: Remove compatibility macro PyModule_AddIntMacro
+
+The macro PyModule_AddIntMacro is defined in python >= 2.6
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ src/external/python.m4 | 2 +-
+ src/util/sss_python.h  | 5 -----
+ 2 files changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/src/external/python.m4 b/src/external/python.m4
+index e93f850092b0f54565e138b3235b9c29f89e5444..ac427268d4ff8828314cefb43ce2af72d34bc295 100644
+--- a/src/external/python.m4
++++ b/src/external/python.m4
+@@ -63,7 +63,7 @@ AC_DEFUN([AM_CHECK_PYTHON_COMPAT],
+     LIBS="$LIBS $PYTHON_LIBS"
+ 
+     AC_CHECK_FUNCS([PyErr_NewExceptionWithDoc])
+-    AC_CHECK_DECLS([PyModule_AddIntMacro, PyUnicode_FromString], [], [], [[#include <Python.h>]])
++    AC_CHECK_DECLS([PyUnicode_FromString], [], [], [[#include <Python.h>]])
+ 
+     CPPFLAGS="$save_CPPFLAGS"
+     LIBS="$save_LIBS"
+diff --git a/src/util/sss_python.h b/src/util/sss_python.h
+index 56c25ebb74bffc061688c3c32515d6e0288ac94d..5521aa5cfd84acffc65edbe76a264b1f2a52e9fd 100644
+--- a/src/util/sss_python.h
++++ b/src/util/sss_python.h
+@@ -32,11 +32,6 @@ PyObject *sss_python_unicode_from_string(const char *u);
+ PyObject *
+ sss_exception_with_doc(char *name, char *doc, PyObject *base, PyObject *dict);
+ 
+-/* PyModule_AddIntMacro() compatibility */
+-#if !HAVE_DECL_PYMODULE_ADDINTMACRO
+-#define PyModule_AddIntMacro(m, c) PyModule_AddIntConstant(m, sss_py_const_p(char, #c), c)
+-#endif
+-
+ /* Convenience macros */
+ #define TYPE_READY(module, type, name) do {         \
+     if (PyType_Ready(&type) < 0)                    \
+-- 
+2.4.3
+

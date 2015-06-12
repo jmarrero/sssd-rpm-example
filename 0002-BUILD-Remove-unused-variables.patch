@@ -1,0 +1,26 @@
+From 8b57611326949037065899fa8f7f53d635700930 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 9 Feb 2015 18:46:16 +0100
+Subject: [PATCH 02/30] BUILD: Remove unused variables
+
+Reviewed-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ src/external/python.m4 | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/external/python.m4 b/src/external/python.m4
+index a1bd87a0ee3a56ddd25c4aba7687ffc7540b4ec2..241de9fd0e401c40f8136861e7c7070c8a50cddd 100644
+--- a/src/external/python.m4
++++ b/src/external/python.m4
+@@ -37,8 +37,6 @@ AC_DEFUN([AM_CHECK_PYTHON_HEADERS],
+     AC_MSG_CHECKING(for headers required to compile python extensions)
+ 
+     dnl deduce PYTHON_INCLUDES
+-    py_prefix=`$PYTHON -c "import sys; print(sys.prefix)"`
+-    py_exec_prefix=`$PYTHON -c "import sys; print(sys.exec_prefix)"`
+     PYTHON_INCLUDES=-I`$PYTHON -c "from distutils import sysconfig; print(sysconfig.get_config_var('INCLUDEPY'))"`
+ 
+     AC_SUBST(PYTHON_INCLUDES)
+-- 
+2.4.3
+
