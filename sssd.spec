@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.12.5
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1038,6 +1038,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Jun 19 2015 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.12.5-4
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_23_Mass_Rebuild
+
 * Fri Jun 12 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.12.5-3
 - Fix libwbclient alternatives
 
