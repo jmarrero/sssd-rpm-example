@@ -28,46 +28,16 @@
 %endif
 
 Name: sssd
-Version: 1.12.5
-Release: 4%{?dist}
+Version: 1.13.0
+Release: 1%{?dist}.alpha
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}alpha.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-BUILD-Remove-unused-libraries-for-pysss.so.patch
-Patch0002: 0002-BUILD-Remove-unused-variables.patch
-Patch0003: 0003-BUILD-Remove-detection-of-type-Py_ssize_t.patch
-Patch0004: 0004-UTIL-Remove-python-wrapper-sss_python_set_new.patch
-Patch0005: 0005-UTIL-Remove-python-wrapper-sss_python_set_add.patch
-Patch0006: 0006-UTIL-Remove-python-wrapper-sss_python_set_check.patch
-Patch0007: 0007-UTIL-Remove-compatibility-macro-PyModule_AddIntMacro.patch
-Patch0008: 0008-UTIL-Remove-python-wrapper-sss_python_unicode_from_s.patch
-Patch0009: 0009-BUILD-Use-python-config-for-detection-FLAGS.patch
-Patch0010: 0010-SPEC-Use-new-convention-for-python-packages.patch
-Patch0011: 0011-SPEC-Move-python-bindings-to-separate-packages.patch
-Patch0012: 0012-BUILD-Add-possibility-to-build-python-2-3-bindings.patch
-Patch0013: 0013-TESTS-Run-python-tests-with-all-supported-python-ver.patch
-Patch0014: 0014-SPEC-Replace-python_-macros-with-python2_.patch
-Patch0015: 0015-SPEC-Build-python3-bindings-on-available-platforms.patch
-Patch0016: 0016-ad_opts-Use-different-default-attribute-for-group-na.patch
-Patch0017: 0017-Add-leak-check-and-command-line-option-to-test_autht.patch
-Patch0018: 0018-utils-add-sss_authtok_-gs-et_2fa.patch
-Patch0019: 0019-pam-handle-2FA-authentication-token-in-the-responder.patch
-Patch0020: 0020-Add-pre-auth-request.patch
-Patch0021: 0021-krb5-child-add-preauth-and-split-2fa-token-support.patch
-Patch0022: 0022-IPA-create-preauth-indicator-file-at-startup.patch
-Patch0023: 0023-pam_sss-add-pre-auth-and-2fa-support.patch
-Patch0024: 0024-Add-cache_credentials_minimal_first_factor_length-co.patch
-Patch0025: 0025-sysdb-add-sysdb_cache_password_ex.patch
-Patch0026: 0026-krb5-save-hash-of-the-first-authentication-factor-to.patch
-Patch0027: 0027-krb5-try-delayed-online-authentication-only-for-sing.patch
-Patch0028: 0028-2FA-offline-auth.patch
-Patch0029: 0029-pam_sss-move-message-encoding-into-separate-file.patch
-Patch0030: 0030-PAM-add-PAM-responder-unit-test.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -82,6 +52,7 @@ Requires: python3-sssdconfig = %{version}-%{release}
 %global servicename sssd
 %global sssdstatedir %{_localstatedir}/lib/sss
 %global dbpath %{sssdstatedir}/db
+%global keytabdir %{sssdstatedir}/keytabs
 %global pipepath %{sssdstatedir}/pipes
 %global mcpath %{sssdstatedir}/mc
 %global pubconfpath %{sssdstatedir}/pubconf
@@ -107,6 +78,7 @@ BuildRequires: dbus-libs
 BuildRequires: openldap-devel
 BuildRequires: pam-devel
 BuildRequires: nss-devel
+BuildRequires: openssl-devel
 BuildRequires: nspr-devel
 BuildRequires: pcre-devel
 BuildRequires: libxslt
@@ -407,14 +379,16 @@ Requires: libipa_hbac = %{version}-%{release}
 %description -n libipa_hbac-devel
 Utility library to validate FreeIPA HBAC rules for authorization requests
 
-%package -n libipa_hbac-python
+%package -n python-libipa_hbac
 Summary: Python2 bindings for the FreeIPA HBAC Evaluator library
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libipa_hbac = %{version}-%{release}
+Provides: libipa_hbac-python = %{version}-%{release}
+Obsoletes: libipa_hbac-python < 1.13.0
 
-%description -n libipa_hbac-python
-The libipa_hbac-python contains the bindings so that libipa_hbac can be
+%description -n python-libipa_hbac
+The python-libipa_hbac contains the bindings so that libipa_hbac can be
 used by Python applications.
 
 %package -n python3-libipa_hbac
@@ -446,14 +420,16 @@ Requires: libsss_nss_idmap = %{version}-%{release}
 %description -n libsss_nss_idmap-devel
 Utility library for SID based lookups
 
-%package -n libsss_nss_idmap-python
+%package -n python-libsss_nss_idmap
 Summary: Python2 bindings for libsss_nss_idmap
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libsss_nss_idmap = %{version}-%{release}
+Provides: libsss_nss_idmap-python = %{version}-%{release}
+Obsoletes: libsss_nss_idmap-python < 1.13.0
 
-%description -n libsss_nss_idmap-python
-The libsss_nss_idmap-python contains the bindings so that libsss_nss_idmap can
+%description -n python-libsss_nss_idmap
+The python-libsss_nss_idmap contains the bindings so that libsss_nss_idmap can
 be used by Python applications.
 
 %package -n python3-libsss_nss_idmap
@@ -534,7 +510,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q
+%setup -q -n %{name}-1.12.90
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -566,12 +542,6 @@ autoreconf -ivf
 make %{?_smp_mflags} all docs
 
 %check
-
-# the utility patch did not apply changes in file permissions
-chmod 755 src/config/SSSDConfigTest.py*.sh \
-          src/tests/pyhbac-test.py*.sh \
-          src/tests/pysss_murmur-test.py*.sh
-
 export CK_TIMEOUT_MULTIPLIER=10
 make %{?_smp_mflags} check VERBOSE=yes
 unset CK_TIMEOUT_MULTIPLIER
@@ -708,6 +678,7 @@ rm -rf $RPM_BUILD_ROOT
 #Internal shared libraries
 %{_libdir}/%{name}/libsss_child.so
 %{_libdir}/%{name}/libsss_crypt.so
+%{_libdir}/%{name}/libsss_cert.so
 %{_libdir}/%{name}/libsss_debug.so
 %{_libdir}/%{name}/libsss_krb5_common.so
 %{_libdir}/%{name}/libsss_ldap_common.so
@@ -781,6 +752,7 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %doc COPYING
 %attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
+%attr(700,root,root) %dir %{keytabdir}
 %{_libdir}/%{name}/libsss_ipa.so
 %{_libexecdir}/%{servicename}/selinux_child
 %{_mandir}/man5/sssd-ipa.5*
@@ -929,7 +901,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/libsss_nss_idmap.so
 %{_libdir}/pkgconfig/sss_nss_idmap.pc
 
-%files -n libsss_nss_idmap-python
+%files -n python-libsss_nss_idmap
 %defattr(-,root,root,-)
 %{python2_sitearch}/pysss_nss_idmap.so
 %{python2_sitearch}/_py2sss_nss_idmap.so
@@ -939,7 +911,7 @@ rm -rf $RPM_BUILD_ROOT
 %{python3_sitearch}/pysss_nss_idmap.so
 %{python3_sitearch}/_py3sss_nss_idmap.so
 
-%files -n libipa_hbac-python
+%files -n python-libipa_hbac
 %defattr(-,root,root,-)
 %{python2_sitearch}/pyhbac.so
 %{python2_sitearch}/_py2hbac.so
@@ -1038,6 +1010,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Jun 22 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-1.alpha
+- New upstream release 1.13 alpha
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.0alpha
+
 * Fri Jun 19 2015 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.12.5-4
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_23_Mass_Rebuild
 
