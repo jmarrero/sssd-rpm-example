@@ -29,12 +29,12 @@
 
 Name: sssd
 Version: 1.13.0
-Release: 2%{?dist}.alpha
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}alpha.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -511,7 +511,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.12.90
+%setup -q
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -1011,6 +1011,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Jul 08 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-3
+- New upstream release 1.13.0
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.0
+
 * Tue Jun 30 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-2.alpha
 - Unify return type of list_active_domains for python{2,3}
 
