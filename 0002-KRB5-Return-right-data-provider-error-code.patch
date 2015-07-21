@@ -1,0 +1,32 @@
+From 3c0ed7ebf698f69ce1643d0f41d758fc730e06a7 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 14 Jul 2015 12:48:47 +0200
+Subject: [PATCH] KRB5: Return right data provider error code
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2719
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+---
+ src/providers/krb5/krb5_wait_queue.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/krb5/krb5_wait_queue.c b/src/providers/krb5/krb5_wait_queue.c
+index 126209620dcd22889cf7bcb1cbec1890b8891b41..b4d3f903a94c9fdfffc975f1dfd10a27ab653a8d 100644
+--- a/src/providers/krb5/krb5_wait_queue.c
++++ b/src/providers/krb5/krb5_wait_queue.c
+@@ -366,7 +366,7 @@ int krb5_auth_queue_recv(struct tevent_req *req,
+     }
+ 
+     if (_dp_err) {
+-        *_dp_err = state->pam_status;
++        *_dp_err = state->dp_err;
+     }
+ 
+     TEVENT_REQ_RETURN_ON_ERROR(req);
+-- 
+2.4.3
+

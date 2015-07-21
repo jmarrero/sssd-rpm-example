@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.13.0
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -39,6 +39,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001: 0001-SSSDConfig-return-list-for-list_active_domains.patch
+Patch0002: 0002-KRB5-Return-right-data-provider-error-code.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -1011,6 +1012,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Jul 21 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-4
+- Fix ipa-migration bug
+- Resolves: upstream #2719 - IPA: returned unknown dp error code with disabled
+                             migration mode
 * Wed Jul 08 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-3
 - New upstream release 1.13.0
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.0
