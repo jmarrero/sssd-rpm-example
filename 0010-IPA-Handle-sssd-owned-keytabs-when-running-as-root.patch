@@ -1,0 +1,116 @@
+From 629fba06bc02e6ff4b25680532d298552fa55b22 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 22 Jul 2015 17:20:11 +0200
+Subject: [PATCH 10/14] IPA: Handle sssd-owned keytabs when running as root
+
+https://fedorahosted.org/sssd/ticket/2718
+
+This patch handles the case where the keytab is created with sssd:sssd
+ownership (perhaps by the IPA oddjob script) but SSSD runs as root,
+which is the default in many distributions.
+
+Reviewed-by: Alexander Bokovoy <abokovoy@redhat.com>
+---
+ src/providers/ipa/ipa_subdomains.h        |  3 ++
+ src/providers/ipa/ipa_subdomains_server.c | 46 +++++++++++++++++++++++++------
+ 2 files changed, 41 insertions(+), 8 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_subdomains.h b/src/providers/ipa/ipa_subdomains.h
+index 5bc63a173a1a8967eb5de30a2da84a81377d3900..2302c5f03e80de2ea1efad424769e777cd6dd8d5 100644
+--- a/src/providers/ipa/ipa_subdomains.h
++++ b/src/providers/ipa/ipa_subdomains.h
+@@ -94,6 +94,9 @@ struct ipa_server_mode_ctx {
+ 
+     struct ipa_ad_server_ctx *trusts;
+     struct ipa_ext_groups *ext_groups;
++
++    uid_t kt_owner_uid;
++    uid_t kt_owner_gid;
+ };
+ 
+ int ipa_ad_subdom_init(struct be_ctx *be_ctx,
+diff --git a/src/providers/ipa/ipa_subdomains_server.c b/src/providers/ipa/ipa_subdomains_server.c
+index a9e2c1f700ef47716be868bad68590b8d5d0d42a..4bfea61e6dd0a02f6b723a39f7ba236c914009b0 100644
+--- a/src/providers/ipa/ipa_subdomains_server.c
++++ b/src/providers/ipa/ipa_subdomains_server.c
+@@ -520,16 +520,28 @@ static errno_t ipa_getkeytab_recv(struct tevent_req *req, int *child_status)
+     return EOK;
+ }
+ 
+-static errno_t ipa_check_keytab(const char *keytab)
++static errno_t ipa_check_keytab(const char *keytab,
++                                uid_t kt_owner_uid,
++                                gid_t kt_owner_gid)
+ {
+     errno_t ret;
+ 
+     ret = check_file(keytab, getuid(), getgid(), S_IFREG|0600, 0, NULL, false);
+-    if (ret != EOK) {
+-        if (ret != ENOENT) {
+-            DEBUG(SSSDBG_OP_FAILURE, "Failed to check for %s\n", keytab);
+-        } else {
+-            DEBUG(SSSDBG_TRACE_FUNC, "Keytab %s is not present\n", keytab);
++    if (ret == ENOENT) {
++        DEBUG(SSSDBG_TRACE_FUNC, "Keytab %s is not present\n", keytab);
++        goto done;
++    } else if (ret != EOK) {
++        if (kt_owner_uid) {
++            ret = check_file(keytab, kt_owner_uid, kt_owner_gid,
++                             S_IFREG|0600, 0, NULL, false);
++        }
++
++        if (ret != EOK) {
++            if (ret != ENOENT) {
++                DEBUG(SSSDBG_OP_FAILURE, "Failed to check for %s\n", keytab);
++            } else {
++                DEBUG(SSSDBG_TRACE_FUNC, "Keytab %s is not present\n", keytab);
++            }
+         }
+         goto done;
+     }
+@@ -648,7 +660,9 @@ static errno_t ipa_server_trust_add_1way(struct tevent_req *req)
+         return EIO;
+     }
+ 
+-    ret = ipa_check_keytab(state->keytab);
++    ret = ipa_check_keytab(state->keytab,
++                           state->id_ctx->server_mode->kt_owner_uid,
++                           state->id_ctx->server_mode->kt_owner_gid);
+     if (ret == EOK) {
+         DEBUG(SSSDBG_TRACE_FUNC,
+               "Keytab already present, can add the trust\n");
+@@ -704,7 +718,9 @@ static void ipa_server_trust_1way_kt_done(struct tevent_req *subreq)
+     DEBUG(SSSDBG_TRACE_FUNC,
+           "Keytab successfully retrieved to %s\n", state->keytab);
+ 
+-    ret = ipa_check_keytab(state->keytab);
++    ret = ipa_check_keytab(state->keytab,
++                           state->id_ctx->server_mode->kt_owner_uid,
++                           state->id_ctx->server_mode->kt_owner_gid);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "ipa_check_keytab failed: %d\n", ret);
+         tevent_req_error(req, ret);
+@@ -1029,6 +1045,20 @@ int ipa_ad_subdom_init(struct be_ctx *be_ctx,
+     id_ctx->server_mode->hostname = hostname;
+     id_ctx->server_mode->trusts = NULL;
+     id_ctx->server_mode->ext_groups = NULL;
++    id_ctx->server_mode->kt_owner_uid = 0;
++    id_ctx->server_mode->kt_owner_gid = 0;
++
++    if (getuid() == 0) {
++        /* We need to handle keytabs created by IPA oddjob script gracefully
++         * even if we're running as root and IPA creates them as the SSSD user
++         */
++        ret = sss_user_by_name_or_uid(SSSD_USER,
++                                      &id_ctx->server_mode->kt_owner_uid,
++                                      &id_ctx->server_mode->kt_owner_gid);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_MINOR_FAILURE, "Failed to get ID of %s\n", SSSD_USER);
++        }
++    }
+ 
+     ret = ipa_ad_subdom_reinit(be_ctx, be_ctx->ev,
+                                be_ctx, id_ctx, be_ctx->domain);
+-- 
+2.5.0
+

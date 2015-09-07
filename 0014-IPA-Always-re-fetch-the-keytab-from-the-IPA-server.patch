@@ -1,0 +1,447 @@
+From b2d318b91bb9d6ea1bef827031b980b8d6ec7b44 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 24 Jul 2015 13:13:08 +0200
+Subject: [PATCH 14/14] IPA: Always re-fetch the keytab from the IPA server
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Even if a keytab for one-way trust exists, re-fetch the keytab again and
+try to use it. Fall back to the previous one if it exists.
+
+This is in order to allow the admin to re-establish the trust keytabs
+with a simple sssd restart.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                                   |   2 +
+ src/providers/ipa/ipa_subdomains.c            |   4 +-
+ src/providers/ipa/ipa_subdomains_server.c     |  83 +++++++++----
+ src/tests/cmocka/test_ipa_subdomains_server.c | 166 ++++++++++++++++++++++++--
+ 4 files changed, 221 insertions(+), 34 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index b8cbc6df23ded1edb945a709b6dbe1c44eb54017..4e58b4f419607272f35363875054320af0899dcf 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -2501,6 +2501,8 @@ test_ipa_subdom_server_LDFLAGS = \
+     -Wl,-wrap,krb5_kt_default \
+     -Wl,-wrap,execle \
+     -Wl,-wrap,execve \
++    -Wl,-wrap,rename \
++    -Wl,-wrap,sss_unique_filename \
+     $(NULL)
+ test_ipa_subdom_server_LDADD = \
+     $(PAM_LIBS) \
+diff --git a/src/providers/ipa/ipa_subdomains.c b/src/providers/ipa/ipa_subdomains.c
+index cf72784473747c67d44a5d887faf867cfe62ce2b..c688ddb9bb9b643e0695c1901a4ca467f71853da 100644
+--- a/src/providers/ipa/ipa_subdomains.c
++++ b/src/providers/ipa/ipa_subdomains.c
+@@ -264,7 +264,7 @@ static errno_t ipa_ranges_parse_results(TALLOC_CTX *mem_ctx,
+         ret = get_idmap_data_from_range(r, domain_name, &name1, &sid1, &rid1,
+                                         &range1, &mapping1);
+         if (ret != EOK) {
+-            DEBUG(SSSDBG_OP_FAILURE, ("get_idmap_data_from_range failed.\n"));
++            DEBUG(SSSDBG_OP_FAILURE, "get_idmap_data_from_range failed.\n");
+             goto done;
+         }
+         for (d = 0; d < c; d++) {
+@@ -272,7 +272,7 @@ static errno_t ipa_ranges_parse_results(TALLOC_CTX *mem_ctx,
+                                             &sid2, &rid2, &range2, &mapping2);
+             if (ret != EOK) {
+                 DEBUG(SSSDBG_OP_FAILURE,
+-                      ("get_idmap_data_from_range failed.\n"));
++                      "get_idmap_data_from_range failed.\n");
+                 goto done;
+             }
+ 
+diff --git a/src/providers/ipa/ipa_subdomains_server.c b/src/providers/ipa/ipa_subdomains_server.c
+index 4bfea61e6dd0a02f6b723a39f7ba236c914009b0..dfecab1bc362b5772379bae6d51f9cef8443f225 100644
+--- a/src/providers/ipa/ipa_subdomains_server.c
++++ b/src/providers/ipa/ipa_subdomains_server.c
+@@ -445,6 +445,17 @@ static void ipa_getkeytab_exec(const char *ccache,
+         exit(1);
+     }
+ 
++    /* ipa-getkeytab cannot add keys to an empty file, let's unlink it and only
++     * use the filename */
++    ret = unlink(keytab_path);
++    if (ret == -1) {
++        ret = errno;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Failed to unlink the temporary ccname [%d][%s]\n",
++              ret, sss_strerror(ret));
++        exit(1);
++    }
++
+     errno = 0;
+     ret = execle(IPA_GETKEYTAB_PATH, IPA_GETKEYTAB_PATH,
+                  "-r", "-s", server, "-p", principal, "-k", keytab_path, NULL,
+@@ -561,6 +572,7 @@ struct ipa_server_trust_add_state {
+     uint32_t direction;
+     const char *forest;
+     const char *keytab;
++    char *new_keytab;
+     const char *principal;
+     const char *forest_realm;
+     const char *ccache;
+@@ -660,21 +672,20 @@ static errno_t ipa_server_trust_add_1way(struct tevent_req *req)
+         return EIO;
+     }
+ 
+-    ret = ipa_check_keytab(state->keytab,
+-                           state->id_ctx->server_mode->kt_owner_uid,
+-                           state->id_ctx->server_mode->kt_owner_gid);
+-    if (ret == EOK) {
+-        DEBUG(SSSDBG_TRACE_FUNC,
+-              "Keytab already present, can add the trust\n");
+-        return EOK;
+-    } else if (ret != ENOENT) {
+-        DEBUG(SSSDBG_OP_FAILURE,
+-              "Failed to check for keytab: %d\n", ret);
++    state->new_keytab = talloc_asprintf(state, "%sXXXXXX", state->keytab);
++    if (state->new_keytab == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot set up ipa_get_keytab\n");
++        return ENOMEM;
++    }
++
++    ret = sss_unique_filename(state, state->new_keytab);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot create temporary keytab name\n");
+         return ret;
+     }
+ 
+     DEBUG(SSSDBG_TRACE_FUNC,
+-          "No keytab for %s\n", state->subdom->name);
++          "Will re-fetch keytab for %s\n", state->subdom->name);
+ 
+     hostname = dp_opt_get_string(state->id_ctx->ipa_options->basic,
+                                  IPA_HOSTNAME);
+@@ -691,7 +702,7 @@ static errno_t ipa_server_trust_add_1way(struct tevent_req *req)
+                                 state->ccache,
+                                 hostname,
+                                 state->principal,
+-                                state->keytab);
++                                state->new_keytab);
+     if (subreq == NULL) {
+         return ENOMEM;
+     }
+@@ -710,23 +721,49 @@ static void ipa_server_trust_1way_kt_done(struct tevent_req *subreq)
+     ret = ipa_getkeytab_recv(subreq, NULL);
+     talloc_zfree(subreq);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_OP_FAILURE, "ipa_getkeytab_recv failed: %d\n", ret);
+-        tevent_req_error(req, ret);
+-        return;
++        /* Do not fail here, but try to check and use the previous keytab,
++         * if any */
++        DEBUG(SSSDBG_MINOR_FAILURE, "ipa_getkeytab_recv failed: %d\n", ret);
++    } else {
++        DEBUG(SSSDBG_TRACE_FUNC,
++              "Keytab successfully retrieved to %s\n", state->new_keytab);
+     }
+ 
+-    DEBUG(SSSDBG_TRACE_FUNC,
+-          "Keytab successfully retrieved to %s\n", state->keytab);
+-
+-    ret = ipa_check_keytab(state->keytab,
++    ret = ipa_check_keytab(state->new_keytab,
+                            state->id_ctx->server_mode->kt_owner_uid,
+                            state->id_ctx->server_mode->kt_owner_gid);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_OP_FAILURE, "ipa_check_keytab failed: %d\n", ret);
+-        tevent_req_error(req, ret);
+-        return;
++    if (ret == EOK) {
++        ret = rename(state->new_keytab, state->keytab);
++        if (ret == -1) {
++            ret = errno;
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                "rename failed [%d][%s].\n", ret, strerror(ret));
++            tevent_req_error(req, ret);
++            return;
++        }
++        DEBUG(SSSDBG_TRACE_INTERNAL, "Keytab renamed to %s\n", state->keytab);
++    } else if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "Trying to recover and use the previous keytab, if available\n");
++        ret = ipa_check_keytab(state->keytab,
++                               state->id_ctx->server_mode->kt_owner_uid,
++                               state->id_ctx->server_mode->kt_owner_gid);
++        if (ret == EOK) {
++            DEBUG(SSSDBG_TRACE_FUNC,
++                  "The previous keytab %s contains the expected principal\n",
++                  state->keytab);
++        } else {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "Cannot use the old keytab: %d\n", ret);
++            /* Nothing we can do now */
++            tevent_req_error(req, ret);
++            return;
++        }
+     }
+ 
++    DEBUG(SSSDBG_TRACE_FUNC,
++          "Keytab %s contains the expected principals\n", state->new_keytab);
++
+     ret = ipa_server_trust_add_step(req);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+diff --git a/src/tests/cmocka/test_ipa_subdomains_server.c b/src/tests/cmocka/test_ipa_subdomains_server.c
+index a4cb8c2b7538dc84b74e0227205b73780844b652..fb9bd80e299c05fa230599d442fa361ae757dcd3 100644
+--- a/src/tests/cmocka/test_ipa_subdomains_server.c
++++ b/src/tests/cmocka/test_ipa_subdomains_server.c
+@@ -66,33 +66,79 @@
+ #define ONEWAY_PRINC    DOM_FLAT"$"
+ #define ONEWAY_AUTHID   ONEWAY_PRINC"@"SUBDOM_REALM
+ 
++static bool global_rename_called;
++
+ krb5_error_code __wrap_krb5_kt_default(krb5_context context, krb5_keytab *id)
+ {
+     return krb5_kt_resolve(context, KEYTAB_PATH, id);
+ }
+ 
+-static void create_dummy_keytab(void)
++static void create_dummy_keytab(const char *dummy_kt)
+ {
+     errno_t ret;
+ 
+-    assert_non_null(ONEWAY_KEYTAB);
++    assert_non_null(dummy_kt);
+     mock_keytab_with_contents(global_talloc_context,
+-                              ONEWAY_KEYTAB, ONEWAY_AUTHID);
++                              dummy_kt, ONEWAY_AUTHID);
+ 
+-    ret = access(ONEWAY_KEYTAB, R_OK);
++    ret = access(dummy_kt, R_OK);
+     assert_int_equal(ret, 0);
+ }
+ 
++static int wrap_exec(void)
++{
++    const char *test_kt;
++    const char *fail_creating_kt;
++
++    test_kt = getenv("TEST_KT_ENV");
++    if (test_kt == NULL) {
++        _exit(1);
++    }
++    unsetenv("TEST_KT_ENV");
++
++    fail_creating_kt = getenv("KT_CREATE_FAIL");
++    if (fail_creating_kt != NULL) {
++        _exit(1);
++    }
++
++    create_dummy_keytab(test_kt);
++    _exit(0);
++
++    return 1;   /* Should not happen */
++}
++
+ int __wrap_execle(const char *path, const char *arg, ...)
+ {
+-    create_dummy_keytab();
+-    _exit(0);
++    return wrap_exec();
+ }
+ 
+ int __wrap_execve(const char *path, const char *arg, ...)
+ {
+-    create_dummy_keytab();
+-    _exit(0);
++    return wrap_exec();
++}
++
++errno_t __real_sss_unique_filename(TALLOC_CTX *owner, char *path_tmpl);
++
++errno_t __wrap_sss_unique_filename(TALLOC_CTX *owner, char *path_tmpl)
++{
++    int ret;
++    int sret;
++
++    ret = __real_sss_unique_filename(owner, path_tmpl);
++    if (ret == EOK) {
++
++        sret = setenv("TEST_KT_ENV", path_tmpl, 1);
++        assert_int_equal(sret, 0);
++    }
++    return ret;
++}
++
++int __real_rename(const char *old, const char *new);
++
++int __wrap_rename(const char *old, const char *new)
++{
++    global_rename_called = true;
++    return __real_rename(old, new);
+ }
+ 
+ struct trust_test_ctx {
+@@ -100,6 +146,7 @@ struct trust_test_ctx {
+     struct be_ctx *be_ctx;
+ 
+     struct ipa_id_ctx *ipa_ctx;
++    bool expect_rename;
+ };
+ 
+ static struct ipa_id_ctx *mock_ipa_ctx(TALLOC_CTX *mem_ctx,
+@@ -244,6 +291,8 @@ static int test_ipa_server_create_trusts_setup(void **state)
+ 
+     mock_keytab_with_contents(test_ctx, KEYTAB_PATH, KEYTAB_TEST_PRINC);
+ 
++    global_rename_called = false;
++
+     *state = test_ctx;
+     return 0;
+ }
+@@ -260,6 +309,11 @@ static int test_ipa_server_create_trusts_teardown(void **state)
+     unlink(ONEWAY_KEYTAB);
+     /* Ignore failures */
+ 
++    /* If a test needs this variable, it should be set again in
++     * each test
++     */
++    unsetenv("KT_CREATE_FAIL");
++
+     talloc_free(test_ctx);
+     return 0;
+ }
+@@ -612,6 +666,8 @@ static void test_ipa_server_create_oneway(void **state)
+ 
+     assert_null(test_ctx->ipa_ctx->server_mode->trusts);
+ 
++    test_ctx->expect_rename = true;
++
+     req = ipa_server_create_trusts_send(test_ctx,
+                                         test_ctx->tctx->ev,
+                                         test_ctx->be_ctx,
+@@ -635,6 +691,8 @@ static void test_ipa_server_create_trusts_oneway(struct tevent_req *req)
+     talloc_zfree(req);
+     assert_int_equal(ret, EOK);
+ 
++    assert_true(test_ctx->expect_rename == global_rename_called);
++
+     ret = access(ONEWAY_KEYTAB, R_OK);
+     assert_int_equal(ret, 0);
+ 
+@@ -674,10 +732,46 @@ static void test_ipa_server_create_oneway_kt_exists(void **state)
+ 
+     add_test_1way_subdomains(test_ctx);
+ 
+-    create_dummy_keytab();
++    create_dummy_keytab(ONEWAY_KEYTAB);
+     ret = access(ONEWAY_KEYTAB, R_OK);
+     assert_int_equal(ret, 0);
+ 
++    test_ctx->expect_rename = true;
++
++    assert_null(test_ctx->ipa_ctx->server_mode->trusts);
++
++    req = ipa_server_create_trusts_send(test_ctx,
++                                        test_ctx->tctx->ev,
++                                        test_ctx->be_ctx,
++                                        test_ctx->ipa_ctx,
++                                        test_ctx->be_ctx->domain);
++    assert_non_null(req);
++
++    tevent_req_set_callback(req, test_ipa_server_create_trusts_oneway, test_ctx);
++
++    ret = test_ev_loop(test_ctx->tctx);
++    assert_int_equal(ret, ERR_OK);
++}
++
++/* Test scenario where a keytab already exists, but refresh fails. In this case,
++ * sssd should attempt to reuse the previous keytab
++ */
++static void test_ipa_server_create_oneway_kt_refresh_fallback(void **state)
++{
++    struct trust_test_ctx *test_ctx =
++        talloc_get_type(*state, struct trust_test_ctx);
++    struct tevent_req *req;
++    errno_t ret;
++
++    add_test_1way_subdomains(test_ctx);
++
++    create_dummy_keytab(ONEWAY_KEYTAB);
++    ret = access(ONEWAY_KEYTAB, R_OK);
++    assert_int_equal(ret, 0);
++
++    setenv("KT_CREATE_FAIL", "1", 1);
++    test_ctx->expect_rename = false;
++
+     assert_null(test_ctx->ipa_ctx->server_mode->trusts);
+ 
+     req = ipa_server_create_trusts_send(test_ctx,
+@@ -693,6 +787,54 @@ static void test_ipa_server_create_oneway_kt_exists(void **state)
+     assert_int_equal(ret, ERR_OK);
+ }
+ 
++/* Tests case where there's no keytab and retrieving fails. Just fail the
++ * request in that case
++ */
++static void test_ipa_server_create_trusts_oneway_fail(struct tevent_req *req);
++
++static void test_ipa_server_create_oneway_kt_refresh_fail(void **state)
++{
++    struct trust_test_ctx *test_ctx =
++        talloc_get_type(*state, struct trust_test_ctx);
++    struct tevent_req *req;
++    errno_t ret;
++
++    add_test_1way_subdomains(test_ctx);
++
++    setenv("KT_CREATE_FAIL", "1", 1);
++    test_ctx->expect_rename = false;
++
++    assert_null(test_ctx->ipa_ctx->server_mode->trusts);
++
++    req = ipa_server_create_trusts_send(test_ctx,
++                                        test_ctx->tctx->ev,
++                                        test_ctx->be_ctx,
++                                        test_ctx->ipa_ctx,
++                                        test_ctx->be_ctx->domain);
++    assert_non_null(req);
++
++    tevent_req_set_callback(req,
++                            test_ipa_server_create_trusts_oneway_fail,
++                            test_ctx);
++
++    ret = test_ev_loop(test_ctx->tctx);
++    assert_int_equal(ret, ERR_OK);
++}
++
++static void test_ipa_server_create_trusts_oneway_fail(struct tevent_req *req)
++{
++    struct trust_test_ctx *test_ctx = \
++        tevent_req_callback_data(req, struct trust_test_ctx);
++    errno_t ret;
++
++    ret = ipa_server_create_trusts_recv(req);
++    assert_int_not_equal(ret, EOK);
++
++    assert_true(test_ctx->expect_rename == global_rename_called);
++
++    test_ev_done(test_ctx->tctx, EOK);
++}
++
+ static void test_ipa_server_trust_oneway_init(void **state)
+ {
+     struct trust_test_ctx *test_ctx =
+@@ -749,6 +891,12 @@ int main(int argc, const char *argv[])
+         cmocka_unit_test_setup_teardown(test_ipa_server_create_oneway_kt_exists,
+                                         test_ipa_server_create_trusts_setup,
+                                         test_ipa_server_create_trusts_teardown),
++        cmocka_unit_test_setup_teardown(test_ipa_server_create_oneway_kt_refresh_fallback,
++                                        test_ipa_server_create_trusts_setup,
++                                        test_ipa_server_create_trusts_teardown),
++        cmocka_unit_test_setup_teardown(test_ipa_server_create_oneway_kt_refresh_fail,
++                                        test_ipa_server_create_trusts_setup,
++                                        test_ipa_server_create_trusts_teardown),
+         cmocka_unit_test_setup_teardown(test_ipa_server_trust_oneway_init,
+                                         test_ipa_server_create_trusts_setup,
+                                         test_ipa_server_create_trusts_teardown),
+-- 
+2.5.0
+

@@ -1,0 +1,88 @@
+From 2322de0bd2fdc6b2ca64969df35662ab962620a4 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 21 Jul 2015 11:44:03 +0200
+Subject: [PATCH 07/14] IPA: Remove MPG groups if getgrgid was called before
+ getpw()
+
+https://fedorahosted.org/sssd/ticket/2724
+
+This bug only affects IPA clients that are connected to IPA servers with
+AD trust and ID mapping in effect.
+
+If an IPA client calls getgrgid() for an ID that matches a user, the
+user's private group would be returned and stored as a group entry.
+
+Subsequent queries for that user would fail, because MPG domains impose
+uniqueness restriction for both the ID and name space across groups and
+users.
+
+To work around that, we remove the UPG groups in MPG domains during a
+group lookup.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/providers/ipa/ipa_s2n_exop.c | 41 ++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 39 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index 812a4bbd707faf5c184594b562c148d1e704fd58..1e6368dc7ef1a6f60b541409f7f6740d602f0d43 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -1764,6 +1764,7 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+     int tret;
+     struct sysdb_attrs *gid_override_attrs = NULL;
+     char ** exop_grouplist;
++    struct ldb_message *msg;
+ 
+     tmp_ctx = talloc_new(NULL);
+     if (tmp_ctx == NULL) {
+@@ -2005,8 +2006,44 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+                                    attrs->a.user.pw_dir, attrs->a.user.pw_shell,
+                                    NULL, attrs->sysdb_attrs, NULL,
+                                    timeout, now);
+-            if (ret != EOK) {
+-                DEBUG(SSSDBG_OP_FAILURE, "sysdb_store_user failed.\n");
++            if (ret == EEXIST && dom->mpg == true) {
++                /* This handles the case where getgrgid() was called for
++                 * this user, so a group was created in the cache
++                 */
++                ret = sysdb_search_group_by_name(tmp_ctx, dom, name, NULL, &msg);
++                if (ret != EOK) {
++                    /* Fail even on ENOENT, the group must be around */
++                    DEBUG(SSSDBG_OP_FAILURE,
++                          "Could not delete MPG group [%d]: %s\n",
++                          ret, sss_strerror(ret));
++                    goto done;
++                }
++
++                ret = sysdb_delete_group(dom, NULL, attrs->a.user.pw_uid);
++                if (ret != EOK) {
++                    DEBUG(SSSDBG_OP_FAILURE,
++                          "sysdb_delete_group failed for MPG group [%d]: %s\n",
++                          ret, sss_strerror(ret));
++                    goto done;
++                }
++
++                ret = sysdb_store_user(dom, name, NULL,
++                                       attrs->a.user.pw_uid,
++                                       gid, attrs->a.user.pw_gecos,
++                                       attrs->a.user.pw_dir,
++                                       attrs->a.user.pw_shell,
++                                       NULL, attrs->sysdb_attrs, NULL,
++                                       timeout, now);
++                if (ret != EOK) {
++                    DEBUG(SSSDBG_OP_FAILURE,
++                          "sysdb_store_user failed for MPG user [%d]: %s\n",
++                          ret, sss_strerror(ret));
++                    goto done;
++                }
++            } else if (ret != EOK) {
++                DEBUG(SSSDBG_OP_FAILURE,
++                      "sysdb_store_user failed [%d]: %s\n",
++                      ret, sss_strerror(ret));
+                 goto done;
+             }
+ 
+-- 
+2.5.0
+

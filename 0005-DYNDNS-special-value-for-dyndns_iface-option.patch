@@ -1,0 +1,107 @@
+From ef7a48d5acc481a207ac2821fc43651641f1b298 Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Tue, 14 Jul 2015 04:21:34 -0400
+Subject: [PATCH 05/14] DYNDNS: special value '*' for dyndns_iface option
+
+Option dyndns_iface has now special value '*' which implies that IPs
+from add interfaces should be sent during DDNS update.
+---
+ src/man/sssd-ad.5.xml     |  6 ++++--
+ src/man/sssd-ipa.5.xml    |  9 ++++-----
+ src/providers/dp_dyndns.c | 20 ++++++++++++++++----
+ 3 files changed, 24 insertions(+), 11 deletions(-)
+
+diff --git a/src/man/sssd-ad.5.xml b/src/man/sssd-ad.5.xml
+index ff43ea37066514a87934d07b141e680416dcc05b..3cbc10520098372d984d00425d03832d002d6672 100644
+--- a/src/man/sssd-ad.5.xml
++++ b/src/man/sssd-ad.5.xml
+@@ -756,10 +756,12 @@ ad_gpo_map_deny = +my_pam_service
+                             Optional. Applicable only when dyndns_update
+                             is true. Choose the interface or a list of interfaces
+                             whose IP addresses should be used for dynamic DNS
+-                            updates.
++                            updates. Special value <quote>*</quote> implies that
++                            IPs from all interfaces should be used.
+                         </para>
+                         <para>
+-                            Default: Use the IP address of the AD LDAP connection
++                            Default: Use the IP addresses of the interface which
++                            is used for AD LDAP connection
+                         </para>
+                         <para>
+                             Example: dyndns_iface = em1, vnet1, vnet2
+diff --git a/src/man/sssd-ipa.5.xml b/src/man/sssd-ipa.5.xml
+index d450c2fadbb1713096ff766bf536702195cfd137..2e985991fde10827aff0e7c8e67f29a009683450 100644
+--- a/src/man/sssd-ipa.5.xml
++++ b/src/man/sssd-ipa.5.xml
+@@ -168,10 +168,8 @@
+                             Optional. Applicable only when dyndns_update
+                             is true. Choose the interface or a list of interfaces
+                             whose IP addresses should be used for dynamic DNS
+-                            updates.
+-                        </para>
+-                        <para>
+-                            NOTE: This option currently supports multiple interfaces.
++                            updates. Special value <quote>*</quote> implies that
++                            IPs from all interfaces should be used.
+                         </para>
+                         <para>
+                             NOTE: While it is still possible to use the old
+@@ -180,7 +178,8 @@
+                             in their config file.
+                         </para>
+                         <para>
+-                            Default: Use the IP address of the IPA LDAP connection
++                            Default: Use the IP addresses of the interface which
++                            is used for IPA LDAP connection
+                         </para>
+                         <para>
+                             Example: dyndns_iface = em1, vnet1, vnet2
+diff --git a/src/providers/dp_dyndns.c b/src/providers/dp_dyndns.c
+index 76562840ef1d427629e41617b871caaedab779d4..03389acfba13e566540ca8b0570c0d009173575f 100644
+--- a/src/providers/dp_dyndns.c
++++ b/src/providers/dp_dyndns.c
+@@ -42,6 +42,9 @@
+ #define DYNDNS_TIMEOUT 15
+ #endif /* DYNDNS_TIMEOUT */
+ 
++/* MASK represents special value for matching all interfaces */
++#define MASK "*"
++
+ struct sss_iface_addr {
+     struct sss_iface_addr *next;
+     struct sss_iface_addr *prev;
+@@ -171,6 +174,16 @@ ok_for_dns(struct sockaddr *sa)
+     return true;
+ }
+ 
++static bool supported_address_family(sa_family_t sa_family)
++{
++    return sa_family == AF_INET || sa_family == AF_INET6;
++}
++
++static bool matching_name(const char *ifname, const char *ifname2)
++{
++    return (strcmp(MASK, ifname) == 0) || (strcasecmp(ifname, ifname2) == 0);
++}
++
+ /* Collect IP addresses associated with an interface */
+ errno_t
+ sss_iface_addr_list_get(TALLOC_CTX *mem_ctx, const char *ifname,
+@@ -200,10 +213,9 @@ sss_iface_addr_list_get(TALLOC_CTX *mem_ctx, const char *ifname,
+         if (!ifa->ifa_addr) continue;
+ 
+         /* Add IP addresses to the list */
+-        if ((ifa->ifa_addr->sa_family == AF_INET ||
+-             ifa->ifa_addr->sa_family == AF_INET6) &&
+-             strcasecmp(ifa->ifa_name, ifname) == 0 &&
+-             ok_for_dns(ifa->ifa_addr)) {
++        if (supported_address_family(ifa->ifa_addr->sa_family)
++                && matching_name(ifname, ifa->ifa_name)
++                && ok_for_dns(ifa->ifa_addr)) {
+ 
+             /* Add this address to the IP address list */
+             address = talloc_zero(mem_ctx, struct sss_iface_addr);
+-- 
+2.5.0
+

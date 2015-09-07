@@ -1,0 +1,27 @@
+From f2fd03807a6a7d92b706f0964bd1bcf172766cd6 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 22 Jul 2015 15:17:57 +0200
+Subject: [PATCH 08/14] IPA: Better debugging
+
+Reviewed-by: Alexander Bokovoy <abokovoy@redhat.com>
+---
+ src/providers/ipa/ipa_subdomains_server.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/providers/ipa/ipa_subdomains_server.c b/src/providers/ipa/ipa_subdomains_server.c
+index cd8c6301c4e4fbbf194ca98ce7a7bfe6215b381c..a9e2c1f700ef47716be868bad68590b8d5d0d42a 100644
+--- a/src/providers/ipa/ipa_subdomains_server.c
++++ b/src/providers/ipa/ipa_subdomains_server.c
+@@ -623,6 +623,9 @@ ipa_server_trust_add_send(TALLOC_CTX *mem_ctx,
+ 
+ immediate:
+     if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Could not add trusted subdomain %s from forest %s\n",
++              subdom->name, state->forest);
+         tevent_req_error(req, ret);
+     } else {
+         tevent_req_done(req);
+-- 
+2.5.0
+

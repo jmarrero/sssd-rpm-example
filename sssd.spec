@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.13.0
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -40,6 +40,18 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 ### Patches ###
 Patch0001: 0001-SSSDConfig-return-list-for-list_active_domains.patch
 Patch0002: 0002-KRB5-Return-right-data-provider-error-code.patch
+Patch0003: 0003-DYNDNS-sss_iface_addr_list_get-return-ENOENT.patch
+Patch0004: 0004-DYNDNS-support-mult.-interfaces-for-dyndns_iface-opt.patch
+Patch0005: 0005-DYNDNS-special-value-for-dyndns_iface-option.patch
+Patch0006: 0006-TESTS-dyndns-tests-support-AAAA-addresses.patch
+Patch0007: 0007-IPA-Remove-MPG-groups-if-getgrgid-was-called-before-.patch
+Patch0008: 0008-IPA-Better-debugging.patch
+Patch0009: 0009-UTIL-Lower-debug-level-in-perform_checks.patch
+Patch0010: 0010-IPA-Handle-sssd-owned-keytabs-when-running-as-root.patch
+Patch0011: 0011-LDAP-use-ldb_binary_encode-when-printing-attribute-v.patch
+Patch0012: 0012-IPA-Change-the-default-of-ldap_user_certificate-to-u.patch
+Patch0013: 0013-UTIL-Provide-a-common-interface-to-safely-create-tem.patch
+Patch0014: 0014-IPA-Always-re-fetch-the-keytab-from-the-IPA-server.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -1012,10 +1024,14 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Sep 07 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-5
+- Backport upstream patches required by FreeIPA 4.2.1
+
 * Tue Jul 21 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-4
 - Fix ipa-migration bug
 - Resolves: upstream #2719 - IPA: returned unknown dp error code with disabled
                              migration mode
+
 * Wed Jul 08 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-3
 - New upstream release 1.13.0
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.0
