@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.13.0
-Release: 5%{?dist}
+Release: 6%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -52,6 +52,7 @@ Patch0011: 0011-LDAP-use-ldb_binary_encode-when-printing-attribute-v.patch
 Patch0012: 0012-IPA-Change-the-default-of-ldap_user_certificate-to-u.patch
 Patch0013: 0013-UTIL-Provide-a-common-interface-to-safely-create-tem.patch
 Patch0014: 0014-IPA-Always-re-fetch-the-keytab-from-the-IPA-server.patch
+Patch0015: 0015-krb5-do-not-send-SSS_OTP-if-two-factors-were-used.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -1024,6 +1025,11 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Sep 10 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-6
+- Fix OTP bug
+- Resolves: upstream #2729 - Do not send SSS_OTP if both factors were
+                             entered separately
+
 * Mon Sep 07 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-5
 - Backport upstream patches required by FreeIPA 4.2.1
 
