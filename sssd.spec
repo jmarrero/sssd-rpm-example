@@ -28,8 +28,8 @@
 %endif
 
 Name: sssd
-Version: 1.13.0
-Release: 6%{?dist}
+Version: 1.13.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -38,21 +38,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-SSSDConfig-return-list-for-list_active_domains.patch
-Patch0002: 0002-KRB5-Return-right-data-provider-error-code.patch
-Patch0003: 0003-DYNDNS-sss_iface_addr_list_get-return-ENOENT.patch
-Patch0004: 0004-DYNDNS-support-mult.-interfaces-for-dyndns_iface-opt.patch
-Patch0005: 0005-DYNDNS-special-value-for-dyndns_iface-option.patch
-Patch0006: 0006-TESTS-dyndns-tests-support-AAAA-addresses.patch
-Patch0007: 0007-IPA-Remove-MPG-groups-if-getgrgid-was-called-before-.patch
-Patch0008: 0008-IPA-Better-debugging.patch
-Patch0009: 0009-UTIL-Lower-debug-level-in-perform_checks.patch
-Patch0010: 0010-IPA-Handle-sssd-owned-keytabs-when-running-as-root.patch
-Patch0011: 0011-LDAP-use-ldb_binary_encode-when-printing-attribute-v.patch
-Patch0012: 0012-IPA-Change-the-default-of-ldap_user_certificate-to-u.patch
-Patch0013: 0013-UTIL-Provide-a-common-interface-to-safely-create-tem.patch
-Patch0014: 0014-IPA-Always-re-fetch-the-keytab-from-the-IPA-server.patch
-Patch0015: 0015-krb5-do-not-send-SSS_OTP-if-two-factors-were-used.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -83,7 +68,6 @@ BuildRequires: popt-devel
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
 BuildRequires: libtdb-devel
-
 BuildRequires: libldb-devel >= %{ldb_version}
 BuildRequires: libdhash-devel >= 0.4.2
 BuildRequires: libcollection-devel
@@ -93,7 +77,6 @@ BuildRequires: dbus-libs
 BuildRequires: openldap-devel
 BuildRequires: pam-devel
 BuildRequires: nss-devel
-BuildRequires: openssl-devel
 BuildRequires: nspr-devel
 BuildRequires: pcre-devel
 BuildRequires: libxslt
@@ -686,6 +669,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_libexecdir}/%{servicename}/sssd_autofs
 %{_libexecdir}/%{servicename}/sssd_ssh
 %{_libexecdir}/%{servicename}/sssd_sudo
+%{_libexecdir}/%{servicename}/p11_child
 
 %dir %{_libdir}/%{name}
 %{_libdir}/%{name}/libsss_simple.so
@@ -776,7 +760,6 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %doc COPYING
 %{_libdir}/%{name}/libsss_ad.so
-%{_libdir}/%{name}/libsss_ad_common.so
 %{_libexecdir}/%{servicename}/gpo_child
 %{_mandir}/man5/sssd-ad.5*
 
@@ -836,6 +819,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_sbindir}/sss_groupmod
 %{_sbindir}/sss_groupshow
 %{_sbindir}/sss_obfuscate
+%{_sbindir}/sss_override
 %{_sbindir}/sss_debuglevel
 %{_sbindir}/sss_seed
 %{_mandir}/man8/sss_groupadd.8*
@@ -846,6 +830,7 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/sss_userdel.8*
 %{_mandir}/man8/sss_usermod.8*
 %{_mandir}/man8/sss_obfuscate.8*
+%{_mandir}/man8/sss_override.8*
 %{_mandir}/man8/sss_debuglevel.8*
 %{_mandir}/man8/sss_seed.8*
 
@@ -1025,6 +1010,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Oct 01 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.1-0
+- New upstream release 1.13.1
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.1
+
 * Thu Sep 10 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.0-6
 - Fix OTP bug
 - Resolves: upstream #2729 - Do not send SSS_OTP if both factors were
