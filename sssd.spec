@@ -141,7 +141,6 @@ Requires: libldb%{?_isa} >= %{ldb_version}
 Requires: libtdb%{?_isa} >= 1.1.3
 Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
-Requires: libini_config >= 1.0.0.1
 Requires(post): systemd-units chkconfig
 Requires(preun): systemd-units chkconfig
 Requires(postun): systemd-units chkconfig
