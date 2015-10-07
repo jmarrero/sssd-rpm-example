@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.13.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -38,6 +38,9 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-PAM-only-allow-missing-user-name-for-certificate-aut.patch
+Patch0002: 0002-AD-Provide-common-connection-list-construction-funct.patch
+Patch0003: 0003-AD-Consolidate-connection-list-construction-on-ad_co.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -1009,7 +1012,12 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
-* Thu Oct 01 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.1-0
+* Wed Oct 07 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.1-2
+- Fix few segfaults
+- Resolves: upstream #2811 - PAM responder crashed if user was not set
+- Resolves: upstream #2810 - sssd_be crashed in ipa_srv_ad_acct_lookup_step
+
+* Thu Oct 01 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.1-1
 - New upstream release 1.13.1
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.1
 

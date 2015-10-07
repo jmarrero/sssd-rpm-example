@@ -1,0 +1,240 @@
+From dfa6a5468a606df968eff0ae1135f9ebb97ad9dc Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Thu, 1 Oct 2015 13:13:05 +0200
+Subject: [PATCH 2/3] AD: Provide common connection list construction functions
+
+https://fedorahosted.org/sssd/ticket/2810
+
+Provides a new AD common function ad_ldap_conn_list() that creates a
+list of AD connection to use along with properties to avoid mistakes
+when manually constructing these lists.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 309aa83d16b5919f727af04850bcd0799ba0962f)
+(cherry picked from commit 15a4b34ccfcfbcec2c9ba529d0113adf251abc16)
+---
+ src/providers/ad/ad_common.c          | 26 +++++++++++++++++++
+ src/providers/ad/ad_common.h          |  5 ++++
+ src/providers/ad/ad_id.c              | 17 +------------
+ src/providers/ipa/ipa_subdomains_id.c | 21 ++++++----------
+ src/tests/cmocka/test_ad_common.c     | 47 ++++++++++++++++++++++++++++++-----
+ 5 files changed, 81 insertions(+), 35 deletions(-)
+
+diff --git a/src/providers/ad/ad_common.c b/src/providers/ad/ad_common.c
+index 130cdeb613aae3843f7453a478815daaae6aab77..df277e55e234d4d4efe34d5f5d8efdfe7267fb60 100644
+--- a/src/providers/ad/ad_common.c
++++ b/src/providers/ad/ad_common.c
+@@ -1236,6 +1236,14 @@ ad_get_dom_ldap_conn(struct ad_id_ctx *ad_ctx, struct sss_domain_info *dom)
+     subdom_id_ctx = talloc_get_type(sdom->pvt, struct ad_id_ctx);
+     conn = subdom_id_ctx->ldap_ctx;
+ 
++    if (IS_SUBDOMAIN(sdom->dom) == true && conn != NULL) {
++        /* Regardless of connection types, a subdomain error must not be
++         * allowed to set the whole back end offline, rather report an error
++         * and let the caller deal with it (normally disable the subdomain
++         */
++        conn->ignore_mark_offline = true;
++    }
++
+     return conn;
+ }
+ 
+@@ -1260,3 +1268,21 @@ ad_gc_conn_list(TALLOC_CTX *mem_ctx, struct ad_id_ctx *ad_ctx,
+ 
+     return clist;
+ }
++
++struct sdap_id_conn_ctx **
++ad_ldap_conn_list(TALLOC_CTX *mem_ctx,
++                  struct ad_id_ctx *ad_ctx,
++                  struct sss_domain_info *dom)
++{
++    struct sdap_id_conn_ctx **clist;
++
++    clist = talloc_zero_array(mem_ctx, struct sdap_id_conn_ctx *, 2);
++    if (clist == NULL) {
++        return NULL;
++    }
++
++    clist[0] = ad_get_dom_ldap_conn(ad_ctx, dom);
++
++    clist[1] = NULL;
++    return clist;
++}
+diff --git a/src/providers/ad/ad_common.h b/src/providers/ad/ad_common.h
+index 817f5b42cad7cad6a88244fd43bd91a4358d56c0..701e461987cb286ca7add2766ffb4dc496bde01e 100644
+--- a/src/providers/ad/ad_common.h
++++ b/src/providers/ad/ad_common.h
+@@ -148,6 +148,11 @@ struct sdap_id_conn_ctx **
+ ad_gc_conn_list(TALLOC_CTX *mem_ctx, struct ad_id_ctx *ad_ctx,
+                struct sss_domain_info *dom);
+ 
++struct sdap_id_conn_ctx **
++ad_ldap_conn_list(TALLOC_CTX *mem_ctx,
++                  struct ad_id_ctx *ad_ctx,
++                  struct sss_domain_info *dom);
++
+ struct sdap_id_conn_ctx *
+ ad_get_dom_ldap_conn(struct ad_id_ctx *ad_ctx, struct sss_domain_info *dom);
+ 
+diff --git a/src/providers/ad/ad_id.c b/src/providers/ad/ad_id.c
+index ecaf6c993bf7ddb7ba565d40ef0ad250114f5536..be0cb3b12f2e3a2b53d740ecf3befc07fd853f8b 100644
+--- a/src/providers/ad/ad_id.c
++++ b/src/providers/ad/ad_id.c
+@@ -269,29 +269,14 @@ get_conn_list(struct be_req *breq, struct ad_id_ctx *ad_ctx,
+     case BE_REQ_GROUP: /* group */
+     case BE_REQ_INITGROUPS: /* init groups for user */
+         clist = ad_gc_conn_list(breq, ad_ctx, dom);
+-        if (clist == NULL) return NULL;
+         break;
+ 
+     default:
+         /* Requests for other object should only contact LDAP by default */
+-        clist = talloc_zero_array(breq, struct sdap_id_conn_ctx *, 2);
+-        if (clist == NULL) return NULL;
+-
+-        clist[0] = ad_ctx->ldap_ctx;
+-        clist[1] = NULL;
++        clist = ad_ldap_conn_list(breq, ad_ctx, dom);
+         break;
+     }
+ 
+-    /* Regardless of connection types, a subdomain error must not be allowed
+-     * to set the whole back end offline, rather report an error and let the
+-     * caller deal with it (normally disable the subdomain
+-     */
+-    if (IS_SUBDOMAIN(dom)) {
+-        for (cindex = 0; clist[cindex] != NULL; cindex++) {
+-            clist[cindex]->ignore_mark_offline = true;
+-        }
+-    }
+-
+     return clist;
+ }
+ 
+diff --git a/src/providers/ipa/ipa_subdomains_id.c b/src/providers/ipa/ipa_subdomains_id.c
+index 8f13608bcfd2f17c27fcba7f087e1a27086a2a1c..472985d4ab4f785aa9c4af94bf8021829ca1c3c8 100644
+--- a/src/providers/ipa/ipa_subdomains_id.c
++++ b/src/providers/ipa/ipa_subdomains_id.c
+@@ -641,21 +641,16 @@ ipa_get_ad_acct_send(TALLOC_CTX *mem_ctx,
+     case BE_REQ_BY_SECID:
+     case BE_REQ_GROUP:
+         clist = ad_gc_conn_list(req, ad_id_ctx, state->obj_dom);
+-        if (clist == NULL) {
+-            ret = ENOMEM;
+-            goto fail;
+-        }
+-        clist[1]->ignore_mark_offline = true;
+         break;
+     default:
+-        clist = talloc_zero_array(req, struct sdap_id_conn_ctx *, 2);
+-        if (clist == NULL) {
+-            ret = ENOMEM;
+-            goto fail;
+-        }
+-        clist[0] = ad_id_ctx->ldap_ctx;
+-        clist[0]->ignore_mark_offline = true;
+-        clist[1] = NULL;
++        clist = ad_ldap_conn_list(req, ad_id_ctx, state->obj_dom);
++        break;
++    }
++
++    if (clist == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, "Cannot generate AD connection list!\n");
++        ret = ENOMEM;
++        goto fail;
+     }
+ 
+     /* Now we already need ad_id_ctx in particular sdap_id_conn_ctx */
+diff --git a/src/tests/cmocka/test_ad_common.c b/src/tests/cmocka/test_ad_common.c
+index bc9d0940bb22cc4b11f5a5b012ac4ded338714a0..d2b59a23dfbff0bfda8ec7a52a71aec99f56baf3 100644
+--- a/src/tests/cmocka/test_ad_common.c
++++ b/src/tests/cmocka/test_ad_common.c
+@@ -350,7 +350,7 @@ __wrap_sdap_set_sasl_options(struct sdap_options *id_opts,
+     return EOK;
+ }
+ 
+-void test_ldap_conn_list(void **state)
++void test_ad_get_dom_ldap_conn(void **state)
+ {
+     struct sdap_id_conn_ctx *conn;
+ 
+@@ -365,7 +365,7 @@ void test_ldap_conn_list(void **state)
+     assert_true(conn == test_ctx->subdom_ad_ctx->ldap_ctx);
+ }
+ 
+-void test_conn_list(void **state)
++void test_gc_conn_list(void **state)
+ {
+     struct sdap_id_conn_ctx **conn_list;
+ 
+@@ -392,7 +392,8 @@ void test_conn_list(void **state)
+     assert_true(conn_list[0] == test_ctx->ad_ctx->gc_ctx);
+     assert_true(conn_list[0]->ignore_mark_offline);
+     assert_true(conn_list[1] == test_ctx->subdom_ad_ctx->ldap_ctx);
+-    assert_false(conn_list[1]->ignore_mark_offline);
++    /* Subdomain error should not set the backend offline! */
++    assert_true(conn_list[1]->ignore_mark_offline);
+     talloc_free(conn_list);
+ 
+     dp_opt_set_bool(test_ctx->ad_ctx->ad_options->basic, AD_ENABLE_GC, false);
+@@ -411,6 +412,37 @@ void test_conn_list(void **state)
+     assert_non_null(conn_list);
+ 
+     assert_true(conn_list[0] == test_ctx->subdom_ad_ctx->ldap_ctx);
++    assert_true(conn_list[0]->ignore_mark_offline);
++    assert_null(conn_list[1]);
++    talloc_free(conn_list);
++}
++
++void test_ldap_conn_list(void **state)
++{
++    struct sdap_id_conn_ctx **conn_list;
++
++    struct ad_common_test_ctx *test_ctx = talloc_get_type(*state,
++                                                     struct ad_common_test_ctx);
++    assert_non_null(test_ctx);
++
++    conn_list = ad_ldap_conn_list(test_ctx,
++                                  test_ctx->ad_ctx,
++                                  test_ctx->dom);
++    assert_non_null(conn_list);
++
++    assert_true(conn_list[0] == test_ctx->ad_ctx->ldap_ctx);
++    assert_false(conn_list[0]->ignore_mark_offline);
++    assert_null(conn_list[1]);
++    talloc_free(conn_list);
++
++    conn_list = ad_ldap_conn_list(test_ctx,
++                                  test_ctx->ad_ctx,
++                                  test_ctx->subdom);
++    assert_non_null(conn_list);
++
++    assert_true(conn_list[0] == test_ctx->subdom_ad_ctx->ldap_ctx);
++    assert_true(conn_list[0]->ignore_mark_offline);
++    assert_null(conn_list[1]);
+     talloc_free(conn_list);
+ }
+ 
+@@ -432,12 +464,15 @@ int main(int argc, const char *argv[])
+         cmocka_unit_test_setup_teardown(test_ad_create_2way_trust_options,
+                                         test_ad_common_setup,
+                                         test_ad_common_teardown),
++        cmocka_unit_test_setup_teardown(test_ad_get_dom_ldap_conn,
++                                        test_ldap_conn_setup,
++                                        test_ldap_conn_teardown),
++        cmocka_unit_test_setup_teardown(test_gc_conn_list,
++                                        test_ldap_conn_setup,
++                                        test_ldap_conn_teardown),
+         cmocka_unit_test_setup_teardown(test_ldap_conn_list,
+                                         test_ldap_conn_setup,
+                                         test_ldap_conn_teardown),
+-        cmocka_unit_test_setup_teardown(test_conn_list,
+-                                        test_ldap_conn_setup,
+-                                        test_ldap_conn_teardown),
+     };
+ 
+     /* Set debug level to invalid value so we can deside if -d 0 was used. */
+-- 
+2.5.0
+
