@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.13.1
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -41,6 +41,9 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 Patch0001: 0001-PAM-only-allow-missing-user-name-for-certificate-aut.patch
 Patch0002: 0002-AD-Provide-common-connection-list-construction-funct.patch
 Patch0003: 0003-AD-Consolidate-connection-list-construction-on-ad_co.patch
+Patch0004: 0004-SSSDConfig-Do-not-raise-exception-if-config_file_ver.patch
+Patch0005: 0005-SSSDConfigTest-Try-load-saved-config.patch
+Patch0006: 0006-SSSDConfigTest-Test-real-config-without-config_file_.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -1012,6 +1015,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Oct 19 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.1-3
+- python-sssdconfig: Fix parssing sssd.conf without config_file_version
+- Resolves: upstream #2837 - REGRESSION: ipa-client-automout failed
+
 * Wed Oct 07 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.1-2
 - Fix few segfaults
 - Resolves: upstream #2811 - PAM responder crashed if user was not set
