@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.13.1
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -44,6 +44,7 @@ Patch0003: 0003-AD-Consolidate-connection-list-construction-on-ad_co.patch
 Patch0004: 0004-SSSDConfig-Do-not-raise-exception-if-config_file_ver.patch
 Patch0005: 0005-SSSDConfigTest-Try-load-saved-config.patch
 Patch0006: 0006-SSSDConfigTest-Test-real-config-without-config_file_.patch
+patch0007: 0007-BUILD-Accept-krb5-1.14-for-building-the-PAC-plugin.patch
 
 ### Dependencies ###
 Requires: sssd-common = %{version}-%{release}
@@ -1015,6 +1016,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Oct 27 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.1-4
+- Fix building pac responder with the krb5-1.14
+
 * Mon Oct 19 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.1-3
 - python-sssdconfig: Fix parssing sssd.conf without config_file_version
 - Resolves: upstream #2837 - REGRESSION: ipa-client-automout failed
