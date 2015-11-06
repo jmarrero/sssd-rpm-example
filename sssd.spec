@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.13.1
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1016,6 +1016,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Nov 06 2015 Robert Kuska <rkuska@redhat.com> - 1.13.1-5
+- Rebuilt for Python3.5 rebuild
+
 * Tue Oct 27 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.1-4
 - Fix building pac responder with the krb5-1.14
 
