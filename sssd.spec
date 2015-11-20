@@ -32,6 +32,10 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0100: 0100-FO-Don-t-free-rc-allocated-structure.patch
+Patch0101: 0101-tests-Reduce-failover-code-duplication.patch
+Patch0102: 0102-FO-Use-refcount-to-keep-track-of-servers-returned-to.patch
+Patch0103: 0103-FAIL_OVER-Fix-warning-value-computed-is-not-used.patch
 
 ### Dependencies ###
 
