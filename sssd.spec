@@ -9,15 +9,9 @@
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
 %global ldb_version 1.1.20
 
-%if (0%{?fedora} || 0%{?rhel} >= 7)
     %global with_cifs_utils_plugin 1
-%else
-    %global with_cifs_utils_plugin_option --disable-cifs-idmap-plugin
-%endif
 
-%if (0%{?fedora} >= 21 || (0%{?rhel} == 7 &&  0%{?rhel7_minor} >= 1))
     %global with_krb5_localauth_plugin 1
-%endif
 
 
 %global libwbc_alternatives_version 0.12
@@ -28,8 +22,8 @@
 %endif
 
 Name: sssd
-Version: 1.13.1
-Release: 5%{?dist}
+Version: 1.13.2
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -38,15 +32,9 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-PAM-only-allow-missing-user-name-for-certificate-aut.patch
-Patch0002: 0002-AD-Provide-common-connection-list-construction-funct.patch
-Patch0003: 0003-AD-Consolidate-connection-list-construction-on-ad_co.patch
-Patch0004: 0004-SSSDConfig-Do-not-raise-exception-if-config_file_ver.patch
-Patch0005: 0005-SSSDConfigTest-Try-load-saved-config.patch
-Patch0006: 0006-SSSDConfigTest-Test-real-config-without-config_file_.patch
-patch0007: 0007-BUILD-Accept-krb5-1.14-for-building-the-PAC-plugin.patch
 
 ### Dependencies ###
+
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-ldap = %{version}-%{release}
 Requires: sssd-krb5 = %{version}-%{release}
@@ -110,17 +98,14 @@ BuildRequires: findutils
 BuildRequires: glib2-devel
 BuildRequires: selinux-policy-targeted
 BuildRequires: libcmocka-devel >= 1.0.0
-%if (0%{?fedora} >= 20)
 BuildRequires: uid_wrapper
 BuildRequires: nss_wrapper
-%endif
 BuildRequires: libnl3-devel
 BuildRequires: systemd-devel
 %if (0%{?with_cifs_utils_plugin} == 1)
 BuildRequires: cifs-utils-devel
 %endif
 BuildRequires: libnfsidmap-devel
-
 BuildRequires: samba4-devel >= 4.0.0-59beta2
 BuildRequires: libsmbclient-devel
 
@@ -540,8 +525,9 @@ autoreconf -ivf
     --disable-rpath \
     --with-initscript=systemd \
     --with-syslog=journald \
+    --enable-sss-default-nss-plugin \
     %{?with_cifs_utils_plugin_option} \
-    --enable-sss-default-nss-plugin
+
 
 make %{?_smp_mflags} all docs
 
@@ -707,6 +693,7 @@ rm -rf $RPM_BUILD_ROOT
 %attr(755,root,root) %dir %{mcpath}
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/passwd
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/group
+%ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/initgroups
 %attr(755,root,root) %dir %{pipepath}
 %attr(755,root,root) %dir %{pubconfpath}
 %attr(755,root,root) %dir %{gpocachepath}
@@ -854,22 +841,18 @@ rm -rf $RPM_BUILD_ROOT
 %files -n python-sss
 %defattr(-,root,root,-)
 %{python2_sitearch}/pysss.so
-%{python2_sitearch}/_py2sss.so
 
 %files -n python3-sss
 %defattr(-,root,root,-)
 %{python3_sitearch}/pysss.so
-%{python3_sitearch}/_py3sss.so
 
 %files -n python-sss-murmur
 %defattr(-,root,root,-)
 %{python2_sitearch}/pysss_murmur.so
-%{python2_sitearch}/_py2sss_murmur.so
 
 %files -n python3-sss-murmur
 %defattr(-,root,root,-)
 %{python3_sitearch}/pysss_murmur.so
-%{python3_sitearch}/_py3sss_murmur.so
 
 %files -n libsss_idmap
 %defattr(-,root,root,-)
@@ -910,22 +893,18 @@ rm -rf $RPM_BUILD_ROOT
 %files -n python-libsss_nss_idmap
 %defattr(-,root,root,-)
 %{python2_sitearch}/pysss_nss_idmap.so
-%{python2_sitearch}/_py2sss_nss_idmap.so
 
 %files -n python3-libsss_nss_idmap
 %defattr(-,root,root,-)
 %{python3_sitearch}/pysss_nss_idmap.so
-%{python3_sitearch}/_py3sss_nss_idmap.so
 
 %files -n python-libipa_hbac
 %defattr(-,root,root,-)
 %{python2_sitearch}/pyhbac.so
-%{python2_sitearch}/_py2hbac.so
 
 %files -n python3-libipa_hbac
 %defattr(-,root,root,-)
 %{python3_sitearch}/pyhbac.so
-%{python3_sitearch}/_py3hbac.so
 
 %files libwbclient
 %defattr(-,root,root,-)
@@ -1016,6 +995,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Nov 20 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.2-1
+- New upstream release 1.13.2
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.2
+
 * Fri Nov 06 2015 Robert Kuska <rkuska@redhat.com> - 1.13.1-5
 - Rebuilt for Python3.5 rebuild
 
