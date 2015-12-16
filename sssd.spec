@@ -4,6 +4,7 @@
 %define __provides_exclude_from %{python2_sitearch}/.*\.so$|%{python3_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
 %define _hardened_build 1
 
+    %global enable_polkit_rules_option --disable-polkit-rules-path
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
@@ -22,7 +23,7 @@
 %endif
 
 Name: sssd
-Version: 1.13.2
+Version: 1.13.3
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -81,11 +82,7 @@ BuildRequires: pcre-devel
 BuildRequires: libxslt
 BuildRequires: libxml2
 BuildRequires: docbook-style-xsl
-%if (0%{?with_krb5_localauth_plugin} == 1)
-BuildRequires: krb5-devel >= 1.12
-%else
 BuildRequires: krb5-devel
-%endif
 BuildRequires: c-ares-devel
 BuildRequires: python-devel
 BuildRequires: python3-devel
@@ -999,6 +996,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Dec 16 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.3-1
+- New upstream release 1.13.3
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.3
+
 * Fri Nov 20 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.2-1
 - New upstream release 1.13.2
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.2
