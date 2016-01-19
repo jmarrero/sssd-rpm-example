@@ -134,6 +134,7 @@ Requires: libldb%{?_isa} >= %{ldb_version}
 
 Requires: libtdb%{?_isa} >= 1.1.3
 Requires: sssd-client%{?_isa} = %{version}-%{release}
+Requires: libsss_sudo = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires(post): systemd-units chkconfig
 Requires(preun): systemd-units chkconfig
@@ -141,8 +142,6 @@ Requires(postun): systemd-units chkconfig
 
 
 ### Provides ###
-Provides: libsss_sudo = %{version}-%{release}
-Obsoletes: libsss_sudo <= 1.10.0-7%{?dist}.beta1
 Provides: libsss_sudo-devel = %{version}-%{release}
 Obsoletes: libsss_sudo-devel <= 1.10.0-7%{?dist}.beta1
 Provides: libsss_autofs = %{version}-%{release}
@@ -165,6 +164,16 @@ Requires(preun): /usr/sbin/alternatives
 %description client
 Provides the libraries needed by the PAM and NSS stacks to connect to the SSSD
 service.
+
+%package -n libsss_sudo
+Summary: A library to allow communication between SUDO and SSSD
+Group: Development/Libraries
+License: LGPLv3+
+Requires(post): /sbin/ldconfig
+Requires(postun): /sbin/ldconfig
+
+%description -n libsss_sudo
+A utility library to allow communication between SUDO and SSSD
 
 %package tools
 Summary: Userspace tools for use with the SSSD
@@ -680,7 +689,6 @@ rm -rf $RPM_BUILD_ROOT
 
 # 3rd party application libraries
 %{_libdir}/sssd/modules/libsss_autofs.so
-%{_libdir}/libsss_sudo.so
 %{_libdir}/libnfsidmap/sss.so
 
 %{ldb_modulesdir}/memberof.so
@@ -802,6 +810,11 @@ rm -rf $RPM_BUILD_ROOT
 %endif
 %{_mandir}/man8/pam_sss.8*
 %{_mandir}/man8/sssd_krb5_locator_plugin.8*
+
+%files -n libsss_sudo
+%defattr(-,root,root,-)
+%doc src/sss_client/COPYING
+%{_libdir}/libsss_sudo.so*
 
 %files tools -f sssd_tools.lang
 %defattr(-,root,root,-)
@@ -952,6 +965,10 @@ fi
 %endif
 
 %postun client -p /sbin/ldconfig
+
+%post -n libsss_sudo -p /sbin/ldconfig
+
+%postun -n libsss_sudo -p /sbin/ldconfig
 
 %post -n libipa_hbac -p /sbin/ldconfig
 
