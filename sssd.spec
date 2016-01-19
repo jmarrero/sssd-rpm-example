@@ -948,24 +948,13 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/pkgconfig/wbclient_sssd.pc
 
 %post common
-if [ $1 -ge 1 ] ; then
-    # Initial installation
-    /bin/systemctl daemon-reload >/dev/null 2>&1 || :
-fi
+%systemd_post sssd.service
 
 %preun common
-if [ $1 -eq 0 ] ; then
-    # Package removal, not upgrade
-    /bin/systemctl --no-reload disable sssd.service > /dev/null 2>&1 || :
-    /bin/systemctl stop sssd.service > /dev/null 2>&1 || :
-fi
+%systemd_preun sssd.service
 
 %postun common
-/bin/systemctl daemon-reload >/dev/null 2>&1 || :
-if [ $1 -ge 1 ] ; then
-    # Package upgrade, not uninstall
-    /bin/systemctl try-restart sssd.service >/dev/null 2>&1 || :
-fi
+%systemd_postun_with_restart sssd.service
 
 %if (0%{?with_cifs_utils_plugin} == 1)
 %post client
