@@ -728,6 +728,7 @@ rm -rf $RPM_BUILD_ROOT
 %files krb5-common
 %defattr(-,root,root,-)
 %doc COPYING
+%attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
 %{_libexecdir}/%{servicename}/ldap_child
 %{_libexecdir}/%{servicename}/krb5_child
 
@@ -745,7 +746,6 @@ rm -rf $RPM_BUILD_ROOT
 %files ipa -f sssd_ipa.lang
 %defattr(-,root,root,-)
 %doc COPYING
-%attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
 %attr(700,root,root) %dir %{keytabdir}
 %{_libdir}/%{name}/libsss_ipa.so
 %{_libexecdir}/%{servicename}/selinux_child
