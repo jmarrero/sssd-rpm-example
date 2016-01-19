@@ -1,0 +1,191 @@
+From 17f35039230235f94c58a01ebd037a2634769b0c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 25 Nov 2015 13:14:57 +0100
+Subject: [PATCH 26/49] IPA SUDO: Implement sudo handler
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/XXXX
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 4ddd5591c50e27dffa55f03fbce0dcc85cd50a8b)
+---
+ Makefile.am                  |  1 +
+ src/providers/ipa/ipa_sudo.c | 82 ++++++++++++++++++++++++++++++++++++++++++++
+ src/providers/ipa/ipa_sudo.h | 38 ++++++++++++++++++++
+ 3 files changed, 121 insertions(+)
+ create mode 100644 src/providers/ipa/ipa_sudo.h
+
+diff --git a/Makefile.am b/Makefile.am
+index 59632f59f26f6d113de3398856e2ef0015d4ad16..69905a9112114932e918adff94d0c285c09ed231 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -644,6 +644,7 @@ dist_noinst_HEADERS = \
+     src/providers/ipa/ipa_opts.h \
+     src/providers/ipa/ipa_srv.h \
+     src/providers/ipa/ipa_dn.h \
++    src/providers/ipa/ipa_sudo.h \
+     src/providers/ad/ad_srv.h \
+     src/providers/proxy/proxy.h \
+     src/tools/tools_util.h \
+diff --git a/src/providers/ipa/ipa_sudo.c b/src/providers/ipa/ipa_sudo.c
+index 529fb5f0736a883654b60d43d9dcf248af5c8c21..e1b0c828806104336f3df9724484a4411b7fef30 100644
+--- a/src/providers/ipa/ipa_sudo.c
++++ b/src/providers/ipa/ipa_sudo.c
+@@ -18,10 +18,19 @@
+     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
++#include "providers/ipa/ipa_opts.h"
+ #include "providers/ipa/ipa_common.h"
+ #include "providers/ldap/sdap_sudo.h"
++#include "providers/ipa/ipa_sudo.h"
+ #include "db/sysdb_sudo.h"
+ 
++static void ipa_sudo_handler(struct be_req *breq);
++
++struct bet_ops ipa_sudo_ops = {
++    .handler = ipa_sudo_handler,
++    .finalize = NULL,
++};
++
+ enum sudo_schema {
+     SUDO_SCHEMA_IPA,
+     SUDO_SCHEMA_LDAP
+@@ -85,6 +94,72 @@ done:
+     return ret;
+ }
+ 
++static int
++ipa_sudo_init_ipa_schema(struct be_ctx *be_ctx,
++                         struct ipa_id_ctx *id_ctx,
++                         struct bet_ops **ops,
++                         void **pvt_data)
++{
++    struct ipa_sudo_ctx *sudo_ctx;
++    errno_t ret;
++
++    sudo_ctx = talloc_zero(be_ctx, struct ipa_sudo_ctx);
++    if (sudo_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    sudo_ctx->id_ctx = id_ctx->sdap_id_ctx;
++    sudo_ctx->ipa_opts = id_ctx->ipa_options;
++    sudo_ctx->sdap_opts = id_ctx->sdap_id_ctx->opts;
++
++    ret = sdap_get_map(sudo_ctx, be_ctx->cdb, be_ctx->conf_path,
++                       ipa_sudorule_map, IPA_OPTS_SUDORULE,
++                       &sudo_ctx->sudorule_map);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to parse attribute map "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = sdap_get_map(sudo_ctx, be_ctx->cdb, be_ctx->conf_path,
++                       ipa_sudocmdgroup_map, IPA_OPTS_SUDOCMDGROUP,
++                       &sudo_ctx->sudocmdgroup_map);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to parse attribute map "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = sdap_get_map(sudo_ctx, be_ctx->cdb, be_ctx->conf_path,
++                       ipa_sudocmd_map, IPA_OPTS_SUDOCMD,
++                       &sudo_ctx->sudocmd_map);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to parse attribute map "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = sdap_parse_search_base(sudo_ctx, sudo_ctx->sdap_opts->basic,
++                                 SDAP_SUDO_SEARCH_BASE,
++                                 &sudo_ctx->sudo_sb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "Could not parse sudo search base\n");
++        return ret;
++    }
++
++    *ops = &ipa_sudo_ops;
++    *pvt_data = sudo_ctx;
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        talloc_free(sudo_ctx);
++    }
++
++    return ret;
++}
++
+ int ipa_sudo_init(struct be_ctx *be_ctx,
+                   struct ipa_id_ctx *id_ctx,
+                   struct bet_ops **ops,
+@@ -107,6 +182,7 @@ int ipa_sudo_init(struct be_ctx *be_ctx,
+     switch (schema) {
+     case SUDO_SCHEMA_IPA:
+         DEBUG(SSSDBG_TRACE_FUNC, "Using IPA schema for sudo\n");
++        ret = ipa_sudo_init_ipa_schema(be_ctx, id_ctx, ops, pvt_data);
+         break;
+     case SUDO_SCHEMA_LDAP:
+         DEBUG(SSSDBG_TRACE_FUNC, "Using LDAP schema for sudo\n");
+@@ -122,3 +198,9 @@ int ipa_sudo_init(struct be_ctx *be_ctx,
+ 
+     return EOK;
+ }
++
++static void
++ipa_sudo_handler(struct be_req *be_req)
++{
++    sdap_handler_done(be_req, DP_ERR_FATAL, ERR_INTERNAL, "Not implemented yet.");
++}
+diff --git a/src/providers/ipa/ipa_sudo.h b/src/providers/ipa/ipa_sudo.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..21251ed3dabfaebdc324c8d06ba8f1a0b82951b1
+--- /dev/null
++++ b/src/providers/ipa/ipa_sudo.h
+@@ -0,0 +1,38 @@
++/*
++    Authors:
++        Pavel Březina <pbrezina@redhat.com>
++
++    Copyright (C) 2015 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef _IPA_SUDO_H_
++#define _IPA_SUDO_H_
++
++#include "providers/ipa/ipa_common.h"
++
++struct ipa_sudo_ctx {
++    struct sdap_id_ctx *id_ctx;
++    struct ipa_options *ipa_opts;
++    struct sdap_options *sdap_opts;
++
++    /* sudo */
++    struct sdap_attr_map *sudocmdgroup_map;
++    struct sdap_attr_map *sudorule_map;
++    struct sdap_attr_map *sudocmd_map;
++    struct sdap_search_base **sudo_sb;
++};
++
++#endif /* _IPA_SUDO_H_ */
+-- 
+2.5.0
+

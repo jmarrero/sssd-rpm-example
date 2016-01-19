@@ -1,0 +1,86 @@
+From a83b56cc7cf9b74299475727ff41f61f42002f4a Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 21 Dec 2015 15:51:09 +0100
+Subject: [PATCH 07/49] ldap: remove originalMeberOf if there is no memberOf
+
+Since originalMemerberOf is not mapped directly to an original attribute
+and is handled specially it is not automatically removed if there is no
+memberOf in the original object anymore. This patch put
+originalMemerberOf on the list of attribute which should be removed in
+that case.
+
+Resolves https://fedorahosted.org/sssd/ticket/2917
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 9a2f018c0f68a3ada4cea4128a861a7f85893f22)
+---
+ src/providers/ipa/ipa_s2n_exop.c | 12 +++++++++++-
+ src/providers/ldap/ldap_common.c |  8 +++++++-
+ 2 files changed, 18 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index d101a437dfaf2829013f9e3e3705a7161c654d78..1d233cd52c18b4b6ed753bd92d186ac02ed2cb80 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -1764,6 +1764,8 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+     struct sysdb_attrs *gid_override_attrs = NULL;
+     char ** exop_grouplist;
+     struct ldb_message *msg;
++    struct ldb_message_element *el = NULL;
++    const char *missing[] = {NULL, NULL};
+ 
+     tmp_ctx = talloc_new(NULL);
+     if (tmp_ctx == NULL) {
+@@ -1993,6 +1995,12 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+                 }
+             }
+ 
++            ret = sysdb_attrs_get_el_ext(attrs->sysdb_attrs,
++                                         SYSDB_ORIG_MEMBEROF, false, &el);
++            if (ret == ENOENT) {
++                missing[0] = SYSDB_ORIG_MEMBEROF;
++            }
++
+             ret = sysdb_transaction_start(dom->sysdb);
+             if (ret != EOK) {
+                 DEBUG(SSSDBG_CRIT_FAILURE, "Failed to start transaction\n");
+@@ -2004,7 +2012,9 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+                                    attrs->a.user.pw_uid,
+                                    gid, attrs->a.user.pw_gecos,
+                                    attrs->a.user.pw_dir, attrs->a.user.pw_shell,
+-                                   NULL, attrs->sysdb_attrs, NULL,
++                                   NULL, attrs->sysdb_attrs,
++                                   missing[0] == NULL ? NULL
++                                                      : discard_const(missing),
+                                    dom->user_timeout, now);
+             if (ret == EEXIST && dom->mpg == true) {
+                 /* This handles the case where getgrgid() was called for
+diff --git a/src/providers/ldap/ldap_common.c b/src/providers/ldap/ldap_common.c
+index aa4c6cb851a5735e051ef2c024ca0171a4f61148..df4d52bc7426033852899c49bc0fa7a0f1aa9ed6 100644
+--- a/src/providers/ldap/ldap_common.c
++++ b/src/providers/ldap/ldap_common.c
+@@ -780,7 +780,7 @@ errno_t list_missing_attrs(TALLOC_CTX *mem_ctx,
+     /* Allocate the maximum possible values for missing_attrs, to
+      * be on the safe side
+      */
+-    missing = talloc_array(tmp_ctx, char *, attr_count);
++    missing = talloc_array(tmp_ctx, char *, attr_count + 2);
+     if (!missing) {
+         ret = ENOMEM;
+         goto done;
+@@ -831,6 +831,12 @@ errno_t list_missing_attrs(TALLOC_CTX *mem_ctx,
+             /* Attribute could not be found. Add to the missing list */
+             missing[k] = talloc_steal(missing, sysdb_name);
+             k++;
++
++            /* Remove originalMemberOf as well if MemberOf is missing */
++            if (strcmp(sysdb_name, SYSDB_MEMBEROF) == 0) {
++                missing[k] = talloc_strdup(missing, SYSDB_ORIG_MEMBEROF);
++                k++;
++            }
+         }
+     }
+ 
+-- 
+2.5.0
+

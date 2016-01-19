@@ -1,0 +1,32 @@
+From 86c589c8e334e24dfdea910c85da14ebd77972ac Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 14 Dec 2015 17:16:13 +0100
+Subject: [PATCH 02/49] Use right domain for user lookups
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Related to https://fedorahosted.org/sssd/ticket/2910
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit cc1370dab6de99e50ac41126b500382f0aaa73ae)
+---
+ src/providers/ldap/sdap_async_groups.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ldap/sdap_async_groups.c b/src/providers/ldap/sdap_async_groups.c
+index c2a618d40cef14e64c899f3982153ab0bcde8358..b154bd079577c49883acbd36a557f6ba56ed017e 100644
+--- a/src/providers/ldap/sdap_async_groups.c
++++ b/src/providers/ldap/sdap_async_groups.c
+@@ -2474,7 +2474,7 @@ static errno_t sdap_nested_group_populate_users(TALLOC_CTX *mem_ctx,
+             ret = ENOMEM;
+             goto done;
+         }
+-        ret = sysdb_search_users(tmp_ctx, domain, filter,
++        ret = sysdb_search_users(tmp_ctx, user_dom, filter,
+                                  search_attrs, &count, &msgs);
+         talloc_zfree(filter);
+         talloc_zfree(clean_orig_dn);
+-- 
+2.5.0
+

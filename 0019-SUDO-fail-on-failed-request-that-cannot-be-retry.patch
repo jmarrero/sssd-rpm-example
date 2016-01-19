@@ -1,0 +1,28 @@
+From 3571ecfed9d76240324f881c7d1faaf62fa2798c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Fri, 18 Dec 2015 12:45:53 +0100
+Subject: [PATCH 19/49] SUDO: fail on failed request that cannot be retry
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit cad751beaa12e34e15565bc413442b1e80ac0c29)
+---
+ src/providers/ldap/sdap_async_sudo.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/src/providers/ldap/sdap_async_sudo.c b/src/providers/ldap/sdap_async_sudo.c
+index d26d00f47a5c1fa02705a09c1d3ce02a4d5788a8..e3f3da186181a5f3ffbe818073cdbdca1112857a 100644
+--- a/src/providers/ldap/sdap_async_sudo.c
++++ b/src/providers/ldap/sdap_async_sudo.c
+@@ -518,6 +518,9 @@ static void sdap_sudo_refresh_done(struct tevent_req *subreq)
+             tevent_req_error(req, ret);
+         }
+         return;
++    } else if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
+     }
+ 
+     DEBUG(SSSDBG_TRACE_FUNC, "Received %zu rules\n", rules_count);
+-- 
+2.5.0
+

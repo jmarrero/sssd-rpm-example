@@ -1,0 +1,43 @@
+From 207813a4dffb033dde6e3f4c08946864dcf6064a Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Fri, 18 Dec 2015 13:16:29 +0100
+Subject: [PATCH 01/49] nfs idmap: fix infinite loop
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2909
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+Reviewed-by: Noam Meltzer <tsnoam@gmail.com>
+(cherry picked from commit 2a256e4e4b64891fe846e933589506daa68aa13e)
+---
+ src/sss_client/nfs/sss_nfs_client.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/sss_client/nfs/sss_nfs_client.c b/src/sss_client/nfs/sss_nfs_client.c
+index 64cb67a8b75ec04c1d6fa03905f5427bbe6c1e82..8fd993005606a52217dc306f1816c3f88a283aa0 100644
+--- a/src/sss_client/nfs/sss_nfs_client.c
++++ b/src/sss_client/nfs/sss_nfs_client.c
+@@ -157,7 +157,7 @@ static int get_user_from_mc(char *name, size_t len, uid_t uid)
+             goto done;
+         }
+         buf = p;
+-        rc = sss_nss_mc_getpwuid(uid, &pwd, buf, BUF_LEN);
++        rc = sss_nss_mc_getpwuid(uid, &pwd, buf, buflen);
+     } while (rc == ERANGE);
+ 
+     if (rc == 0) {
+@@ -198,7 +198,7 @@ static int get_group_from_mc(char *name, size_t len, id_t gid)
+             goto done;
+         }
+         buf = p;
+-        rc = sss_nss_mc_getgrgid(gid, &grp, buf, BUF_LEN);
++        rc = sss_nss_mc_getgrgid(gid, &grp, buf, buflen);
+     } while (rc == ERANGE);
+ 
+     if (rc == 0) {
+-- 
+2.5.0
+

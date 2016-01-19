@@ -24,7 +24,7 @@
 
 Name: sssd
 Version: 1.13.3
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -33,6 +33,50 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-nfs-idmap-fix-infinite-loop.patch
+Patch0002: 0002-Use-right-domain-for-user-lookups.patch
+Patch0003: 0003-sdap_save_grpmem-determine-domain-by-SID-if-possible.patch
+Patch0004: 0004-ipa_s2n_save_objects-use-configured-user-and-group-t.patch
+Patch0005: 0005-SPEC-Change-package-ownership-of-pubconfpath-krb5.in.patch
+Patch0006: 0006-AD-SRV-prefer-site-local-DCs-in-LDAP-ping.patch
+Patch0007: 0007-ldap-remove-originalMeberOf-if-there-is-no-memberOf.patch
+Patch0008: 0008-KRB5-Adding-DNS-SRV-lookup-for-krb5-provider.patch
+Patch0009: 0009-SDAP-do-not-fail-if-refs-are-found-but-not-processed.patch
+Patch0010: 0010-sudo-remove-unused-param-name-in-sdap_sudo_get_usn.patch
+Patch0011: 0011-sudo-remove-unused-param.-in-ldap_get_sudo_options.patch
+Patch0012: 0012-SDAP-Add-request-that-iterates-over-all-search-bases.patch
+Patch0013: 0013-SDAP-rename-sdap_get_id_specific_filter.patch
+Patch0014: 0014-SDAP-support-empty-filters-in-sdap_combine_filters.patch
+Patch0015: 0015-SUDO-use-sdap_search_bases-instead-custom-sb-iterato.patch
+Patch0016: 0016-SUDO-make-sudo-sysdb-interface-more-reusable.patch
+Patch0017: 0017-SUDO-move-code-shared-between-ldap-and-ipa-to-separa.patch
+Patch0018: 0018-SUDO-allow-to-disable-ptask.patch
+Patch0019: 0019-SUDO-fail-on-failed-request-that-cannot-be-retry.patch
+Patch0020: 0020-IPA-add-ipa_get_rdn-and-ipa_check_rdn.patch
+Patch0021: 0021-SDAP-use-ipa_get_rdn-in-nested-groups.patch
+Patch0022: 0022-IPA-SUDO-choose-between-IPA-and-LDAP-schema.patch
+Patch0023: 0023-IPA-SUDO-Add-ipasudorule-mapping.patch
+Patch0024: 0024-IPA-SUDO-Add-ipasudocmdgrp-mapping.patch
+Patch0025: 0025-IPA-SUDO-Add-ipasudocmd-mapping.patch
+Patch0026: 0026-IPA-SUDO-Implement-sudo-handler.patch
+Patch0027: 0027-IPA-SUDO-Implement-full-refresh.patch
+Patch0028: 0028-IPA-SUDO-Implement-rules-refresh.patch
+Patch0029: 0029-IPA-SUDO-Remember-USN.patch
+Patch0030: 0030-SDAP-Add-sdap_or_filters.patch
+Patch0031: 0031-IPA-SUDO-Implement-smart-refresh.patch
+Patch0032: 0032-SUDO-sdap_sudo_set_usn-do-not-steal-usn.patch
+Patch0033: 0033-SUDO-remove-full_refresh_in_progress.patch
+Patch0034: 0034-SUDO-assume-zero-if-usn-is-unknown.patch
+Patch0035: 0035-SUDO-allow-disabling-full-refresh.patch
+Patch0036: 0036-SUDO-remember-usn-as-number-instead-of-string.patch
+Patch0037: 0037-SUDO-simplify-usn-filter.patch
+Patch0038: 0038-IPA-SUDO-Add-support-for-ipaSudoRunAsExt-attributes.patch
+Patch0039: 0039-UTIL-allow-to-skip-default-options-for-child-process.patch
+Patch0040: 0040-DP_TASK-add-be_ptask_get_timeout.patch
+Patch0041: 0041-AD-add-task-to-renew-the-machine-account-password-if.patch
+Patch0042: 0042-FO-add-fo_get_active_server.patch
+Patch0043: 0043-FO-add-be_fo_get_active_server_name.patch
+Patch0044: 0044-AD-try-to-use-current-server-in-the-renewal-task.patch
 Patch0100: 0100-FO-Don-t-free-rc-allocated-structure.patch
 Patch0101: 0101-tests-Reduce-failover-code-duplication.patch
 Patch0102: 0102-FO-Use-refcount-to-keep-track-of-servers-returned-to.patch
@@ -1019,6 +1063,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Jan 19 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.3-2
+- Resolves: rhbz#1256849 - SUDO: Support the IPA schema
+
 * Wed Dec 16 2015 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.3-1
 - New upstream release 1.13.3
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.3

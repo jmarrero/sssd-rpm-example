@@ -1,0 +1,178 @@
+From 0d13927fc7b2daec06cdff379715318e1dc2e05b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 14 Jan 2016 12:23:37 +0100
+Subject: [PATCH 36/49] SUDO: remember usn as number instead of string
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit f58ffb26aeaae0642a149643672fa59ec01a3a36)
+---
+ src/providers/ipa/ipa_sudo_refresh.c   | 14 +++++++-------
+ src/providers/ldap/sdap.h              |  2 +-
+ src/providers/ldap/sdap_sudo_refresh.c | 12 ++++++------
+ src/providers/ldap/sdap_sudo_shared.c  | 35 ++++++++++++++++++----------------
+ 4 files changed, 33 insertions(+), 30 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_sudo_refresh.c b/src/providers/ipa/ipa_sudo_refresh.c
+index 5934a8f1181250890ca57ac8d83e47ffdc445ea4..42137679c4bd2209b98d1d5223fd3ac71dc16b16 100644
+--- a/src/providers/ipa/ipa_sudo_refresh.c
++++ b/src/providers/ipa/ipa_sudo_refresh.c
+@@ -153,7 +153,7 @@ ipa_sudo_smart_refresh_send(TALLOC_CTX *mem_ctx,
+     struct tevent_req *req;
+     char *cmdgroups_filter;
+     char *search_filter;
+-    const char *usn;
++    unsigned long usn;
+     errno_t ret;
+ 
+     req = tevent_req_create(mem_ctx, &state,
+@@ -164,15 +164,15 @@ ipa_sudo_smart_refresh_send(TALLOC_CTX *mem_ctx,
+     }
+ 
+     /* Download all rules from LDAP that are newer than usn */
+-    if (srv_opts == NULL || srv_opts->max_sudo_value == NULL) {
+-        DEBUG(SSSDBG_TRACE_FUNC, "USN value is unknown, ssuming zero.\n");
+-        usn = "0";
++    if (srv_opts == NULL || srv_opts->max_sudo_value == 0) {
++        DEBUG(SSSDBG_TRACE_FUNC, "USN value is unknown, assuming zero.\n");
++        usn = 0;
+     } else {
+         usn = srv_opts->max_sudo_value;
+     }
+ 
+     cmdgroups_filter = talloc_asprintf(state,
+-            "(&(%s>=%s)(!(%s=%s)))",
++            "(&(%s>=%lu)(!(%s=%lu)))",
+             sudo_ctx->sudocmdgroup_map[IPA_AT_SUDOCMDGROUP_ENTRYUSN].name, usn,
+             sudo_ctx->sudocmdgroup_map[IPA_AT_SUDOCMDGROUP_ENTRYUSN].name, usn);
+     if (cmdgroups_filter == NULL) {
+@@ -181,7 +181,7 @@ ipa_sudo_smart_refresh_send(TALLOC_CTX *mem_ctx,
+     }
+ 
+     search_filter = talloc_asprintf(state,
+-        "(&(%s>=%s)(!(%s=%s)))",
++        "(&(%s>=%lu)(!(%s=%lu)))",
+         sudo_ctx->sudorule_map[IPA_AT_SUDORULE_ENTRYUSN].name, usn,
+         sudo_ctx->sudorule_map[IPA_AT_SUDORULE_ENTRYUSN].name, usn);
+     if (search_filter == NULL) {
+@@ -192,7 +192,7 @@ ipa_sudo_smart_refresh_send(TALLOC_CTX *mem_ctx,
+     /* Do not remove any rules that are already in the sysdb. */
+ 
+     DEBUG(SSSDBG_TRACE_FUNC, "Issuing a smart refresh of sudo rules "
+-                             "(USN > %s)\n", usn);
++                             "(USN > %lu)\n", usn);
+ 
+     subreq = ipa_sudo_refresh_send(state, ev, sudo_ctx, cmdgroups_filter,
+                                    search_filter, NULL);
+diff --git a/src/providers/ldap/sdap.h b/src/providers/ldap/sdap.h
+index edfbf229b4c4396592020de931eba5f83a8f06ed..d7a299220414f2cf9d80de9921b6a5ec49e5793b 100644
+--- a/src/providers/ldap/sdap.h
++++ b/src/providers/ldap/sdap.h
+@@ -460,7 +460,7 @@ struct sdap_server_opts {
+     char *max_user_value;
+     char *max_group_value;
+     char *max_service_value;
+-    char *max_sudo_value;
++    unsigned long max_sudo_value;
+     bool posix_checked;
+ };
+ 
+diff --git a/src/providers/ldap/sdap_sudo_refresh.c b/src/providers/ldap/sdap_sudo_refresh.c
+index 61f24efa11da05d75bc31ea4ea3b150b2f9857f8..ff00fd037430f9a7ce62624184faa53288e581e4 100644
+--- a/src/providers/ldap/sdap_sudo_refresh.c
++++ b/src/providers/ldap/sdap_sudo_refresh.c
+@@ -167,7 +167,7 @@ struct tevent_req *sdap_sudo_smart_refresh_send(TALLOC_CTX *mem_ctx,
+     struct sdap_server_opts *srv_opts = id_ctx->srv_opts;
+     struct sdap_sudo_smart_refresh_state *state = NULL;
+     char *search_filter = NULL;
+-    const char *usn;
++    unsigned long usn;
+     int ret;
+ 
+     req = tevent_req_create(mem_ctx, &state, struct sdap_sudo_smart_refresh_state);
+@@ -180,15 +180,15 @@ struct tevent_req *sdap_sudo_smart_refresh_send(TALLOC_CTX *mem_ctx,
+     state->sysdb = id_ctx->be->domain->sysdb;
+ 
+     /* Download all rules from LDAP that are newer than usn */
+-    if (srv_opts == NULL || srv_opts->max_sudo_value == NULL) {
+-        DEBUG(SSSDBG_TRACE_FUNC, "USN value is unknown, ssuming zero.\n");
+-        usn = "0";
++    if (srv_opts == NULL || srv_opts->max_sudo_value == 0) {
++        DEBUG(SSSDBG_TRACE_FUNC, "USN value is unknown, assuming zero.\n");
++        usn = 0;
+     } else {
+         usn = srv_opts->max_sudo_value;
+     }
+ 
+     search_filter = talloc_asprintf(state,
+-                                    "(&(objectclass=%s)(%s>=%s)(!(%s=%s)))",
++                                    "(&(objectclass=%s)(%s>=%lu)(!(%s=%lu)))",
+                                     map[SDAP_OC_SUDORULE].name,
+                                     map[SDAP_AT_SUDO_USN].name, usn,
+                                     map[SDAP_AT_SUDO_USN].name, usn);
+@@ -201,7 +201,7 @@ struct tevent_req *sdap_sudo_smart_refresh_send(TALLOC_CTX *mem_ctx,
+      * sysdb_filter = NULL; */
+ 
+     DEBUG(SSSDBG_TRACE_FUNC, "Issuing a smart refresh of sudo rules "
+-                             "(USN > %s)\n", usn);
++                             "(USN > %lu)\n", usn);
+ 
+     subreq = sdap_sudo_refresh_send(state, sudo_ctx, search_filter, NULL);
+     if (subreq == NULL) {
+diff --git a/src/providers/ldap/sdap_sudo_shared.c b/src/providers/ldap/sdap_sudo_shared.c
+index 9e9574b7c641f52bd54989172ad7b6ccfd04b13f..72f55e14baa8f8cf896205fb20f14d5f446cfb0a 100644
+--- a/src/providers/ldap/sdap_sudo_shared.c
++++ b/src/providers/ldap/sdap_sudo_shared.c
+@@ -126,7 +126,7 @@ sdap_sudo_set_usn(struct sdap_server_opts *srv_opts,
+ {
+     unsigned int usn_number;
+     char *endptr = NULL;
+-    char *newusn;
++    errno_t ret;
+ 
+     if (srv_opts == NULL) {
+         DEBUG(SSSDBG_TRACE_FUNC, "Bug: srv_opts is NULL\n");
+@@ -138,23 +138,26 @@ sdap_sudo_set_usn(struct sdap_server_opts *srv_opts,
+         return;
+     }
+ 
+-    if (sysdb_compare_usn(usn, srv_opts->max_sudo_value) > 0) {
+-        newusn = talloc_strdup(srv_opts, usn);
+-        if (newusn == NULL) {
+-            DEBUG(SSSDBG_CRIT_FAILURE, "talloc_strdup() failed\n");
+-            return;
+-        }
+-
+-        talloc_zfree(srv_opts->max_sudo_value);
+-        srv_opts->max_sudo_value = newusn;
+-    }
+-
++    errno = 0;
+     usn_number = strtoul(usn, &endptr, 10);
+-    if ((endptr == NULL || (*endptr == '\0' && endptr != usn))
+-         && (usn_number > srv_opts->last_usn)) {
+-         srv_opts->last_usn = usn_number;
++    if (endptr != NULL && *endptr != '\0') {
++        DEBUG(SSSDBG_MINOR_FAILURE, "Unable to convert USN %s\n", usn);
++        return;
++    } else if (errno != 0) {
++        ret = errno;
++        DEBUG(SSSDBG_MINOR_FAILURE, "Unable to convert USN %s [%d]: %s\n",
++              usn, ret, sss_strerror(ret));
++        return;
+     }
+ 
+-    DEBUG(SSSDBG_FUNC_DATA, "SUDO higher USN value: [%s]\n",
++    if (usn_number > srv_opts->max_sudo_value) {
++        srv_opts->max_sudo_value = usn_number;
++    }
++
++    if (usn_number > srv_opts->last_usn) {
++        srv_opts->last_usn = usn_number;
++    }
++
++    DEBUG(SSSDBG_FUNC_DATA, "SUDO higher USN value: [%lu]\n",
+                              srv_opts->max_sudo_value);
+ }
+-- 
+2.5.0
+

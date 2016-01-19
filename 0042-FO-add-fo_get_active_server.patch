@@ -1,0 +1,95 @@
+From 7012e1c6d5571eb75015b679dbadcd14c68d4f58 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 19 Jan 2016 15:04:04 +0100
+Subject: [PATCH 42/49] FO: add fo_get_active_server()
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 5a7f17aedad34a8618765bc33342c109a6958ab5)
+---
+ src/providers/fail_over.c   |  5 +++++
+ src/providers/fail_over.h   |  2 ++
+ src/tests/fail_over-tests.c | 11 +++++++++++
+ 3 files changed, 18 insertions(+)
+
+diff --git a/src/providers/fail_over.c b/src/providers/fail_over.c
+index b076687ac6e571f7e27402fd11ac60183ea46951..b51a6c99ce031a1566f5d021fcf41843891a2d1c 100644
+--- a/src/providers/fail_over.c
++++ b/src/providers/fail_over.c
+@@ -1457,6 +1457,11 @@ fo_set_port_status(struct fo_server *server, enum port_status status)
+     }
+ }
+ 
++struct fo_server *fo_get_active_server(struct fo_service *service)
++{
++    return service->active_server;
++}
++
+ void fo_try_next_server(struct fo_service *service)
+ {
+     struct fo_server *server;
+diff --git a/src/providers/fail_over.h b/src/providers/fail_over.h
+index e49c6414a14eb6ca2cad333f8efbb58576811345..b8272a0a16015ff6b5d287b775c33a77e23eba67 100644
+--- a/src/providers/fail_over.h
++++ b/src/providers/fail_over.h
+@@ -200,6 +200,8 @@ void fo_reset_services(struct fo_ctx *fo_ctx);
+ 
+ void fo_reset_servers(struct fo_service *svc);
+ 
++struct fo_server *fo_get_active_server(struct fo_service *service);
++
+ bool fo_svc_has_server(struct fo_service *service, struct fo_server *server);
+ 
+ /*
+diff --git a/src/tests/fail_over-tests.c b/src/tests/fail_over-tests.c
+index b21ead38229be5d55df2de10bec3dd00a8566d71..c9bac68711cfcf624064b5881f5226d4f8449e39 100644
+--- a/src/tests/fail_over-tests.c
++++ b/src/tests/fail_over-tests.c
+@@ -50,6 +50,7 @@ struct test_ctx {
+ struct task {
+     struct test_ctx *test_ctx;
+     const char *location;
++    struct fo_service *service;
+     int recv;
+     int port;
+     int new_server_status;
+@@ -147,6 +148,7 @@ test_resolve_service_callback(struct tevent_req *req)
+     int port;
+     struct task *task;
+     struct fo_server *server = NULL;
++    struct fo_server *active_server = NULL;
+     struct resolv_hostent *he;
+     int i;
+ 
+@@ -181,6 +183,13 @@ test_resolve_service_callback(struct tevent_req *req)
+         }
+     }
+ 
++    if (task->new_port_status == PORT_WORKING
++            && task->new_server_status == SERVER_WORKING) {
++        active_server = fo_get_active_server(task->service);
++        fail_if(active_server == NULL, "Missing active server");
++        fail_if(server != active_server, "Current server is not active server");
++    }
++
+ }
+ 
+ #define get_request(a, b, c, d, e, f) \
+@@ -203,6 +212,7 @@ _get_request(struct test_ctx *test_ctx, struct fo_service *service,
+     task->new_port_status = new_port_status;
+     task->new_server_status = new_server_status;
+     task->location = location;
++    task->service = service;
+     test_ctx->tasks++;
+ 
+     req = fo_resolve_service_send(test_ctx, test_ctx->ev,
+@@ -242,6 +252,7 @@ START_TEST(test_fo_resolve_service)
+ 
+     /* Make requests. */
+     get_request(ctx, service[0], EOK, 20, PORT_WORKING, -1);
++    get_request(ctx, service[0], EOK, 20, PORT_WORKING, SERVER_WORKING);
+     get_request(ctx, service[0], EOK, 20, -1, SERVER_NOT_WORKING);
+     get_request(ctx, service[0], EOK, 80, PORT_WORKING, -1);
+     get_request(ctx, service[0], EOK, 80, PORT_NOT_WORKING, -1);
+-- 
+2.5.0
+

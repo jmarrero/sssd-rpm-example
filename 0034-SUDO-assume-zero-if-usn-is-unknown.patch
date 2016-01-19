@@ -1,0 +1,127 @@
+From bd0561dd88307853b1901d2ba4036ec0c862f6d9 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 12 Jan 2016 12:15:03 +0100
+Subject: [PATCH 34/49] SUDO: assume zero if usn is unknown
+
+When we switched to be_ptaks full_refresh_done has become obsolete since
+timing is handled in a better way. In case of unknown USN we assume zero
+which allows us to disable full refresh completely in configuration.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 8bd44a13de231d025882810c720dd07ca4ee564d)
+---
+ src/providers/ipa/ipa_sudo.h           |  2 --
+ src/providers/ipa/ipa_sudo_refresh.c   | 18 ++++++------------
+ src/providers/ldap/sdap_sudo.c         |  4 ----
+ src/providers/ldap/sdap_sudo_refresh.c | 19 +++++++------------
+ 4 files changed, 13 insertions(+), 30 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_sudo.h b/src/providers/ipa/ipa_sudo.h
+index 3c346c837be6ee4848d4786ac01f36bc80698d3f..8b866001931ff0550157861dfbc4a99d7bb8319f 100644
+--- a/src/providers/ipa/ipa_sudo.h
++++ b/src/providers/ipa/ipa_sudo.h
+@@ -28,8 +28,6 @@ struct ipa_sudo_ctx {
+     struct ipa_options *ipa_opts;
+     struct sdap_options *sdap_opts;
+ 
+-    bool full_refresh_done;
+-
+     /* sudo */
+     struct sdap_attr_map *sudocmdgroup_map;
+     struct sdap_attr_map *sudorule_map;
+diff --git a/src/providers/ipa/ipa_sudo_refresh.c b/src/providers/ipa/ipa_sudo_refresh.c
+index c8fb7d9216edc0568ee906c368fcff5ff1596022..5934a8f1181250890ca57ac8d83e47ffdc445ea4 100644
+--- a/src/providers/ipa/ipa_sudo_refresh.c
++++ b/src/providers/ipa/ipa_sudo_refresh.c
+@@ -105,8 +105,6 @@ ipa_sudo_full_refresh_done(struct tevent_req *subreq)
+         goto done;
+     }
+ 
+-    state->sudo_ctx->full_refresh_done = true;
+-
+     ret = sysdb_sudo_set_last_full_refresh(state->domain, time(NULL));
+     if (ret != EOK) {
+         DEBUG(SSSDBG_MINOR_FAILURE, "Unable to save time of "
+@@ -165,17 +163,13 @@ ipa_sudo_smart_refresh_send(TALLOC_CTX *mem_ctx,
+         return NULL;
+     }
+ 
+-    if (!sudo_ctx->full_refresh_done
+-            || srv_opts == NULL || srv_opts->max_sudo_value == NULL) {
+-        /* Perform full refresh first */
+-        DEBUG(SSSDBG_TRACE_FUNC, "USN value is unknown, "
+-                                 "waiting for full refresh!\n");
+-        ret = EINVAL;
+-        goto immediately;
+-    }
+-
+     /* Download all rules from LDAP that are newer than usn */
+-    usn = srv_opts->max_sudo_value;
++    if (srv_opts == NULL || srv_opts->max_sudo_value == NULL) {
++        DEBUG(SSSDBG_TRACE_FUNC, "USN value is unknown, ssuming zero.\n");
++        usn = "0";
++    } else {
++        usn = srv_opts->max_sudo_value;
++    }
+ 
+     cmdgroups_filter = talloc_asprintf(state,
+             "(&(%s>=%s)(!(%s=%s)))",
+diff --git a/src/providers/ldap/sdap_sudo.c b/src/providers/ldap/sdap_sudo.c
+index 10067e9ba779b5224bf21dd7a705c45e7f4e0f99..e653c46363253789e60146fbfc067cb93d4ab7f1 100644
+--- a/src/providers/ldap/sdap_sudo.c
++++ b/src/providers/ldap/sdap_sudo.c
+@@ -71,10 +71,6 @@ int sdap_sudo_init(struct be_ctx *be_ctx,
+     *ops = &sdap_sudo_ops;
+     *pvt_data = sudo_ctx;
+ 
+-    /* we didn't do any full refresh now,
+-     * so we don't have current usn values available */
+-    sudo_ctx->full_refresh_done = false;
+-
+     ret = ldap_get_sudo_options(be_ctx->cdb,
+                                 be_ctx->conf_path, id_ctx->opts,
+                                 &sudo_ctx->use_host_filter,
+diff --git a/src/providers/ldap/sdap_sudo_refresh.c b/src/providers/ldap/sdap_sudo_refresh.c
+index f1fb6a924c93ec5c71a890d4e03aaac3e9709d73..61f24efa11da05d75bc31ea4ea3b150b2f9857f8 100644
+--- a/src/providers/ldap/sdap_sudo_refresh.c
++++ b/src/providers/ldap/sdap_sudo_refresh.c
+@@ -115,8 +115,6 @@ static void sdap_sudo_full_refresh_done(struct tevent_req *subreq)
+         goto done;
+     }
+ 
+-    state->sudo_ctx->full_refresh_done = true;
+-
+     /* save the time in the sysdb */
+     ret = sysdb_sudo_set_last_full_refresh(state->domain, time(NULL));
+     if (ret != EOK) {
+@@ -178,20 +176,17 @@ struct tevent_req *sdap_sudo_smart_refresh_send(TALLOC_CTX *mem_ctx,
+         return NULL;
+     }
+ 
+-    if (!sudo_ctx->full_refresh_done
+-            || srv_opts == NULL || srv_opts->max_sudo_value == NULL) {
+-        /* Perform full refresh first */
+-        DEBUG(SSSDBG_TRACE_FUNC, "USN value is unknown, "
+-                                 "waiting for full refresh!\n");
+-        ret = EINVAL;
+-        goto immediately;
+-    }
+-
+     state->id_ctx = id_ctx;
+     state->sysdb = id_ctx->be->domain->sysdb;
+ 
+     /* Download all rules from LDAP that are newer than usn */
+-    usn = srv_opts->max_sudo_value;
++    if (srv_opts == NULL || srv_opts->max_sudo_value == NULL) {
++        DEBUG(SSSDBG_TRACE_FUNC, "USN value is unknown, ssuming zero.\n");
++        usn = "0";
++    } else {
++        usn = srv_opts->max_sudo_value;
++    }
++
+     search_filter = talloc_asprintf(state,
+                                     "(&(objectclass=%s)(%s>=%s)(!(%s=%s)))",
+                                     map[SDAP_OC_SUDORULE].name,
+-- 
+2.5.0
+

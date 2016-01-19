@@ -1,0 +1,57 @@
+From ba178abc4f4ddeb0faf65cb779b15e6a95f113fc Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 19 Jan 2016 15:05:03 +0100
+Subject: [PATCH 43/49] FO: add be_fo_get_active_server_name()
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 7fdec78178440855058be8ca1011e0b1aa45de31)
+---
+ src/providers/data_provider_fo.c | 17 +++++++++++++++++
+ src/providers/dp_backend.h       |  3 +++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/src/providers/data_provider_fo.c b/src/providers/data_provider_fo.c
+index cd57340a0ba0ac7e474dc502bf1f1b4de0e1f778..d1d8c4c5c94811ce73b550dc99166d3c913b95aa 100644
+--- a/src/providers/data_provider_fo.c
++++ b/src/providers/data_provider_fo.c
+@@ -723,6 +723,23 @@ void be_fo_try_next_server(struct be_ctx *ctx, const char *service_name)
+     }
+ }
+ 
++const char *be_fo_get_active_server_name(struct be_ctx *ctx,
++                                         const char *service_name)
++{
++    struct be_svc_data *svc;
++    struct fo_server *server;
++
++    svc = be_fo_find_svc_data(ctx, service_name);
++    if (svc != NULL) {
++        server = fo_get_active_server(svc->fo_service);
++        if (server != NULL) {
++            return fo_get_server_name(server);
++        }
++    }
++
++    return NULL;
++}
++
+ int be_fo_run_callbacks_at_next_request(struct be_ctx *ctx,
+                                         const char *service_name)
+ {
+diff --git a/src/providers/dp_backend.h b/src/providers/dp_backend.h
+index 0ced851be8468ce21a9d283e26461fc47194557e..ffeeca4a6bad976ae8922bc4964b839242290259 100644
+--- a/src/providers/dp_backend.h
++++ b/src/providers/dp_backend.h
+@@ -285,6 +285,9 @@ int be_fo_run_callbacks_at_next_request(struct be_ctx *ctx,
+ void reset_fo(struct be_ctx *be_ctx);
+ void be_fo_reset_svc(struct be_ctx *be_ctx, const char *svc_name);
+ 
++const char *be_fo_get_active_server_name(struct be_ctx *ctx,
++                                         const char *service_name);
++
+ errno_t be_res_init(struct be_ctx *ctx);
+ 
+ /* be_req helpers */
+-- 
+2.5.0
+

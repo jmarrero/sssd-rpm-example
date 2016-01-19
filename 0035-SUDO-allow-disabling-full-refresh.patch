@@ -1,0 +1,31 @@
+From 83f57d9810a34780949ac9f0c4dc9c6f8a069127 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 12 Jan 2016 11:45:22 +0100
+Subject: [PATCH 35/49] SUDO: allow disabling full refresh
+
+This condition always disabled smart refresh when full refresh
+interval was set to zero and thus disabling periodic refresh
+functionality completelely.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 8da71a9d5eebe7690b66fde8bfad195d5e3cc629)
+---
+ src/providers/ldap/sdap_sudo_shared.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ldap/sdap_sudo_shared.c b/src/providers/ldap/sdap_sudo_shared.c
+index 0885054e4d0e886671f7057e44d0e66e3f5ccaad..9e9574b7c641f52bd54989172ad7b6ccfd04b13f 100644
+--- a/src/providers/ldap/sdap_sudo_shared.c
++++ b/src/providers/ldap/sdap_sudo_shared.c
+@@ -55,7 +55,7 @@ sdap_sudo_ptask_setup_generic(struct be_ctx *be_ctx,
+         DEBUG(SSSDBG_CONF_SETTINGS, "At least smart refresh needs to be "
+               "enabled. Setting smart refresh interval to default value "
+               "(%ld) seconds.\n", smart);
+-    } else if (full <= smart) {
++    } else if (full > 0 && full <= smart) {
+         /* In this case it does not make any sense to run smart refresh. */
+         smart = 0;
+ 
+-- 
+2.5.0
+

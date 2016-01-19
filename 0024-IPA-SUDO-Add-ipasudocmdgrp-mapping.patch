@@ -1,0 +1,93 @@
+From 71f41c651bd5a0ff966cfef662abefb8588948ff Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 2 Dec 2015 14:48:18 +0100
+Subject: [PATCH 24/49] IPA SUDO: Add ipasudocmdgrp mapping
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit ed8650be18af26b7bf389e1246f7e8cdb363f829)
+---
+ src/config/etc/sssd.api.d/sssd-ipa.conf |  5 +++++
+ src/db/sysdb_sudo.h                     |  2 ++
+ src/providers/ipa/ipa_common.h          | 10 ++++++++++
+ src/providers/ipa/ipa_opts.c            |  9 +++++++++
+ src/providers/ipa/ipa_opts.h            |  2 ++
+ 5 files changed, 28 insertions(+)
+
+diff --git a/src/config/etc/sssd.api.d/sssd-ipa.conf b/src/config/etc/sssd.api.d/sssd-ipa.conf
+index 0e4e8c00b0fb1fcf9ee9ee82790c28f6c14d26d0..f46545491439824f2ac3d65d4bbbad7d0b70a42b 100644
+--- a/src/config/etc/sssd.api.d/sssd-ipa.conf
++++ b/src/config/etc/sssd.api.d/sssd-ipa.conf
+@@ -254,3 +254,8 @@ ipa_sudorule_usercategory = str, None, false
+ ipa_sudorule_runasusercategory = str, None, false
+ ipa_sudorule_runasgroupcategory = str, None, false
+ ipa_sudorule_entry_usn = str, None, false
++ipa_sudocmdgroup_object_class = str, None, false
++ipa_sudocmdgroup_uuid = str, None, false
++ipa_sudocmdgroup_name = str, None, false
++ipa_sudocmdgroup_member = str, None, false
++ipa_sudocmdgroup_entry_usn = str, None, false
+diff --git a/src/db/sysdb_sudo.h b/src/db/sysdb_sudo.h
+index cb4bcc236933d60adaba1c6ffcc52fc73f5df064..658d0237a16b5d1687bd0bf2ac60d24c91e1b03b 100644
+--- a/src/db/sysdb_sudo.h
++++ b/src/db/sysdb_sudo.h
+@@ -66,6 +66,8 @@
+ #define SYSDB_IPA_SUDORULE_RUNASUSERCATEGORY  "ipaSudoRunAsUserCategory"
+ #define SYSDB_IPA_SUDORULE_RUNASGROUPCATEGORY "ipaSudoRunAsGroupCategory"
+ 
++#define SYSDB_IPA_SUDOCMDGROUP_OC                 "ipasudocmdgrp"
++
+ /* When constructing a sysdb filter, OR these values to include..   */
+ #define SYSDB_SUDO_FILTER_NONE           0x00       /* no additional filter */
+ #define SYSDB_SUDO_FILTER_USERNAME       0x01       /* username             */
+diff --git a/src/providers/ipa/ipa_common.h b/src/providers/ipa/ipa_common.h
+index d5527aeeda27a4684bc51e2d5bc420f9c3165a86..57d93dd643e27d08802009dbcb8056c05edf76ab 100644
+--- a/src/providers/ipa/ipa_common.h
++++ b/src/providers/ipa/ipa_common.h
+@@ -158,6 +158,16 @@ enum ipa_sudorule_attrs {
+     IPA_OPTS_SUDORULE
+ };
+ 
++enum ipa_sudocmdgroup_attrs {
++    IPA_OC_SUDOCMDGROUP = 0,
++    IPA_AT_SUDOCMDGROUP_UUID,
++    IPA_AT_SUDOCMDGROUP_NAME,
++    IPA_AT_SUDOCMDGROUP_MEMBER,
++    IPA_AT_SUDOCMDGROUP_ENTRYUSN,
++
++    IPA_OPTS_SUDOCMDGROUP
++};
++
+ struct ipa_auth_ctx {
+     struct krb5_ctx *krb5_auth_ctx;
+     struct sdap_id_ctx *sdap_id_ctx;
+diff --git a/src/providers/ipa/ipa_opts.c b/src/providers/ipa/ipa_opts.c
+index 25e9a009a142580e40e3bc2034d7b310ff8ae9c5..3493984f5db5b0d3ae474858510af61478e4561f 100644
+--- a/src/providers/ipa/ipa_opts.c
++++ b/src/providers/ipa/ipa_opts.c
+@@ -359,3 +359,12 @@ struct sdap_attr_map ipa_sudorule_map[] = {
+     { "ipa_sudorule_entry_usn", "entryUSN", SYSDB_USN, NULL },
+     SDAP_ATTR_MAP_TERMINATOR
+ };
++
++struct sdap_attr_map ipa_sudocmdgroup_map[] = {
++    { "ipa_sudocmdgroup_object_class", "ipasudocmdgrp", SYSDB_IPA_SUDOCMDGROUP_OC, NULL },
++    { "ipa_sudocmdgroup_uuid", "ipaUniqueID", SYSDB_UUID, NULL },
++    { "ipa_sudocmdgroup_name", "cn", SYSDB_NAME, NULL },
++    { "ipa_sudocmdgroup_member", "member", SYSDB_MEMBER, NULL },
++    { "ipa_sudocmdgroup_entry_usn", "entryUSN", SYSDB_USN, NULL },
++    SDAP_ATTR_MAP_TERMINATOR
++};
+diff --git a/src/providers/ipa/ipa_opts.h b/src/providers/ipa/ipa_opts.h
+index 6d9e52f73ae1b5625c31d73adc67a76f018c3898..89acea1608743a65c85b1b1c955e4215576fc48b 100644
+--- a/src/providers/ipa/ipa_opts.h
++++ b/src/providers/ipa/ipa_opts.h
+@@ -60,4 +60,6 @@ extern struct sdap_attr_map ipa_autofs_entry_map[];
+ 
+ extern struct sdap_attr_map ipa_sudorule_map[];
+ 
++extern struct sdap_attr_map ipa_sudocmdgroup_map[];
++
+ #endif /* IPA_OPTS_H_ */
+-- 
+2.5.0
+

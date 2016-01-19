@@ -1,0 +1,2372 @@
+From b55cdd3a298b5edd5ddc26beebfa6379843ebe21 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Fri, 11 Dec 2015 15:00:40 +0100
+Subject: [PATCH 27/49] IPA SUDO: Implement full refresh
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit a641a13889d617aca6bd998025e9087e822ff7f0)
+---
+ Makefile.am                             |    5 +-
+ src/providers/ipa/ipa_sudo.c            |   75 +-
+ src/providers/ipa/ipa_sudo.h            |   75 ++
+ src/providers/ipa/ipa_sudo_async.c      |  779 +++++++++++++++++++++
+ src/providers/ipa/ipa_sudo_conversion.c | 1158 +++++++++++++++++++++++++++++++
+ src/providers/ipa/ipa_sudo_refresh.c    |  195 ++++++
+ 6 files changed, 2285 insertions(+), 2 deletions(-)
+ create mode 100644 src/providers/ipa/ipa_sudo_async.c
+ create mode 100644 src/providers/ipa/ipa_sudo_conversion.c
+ create mode 100644 src/providers/ipa/ipa_sudo_refresh.c
+
+diff --git a/Makefile.am b/Makefile.am
+index 69905a9112114932e918adff94d0c285c09ed231..1c0b1aada9804b2ef35a09cf1b7bf5e9c65ee4e5 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -3044,7 +3044,10 @@ endif
+ 
+ if BUILD_SUDO
+ libsss_ipa_la_SOURCES += \
+-    src/providers/ipa/ipa_sudo.c
++    src/providers/ipa/ipa_sudo.c \
++    src/providers/ipa/ipa_sudo_refresh.c \
++    src/providers/ipa/ipa_sudo_conversion.c \
++    src/providers/ipa/ipa_sudo_async.c
+ endif
+ 
+ if BUILD_SSH
+diff --git a/src/providers/ipa/ipa_sudo.c b/src/providers/ipa/ipa_sudo.c
+index e1b0c828806104336f3df9724484a4411b7fef30..3e73bd30fa86f394b3ef822d59c7b0e539c92ca2 100644
+--- a/src/providers/ipa/ipa_sudo.c
++++ b/src/providers/ipa/ipa_sudo.c
+@@ -147,6 +147,13 @@ ipa_sudo_init_ipa_schema(struct be_ctx *be_ctx,
+         return ret;
+     }
+ 
++    ret = ipa_sudo_ptask_setup(be_ctx, sudo_ctx);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to setup periodic tasks "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        goto done;
++    }
++
+     *ops = &ipa_sudo_ops;
+     *pvt_data = sudo_ctx;
+ 
+@@ -200,7 +207,73 @@ int ipa_sudo_init(struct be_ctx *be_ctx,
+ }
+ 
+ static void
++ipa_sudo_reply(struct tevent_req *req)
++{
++    struct be_sudo_req *sudo_req;
++    struct be_req *be_req;
++    int dp_error;
++    int ret;
++
++    be_req = tevent_req_callback_data(req, struct be_req);
++    sudo_req = talloc_get_type(be_req_get_data(be_req), struct be_sudo_req);
++
++    switch (sudo_req->type) {
++    case BE_REQ_SUDO_FULL:
++        ret = ipa_sudo_full_refresh_recv(req, &dp_error);
++        break;
++    default:
++        DEBUG(SSSDBG_CRIT_FAILURE, "Invalid request type: %d\n",
++                                    sudo_req->type);
++        dp_error = DP_ERR_FATAL;
++        ret = ERR_INTERNAL;
++        break;
++    }
++
++    talloc_zfree(req);
++    sdap_handler_done(be_req, dp_error, ret, sss_strerror(ret));
++}
++
++static void
+ ipa_sudo_handler(struct be_req *be_req)
+ {
+-    sdap_handler_done(be_req, DP_ERR_FATAL, ERR_INTERNAL, "Not implemented yet.");
++    struct be_ctx *be_ctx = be_req_get_be_ctx(be_req);
++    struct ipa_sudo_ctx *sudo_ctx;
++    struct be_sudo_req *sudo_req;
++    struct tevent_req *req;
++    int ret;
++
++    if (be_is_offline(be_ctx)) {
++        sdap_handler_done(be_req, DP_ERR_OFFLINE, EAGAIN, "Offline");
++        return;
++    }
++
++    sudo_ctx = talloc_get_type(be_ctx->bet_info[BET_SUDO].pvt_bet_data,
++                               struct ipa_sudo_ctx);
++
++    sudo_req = talloc_get_type(be_req_get_data(be_req), struct be_sudo_req);
++
++    switch (sudo_req->type) {
++    case BE_REQ_SUDO_FULL:
++        req = ipa_sudo_full_refresh_send(be_req, be_ctx->ev, sudo_ctx);
++        break;
++    default:
++        DEBUG(SSSDBG_CRIT_FAILURE, "Invalid request type: %d\n",
++                                    sudo_req->type);
++        ret = EINVAL;
++        goto fail;
++    }
++
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to send request: %d\n",
++                                    sudo_req->type);
++        ret = ENOMEM;
++        goto fail;
++    }
++
++    tevent_req_set_callback(req, ipa_sudo_reply, be_req);
++
++    return;
++
++fail:
++    sdap_handler_done(be_req, DP_ERR_FATAL, ret, NULL);
+ }
+diff --git a/src/providers/ipa/ipa_sudo.h b/src/providers/ipa/ipa_sudo.h
+index 21251ed3dabfaebdc324c8d06ba8f1a0b82951b1..1ef50a7f352182bdc6607b2fd8ee3d72ccab391d 100644
+--- a/src/providers/ipa/ipa_sudo.h
++++ b/src/providers/ipa/ipa_sudo.h
+@@ -28,6 +28,9 @@ struct ipa_sudo_ctx {
+     struct ipa_options *ipa_opts;
+     struct sdap_options *sdap_opts;
+ 
++    bool full_refresh_done;
++    bool full_refresh_in_progress;
++
+     /* sudo */
+     struct sdap_attr_map *sudocmdgroup_map;
+     struct sdap_attr_map *sudorule_map;
+@@ -35,4 +38,76 @@ struct ipa_sudo_ctx {
+     struct sdap_search_base **sudo_sb;
+ };
+ 
++errno_t
++ipa_sudo_ptask_setup(struct be_ctx *be_ctx, struct ipa_sudo_ctx *sudo_ctx);
++
++struct tevent_req *
++ipa_sudo_full_refresh_send(TALLOC_CTX *mem_ctx,
++                           struct tevent_context *ev,
++                           struct ipa_sudo_ctx *sudo_ctx);
++
++int
++ipa_sudo_full_refresh_recv(struct tevent_req *req,
++                           int *dp_error);
++
++struct tevent_req *
++ipa_sudo_refresh_send(TALLOC_CTX *mem_ctx,
++                      struct tevent_context *ev,
++                      struct ipa_sudo_ctx *sudo_ctx,
++                      const char *search_filter,
++                      const char *delete_filter);
++
++errno_t
++ipa_sudo_refresh_recv(struct tevent_req *req,
++                      int *dp_error,
++                      size_t *_num_rules);
++
++struct ipa_sudo_conv;
++
++struct ipa_sudo_conv *
++ipa_sudo_conv_init(TALLOC_CTX *mem_ctx,
++                   struct sysdb_ctx *sysdb,
++                   struct sdap_attr_map *map_rule,
++                   struct sdap_attr_map *map_cmdgroup,
++                   struct sdap_attr_map *map_cmd,
++                   struct sdap_attr_map *map_user,
++                   struct sdap_attr_map *map_group,
++                   struct sdap_attr_map *map_host,
++                   struct sdap_attr_map *map_hostgroup);
++
++errno_t
++ipa_sudo_conv_rules(struct ipa_sudo_conv *conv,
++                    struct sysdb_attrs **rules,
++                    size_t num_rules);
++
++errno_t
++ipa_sudo_conv_cmdgroups(struct ipa_sudo_conv *conv,
++                        struct sysdb_attrs **cmdgroups,
++                        size_t num_cmdgroups);
++
++errno_t
++ipa_sudo_conv_cmds(struct ipa_sudo_conv *conv,
++                   struct sysdb_attrs **cmds,
++                   size_t num_cmds);
++
++bool
++ipa_sudo_conv_has_cmdgroups(struct ipa_sudo_conv *conv);
++
++bool
++ipa_sudo_conv_has_cmds(struct ipa_sudo_conv *conv);
++
++char *
++ipa_sudo_conv_cmdgroup_filter(TALLOC_CTX *mem_ctx,
++                              struct ipa_sudo_conv *conv);
++
++char *
++ipa_sudo_conv_cmd_filter(TALLOC_CTX *mem_ctx,
++                         struct ipa_sudo_conv *conv);
++
++errno_t
++ipa_sudo_conv_result(TALLOC_CTX *mem_ctx,
++                     struct ipa_sudo_conv *conv,
++                     struct sysdb_attrs ***_rules,
++                     size_t *_num_rules);
++
+ #endif /* _IPA_SUDO_H_ */
+diff --git a/src/providers/ipa/ipa_sudo_async.c b/src/providers/ipa/ipa_sudo_async.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..9ddda1b41a0b3c6ceb33e6d665749948ae835a97
+--- /dev/null
++++ b/src/providers/ipa/ipa_sudo_async.c
+@@ -0,0 +1,779 @@
++/*
++    Authors:
++        Pavel Březina <pbrezina@redhat.com>
++
++    Copyright (C) 2015 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <talloc.h>
++#include <tevent.h>
++#include <dhash.h>
++
++#include "providers/ldap/sdap_ops.h"
++#include "providers/ipa/ipa_common.h"
++#include "providers/ipa/ipa_hosts.h"
++#include "providers/ipa/ipa_sudo.h"
++#include "providers/ipa/ipa_dn.h"
++#include "db/sysdb.h"
++#include "db/sysdb_sudo.h"
++
++struct ipa_hostinfo {
++    size_t num_hosts;
++    size_t num_hostgroups;
++    struct sysdb_attrs **hosts;
++    struct sysdb_attrs **hostgroups;
++};
++
++static char *
++ipa_sudo_filter_append_origdn(char *filter,
++                              struct sysdb_attrs *attrs,
++                              const char *attr_name)
++{
++    const char *origdn;
++    char *sanitizeddn;
++    errno_t ret;
++
++    ret = sysdb_attrs_get_string(attrs, SYSDB_ORIG_DN, &origdn);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to get original DN "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        return NULL;
++    }
++
++    ret = sss_filter_sanitize(NULL, origdn, &sanitizeddn);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to sanitize DN "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        return NULL;
++    }
++
++    filter = talloc_asprintf_append(filter, "(%s=%s)", attr_name, sanitizeddn);
++    talloc_free(sanitizeddn);
++    if (filter == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_asprintf_append() failed\n");
++    }
++
++    return filter;
++}
++
++/**
++ * (|(hostCategory=ALL)(memberHost=$DN(fqdn))(memberHost=$DN(hostgroup))...)
++ */
++static char *
++ipa_sudo_host_filter(TALLOC_CTX *mem_ctx,
++                     struct ipa_hostinfo *host,
++                     struct sdap_attr_map *map)
++{
++    TALLOC_CTX *tmp_ctx;
++    char *filter;
++    size_t i;
++
++    /* If realloc fails we will free all data through tmp_ctx. */
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return NULL;
++    }
++
++    filter = talloc_asprintf(tmp_ctx, "(!(%s=*))",
++                             map[IPA_AT_SUDORULE_HOST].name);
++    if (filter == NULL) {
++        goto fail;
++    }
++
++    /* Append hostCategory=ALL */
++    filter = talloc_asprintf_append(filter, "(%s=ALL)",
++                                    map[IPA_AT_SUDORULE_HOSTCATEGORY].name);
++    if (filter == NULL) {
++        goto fail;
++    }
++
++    /* Append client machine */
++    for (i = 0; i < host->num_hosts; i++) {
++        filter = ipa_sudo_filter_append_origdn(filter, host->hosts[i],
++                                               map[IPA_AT_SUDORULE_HOST].name);
++        if (filter == NULL) {
++            goto fail;
++        }
++    }
++
++    /* Append hostgroups */
++    for (i = 0; i < host->num_hostgroups; i++) {
++        filter = ipa_sudo_filter_append_origdn(filter, host->hostgroups[i],
++                                               map[IPA_AT_SUDORULE_HOST].name);
++        if (filter == NULL) {
++            goto fail;
++        }
++    }
++
++    /* OR filters */
++    filter = talloc_asprintf(tmp_ctx, "(|%s)", filter);
++    if (filter == NULL) {
++        goto fail;
++    }
++
++    talloc_steal(mem_ctx, filter);
++    talloc_free(tmp_ctx);
++    return filter;
++
++fail:
++    talloc_free(tmp_ctx);
++    return NULL;
++}
++
++struct ipa_sudo_fetch_state {
++    struct tevent_context *ev;
++    struct sysdb_ctx *sysdb;
++    struct ipa_sudo_ctx *sudo_ctx;
++    struct sdap_options *sdap_opts;
++    struct ipa_hostinfo *host;
++    struct sdap_handle *sh;
++
++    struct sdap_attr_map *map_cmdgroup;
++    struct sdap_attr_map *map_rule;
++    struct sdap_attr_map *map_cmd;
++    struct sdap_search_base **sudo_sb;
++
++    struct ipa_sudo_conv *conv;
++    struct sysdb_attrs **rules;
++    size_t num_rules;
++};
++
++static errno_t ipa_sudo_fetch_rules(struct tevent_req *req);
++static void ipa_sudo_fetch_rules_done(struct tevent_req *subreq);
++static errno_t ipa_sudo_fetch_cmdgroups(struct tevent_req *req);
++static void ipa_sudo_fetch_cmdgroups_done(struct tevent_req *subreq);
++static errno_t ipa_sudo_fetch_cmds(struct tevent_req *req);
++static void ipa_sudo_fetch_cmds_done(struct tevent_req *subreq);
++static void ipa_sudo_fetch_done(struct tevent_req *req);
++
++static struct tevent_req *
++ipa_sudo_fetch_send(TALLOC_CTX *mem_ctx,
++                    struct tevent_context *ev,
++                    struct sysdb_ctx *sysdb,
++                    struct ipa_sudo_ctx *sudo_ctx,
++                    struct ipa_hostinfo *host,
++                    struct sdap_attr_map *map_user,
++                    struct sdap_attr_map *map_group,
++                    struct sdap_attr_map *map_host,
++                    struct sdap_attr_map *map_hostgroup,
++                    struct sdap_handle *sh)
++{
++    struct ipa_sudo_fetch_state *state = NULL;
++    struct tevent_req *req = NULL;
++    errno_t ret;
++
++    req = tevent_req_create(mem_ctx, &state,
++                            struct ipa_sudo_fetch_state);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, ("tevent_req_create() failed\n"));
++        return NULL;
++    }
++
++    state->ev = ev;
++    state->sysdb = sysdb;
++    state->sudo_ctx = sudo_ctx;
++    state->sdap_opts = sudo_ctx->sdap_opts;
++    state->host = host;
++    state->sh = sh;
++
++    state->map_cmdgroup = sudo_ctx->sudocmdgroup_map;
++    state->map_rule = sudo_ctx->sudorule_map;
++    state->map_cmd = sudo_ctx->sudocmd_map;
++    state->sudo_sb = sudo_ctx->sudo_sb;
++
++    state->conv = ipa_sudo_conv_init(state, sysdb, state->map_rule,
++                                     state->map_cmdgroup, state->map_cmd,
++                                     map_user, map_group, map_host,
++                                     map_hostgroup);
++    if (state->conv == NULL) {
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    ret = ipa_sudo_fetch_rules(req);
++    if (ret != EAGAIN) {
++        goto immediately;
++    }
++
++    return req;
++
++immediately:
++    if (ret == EOK) {
++        tevent_req_done(req);
++    } else {
++        tevent_req_error(req, ret);
++    }
++    tevent_req_post(req, state->ev);
++
++    return req;
++}
++
++static errno_t
++ipa_sudo_fetch_rules(struct tevent_req *req)
++{
++    struct ipa_sudo_fetch_state *state;
++    struct tevent_req *subreq;
++    struct sdap_attr_map *map;
++    char *host_filter;
++    char *filter;
++
++    DEBUG(SSSDBG_TRACE_FUNC, "About to fetch sudo rules\n");
++
++    state = tevent_req_data(req, struct ipa_sudo_fetch_state);
++    map = state->map_rule;
++
++    host_filter = ipa_sudo_host_filter(state, state->host, map);
++    if (host_filter == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to build host filter\n");
++        return ENOMEM;
++    }
++
++    filter = talloc_asprintf(state, "(&(objectClass=%s)(%s=TRUE)%s)",
++                             map[IPA_OC_SUDORULE].name,
++                             map[IPA_AT_SUDORULE_ENABLED].name,
++                             host_filter);
++    talloc_zfree(host_filter);
++    if (filter == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to build filter\n");
++        return ENOMEM;
++    }
++
++    subreq = sdap_search_bases_send(state, state->ev, state->sdap_opts,
++                                    state->sh, state->sudo_sb, map, true, 0,
++                                    filter, NULL);
++    if (subreq == NULL) {
++        return ENOMEM;
++    }
++
++    tevent_req_set_callback(subreq, ipa_sudo_fetch_rules_done, req);
++    return EAGAIN;
++}
++
++static void
++ipa_sudo_fetch_rules_done(struct tevent_req *subreq)
++{
++    struct ipa_sudo_fetch_state *state = NULL;
++    struct tevent_req *req = NULL;
++    struct sysdb_attrs **attrs;
++    size_t num_attrs;
++    errno_t ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_sudo_fetch_state);
++
++    ret = sdap_search_bases_recv(subreq, state, &num_attrs, &attrs);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    DEBUG(SSSDBG_IMPORTANT_INFO, "Received %zu sudo rules\n", num_attrs);
++
++    ret = ipa_sudo_conv_rules(state->conv, attrs, num_attrs);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed when converting rules "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = ipa_sudo_fetch_cmdgroups(req);
++
++done:
++    if (ret == EOK) {
++        ipa_sudo_fetch_done(req);
++    } else if (ret != EAGAIN) {
++        tevent_req_error(req, ret);
++    }
++
++    return;
++}
++
++static errno_t
++ipa_sudo_fetch_cmdgroups(struct tevent_req *req)
++{
++    struct ipa_sudo_fetch_state *state;
++    struct tevent_req *subreq;
++    char *filter;
++
++    DEBUG(SSSDBG_TRACE_FUNC, "About to fetch sudo command groups\n");
++
++    state = tevent_req_data(req, struct ipa_sudo_fetch_state);
++
++    if (ipa_sudo_conv_has_cmdgroups(state->conv)) {
++        DEBUG(SSSDBG_TRACE_FUNC, "No command groups needs to be downloaded\n");
++        return ipa_sudo_fetch_cmds(req);
++    }
++
++    filter = ipa_sudo_conv_cmdgroup_filter(state, state->conv);
++    if (filter == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to build filter\n");
++        return ENOMEM;
++    }
++
++    subreq = sdap_search_bases_send(state, state->ev, state->sdap_opts,
++                                    state->sh, state->sudo_sb,
++                                    state->map_cmdgroup, true, 0,
++                                    filter, NULL);
++    if (subreq == NULL) {
++        return ENOMEM;
++    }
++
++    tevent_req_set_callback(subreq, ipa_sudo_fetch_cmdgroups_done, req);
++    return EAGAIN;
++}
++
++static void
++ipa_sudo_fetch_cmdgroups_done(struct tevent_req *subreq)
++{
++    struct ipa_sudo_fetch_state *state = NULL;
++    struct tevent_req *req = NULL;
++    struct sysdb_attrs **attrs;
++    size_t num_attrs;
++    errno_t ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_sudo_fetch_state);
++
++    ret = sdap_search_bases_recv(subreq, state, &num_attrs, &attrs);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    DEBUG(SSSDBG_IMPORTANT_INFO, "Received %zu sudo command groups\n",
++          num_attrs);
++
++    ret = ipa_sudo_conv_cmdgroups(state->conv, attrs, num_attrs);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed when converting command groups "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = ipa_sudo_fetch_cmds(req);
++
++done:
++    if (ret == EOK) {
++        ipa_sudo_fetch_done(req);
++    } else if (ret != EAGAIN) {
++        tevent_req_error(req, ret);
++    }
++
++    return;
++}
++
++static errno_t
++ipa_sudo_fetch_cmds(struct tevent_req *req)
++{
++    struct ipa_sudo_fetch_state *state;
++    struct tevent_req *subreq;
++    char *filter;
++
++    DEBUG(SSSDBG_TRACE_FUNC, "About to fetch sudo commands\n");
++
++    state = tevent_req_data(req, struct ipa_sudo_fetch_state);
++
++    if (ipa_sudo_conv_has_cmds(state->conv)) {
++        DEBUG(SSSDBG_TRACE_FUNC, "No commands needs to be downloaded\n");
++        return EOK;
++    }
++
++    filter = ipa_sudo_conv_cmd_filter(state, state->conv);
++    if (filter == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to build filter\n");
++        return ENOMEM;
++    }
++
++    subreq = sdap_search_bases_send(state, state->ev, state->sdap_opts,
++                                    state->sh, state->sudo_sb,
++                                    state->map_cmd, true, 0,
++                                    filter, NULL);
++    if (subreq == NULL) {
++        return ENOMEM;
++    }
++
++    tevent_req_set_callback(subreq, ipa_sudo_fetch_cmds_done, req);
++    return EAGAIN;
++}
++
++static void
++ipa_sudo_fetch_cmds_done(struct tevent_req *subreq)
++{
++    struct ipa_sudo_fetch_state *state = NULL;
++    struct tevent_req *req = NULL;
++    struct sysdb_attrs **attrs;
++    size_t num_attrs;
++    errno_t ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_sudo_fetch_state);
++
++    ret = sdap_search_bases_recv(subreq, state, &num_attrs, &attrs);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    DEBUG(SSSDBG_IMPORTANT_INFO, "Received %zu sudo commands\n", num_attrs);
++
++    ret = ipa_sudo_conv_cmds(state->conv, attrs, num_attrs);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed when converting commands "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        goto done;
++    }
++
++done:
++    if (ret == EOK) {
++        ipa_sudo_fetch_done(req);
++    } else if (ret != EAGAIN) {
++        tevent_req_error(req, ret);
++    }
++
++    return;
++}
++
++static void
++ipa_sudo_fetch_done(struct tevent_req *req)
++{
++    struct ipa_sudo_fetch_state *state = NULL;
++    errno_t ret;
++
++    state = tevent_req_data(req, struct ipa_sudo_fetch_state);
++
++    DEBUG(SSSDBG_TRACE_FUNC, "About to convert rules\n");
++
++    ret = ipa_sudo_conv_result(state, state->conv,
++                               &state->rules, &state->num_rules);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to convert rules [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    tevent_req_done(req);
++}
++
++static errno_t
++ipa_sudo_fetch_recv(TALLOC_CTX *mem_ctx,
++                    struct tevent_req *req,
++                    struct sysdb_attrs ***_rules,
++                    size_t *_num_rules)
++{
++    struct ipa_sudo_fetch_state *state = NULL;
++    state = tevent_req_data(req, struct ipa_sudo_fetch_state);
++
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    *_rules = talloc_steal(mem_ctx, state->rules);
++    *_num_rules = state->num_rules;
++
++    return EOK;
++}
++
++
++struct ipa_sudo_refresh_state {
++    struct tevent_context *ev;
++    struct sysdb_ctx *sysdb;
++    struct sss_domain_info *domain;
++    struct ipa_sudo_ctx *sudo_ctx;
++    struct ipa_options *ipa_opts;
++    struct sdap_options *sdap_opts;
++    const char *search_filter;
++    const char *delete_filter;
++
++    struct sdap_id_op *sdap_op;
++    struct sdap_handle *sh;
++    int dp_error;
++
++    struct sysdb_attrs **rules;
++    size_t num_rules;
++};
++
++static errno_t ipa_sudo_refresh_retry(struct tevent_req *req);
++static void ipa_sudo_refresh_connect_done(struct tevent_req *subreq);
++static void ipa_sudo_refresh_host_done(struct tevent_req *subreq);
++static void ipa_sudo_refresh_done(struct tevent_req *subreq);
++
++struct tevent_req *
++ipa_sudo_refresh_send(TALLOC_CTX *mem_ctx,
++                      struct tevent_context *ev,
++                      struct ipa_sudo_ctx *sudo_ctx,
++                      const char *search_filter,
++                      const char *delete_filter)
++{
++    struct ipa_sudo_refresh_state *state;
++    struct tevent_req *req;
++    errno_t ret;
++
++    req = tevent_req_create(mem_ctx, &state, struct ipa_sudo_refresh_state);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, ("tevent_req_create() failed\n"));
++        return NULL;
++    }
++
++    state->ev = ev;
++    state->sysdb = sudo_ctx->id_ctx->be->domain->sysdb;
++    state->domain = sudo_ctx->id_ctx->be->domain;
++    state->sudo_ctx = sudo_ctx;
++    state->ipa_opts = sudo_ctx->ipa_opts;
++    state->sdap_opts = sudo_ctx->sdap_opts;
++    state->dp_error = DP_ERR_FATAL;
++
++    state->sdap_op = sdap_id_op_create(state,
++                                       sudo_ctx->id_ctx->conn->conn_cache);
++    if (!state->sdap_op) {
++        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_create() failed\n");
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    state->search_filter = talloc_strdup(state, search_filter);
++    if (search_filter != NULL && state->search_filter == NULL) {
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    state->delete_filter = talloc_strdup(state, delete_filter);
++    if (delete_filter != NULL && state->delete_filter == NULL) {
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    ret = ipa_sudo_refresh_retry(req);
++    if (ret == EAGAIN) {
++        /* asynchronous processing */
++        return req;
++    }
++
++immediately:
++    if (ret == EOK) {
++        tevent_req_done(req);
++    } else {
++        tevent_req_error(req, ret);
++    }
++    tevent_req_post(req, state->ev);
++
++    return req;
++}
++
++static errno_t
++ipa_sudo_refresh_retry(struct tevent_req *req)
++{
++    struct ipa_sudo_refresh_state *state;
++    struct tevent_req *subreq;
++    int ret;
++
++    state = tevent_req_data(req, struct ipa_sudo_refresh_state);
++
++    subreq = sdap_id_op_connect_send(state->sdap_op, state, &ret);
++    if (subreq == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "sdap_id_op_connect_send() failed: "
++                                   "%d(%s)\n", ret, strerror(ret));
++        return ret;
++    }
++
++    tevent_req_set_callback(subreq, ipa_sudo_refresh_connect_done, req);
++
++    return EAGAIN;
++}
++
++static void
++ipa_sudo_refresh_connect_done(struct tevent_req *subreq)
++{
++    struct ipa_sudo_refresh_state *state;
++    const char *hostname;
++    struct tevent_req *req;
++    int dp_error;
++    int ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_sudo_refresh_state);
++
++    ret = sdap_id_op_connect_recv(subreq, &dp_error);
++    talloc_zfree(subreq);
++
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "SUDO LDAP connection failed "
++                                   "[%d]: %s\n", ret, strerror(ret));
++        state->dp_error = dp_error;
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    state->sh = sdap_id_op_handle(state->sdap_op);
++
++    DEBUG(SSSDBG_TRACE_FUNC, "SUDO LDAP connection successful\n");
++    DEBUG(SSSDBG_TRACE_FUNC, "About to fetch host information\n");
++
++    /* Obtain host information. */
++    hostname = dp_opt_get_string(state->ipa_opts->basic, IPA_HOSTNAME);
++
++    subreq = ipa_host_info_send(state, state->ev,
++                                state->sh, state->sdap_opts, hostname,
++                                state->ipa_opts->host_map,
++                                state->ipa_opts->hostgroup_map,
++                                state->ipa_opts->host_search_bases);
++    if (subreq == NULL) {
++        state->dp_error = DP_ERR_FATAL;
++        tevent_req_error(req, ENOMEM);
++        return;
++    }
++
++    tevent_req_set_callback(subreq, ipa_sudo_refresh_host_done, req);
++}
++
++static void
++ipa_sudo_refresh_host_done(struct tevent_req *subreq)
++{
++    struct ipa_sudo_refresh_state *state;
++    struct ipa_hostinfo *host;
++    struct tevent_req *req;
++    int ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_sudo_refresh_state);
++
++    host = talloc_zero(state, struct ipa_hostinfo);
++    if (host == NULL) {
++        state->dp_error = DP_ERR_FATAL;
++        tevent_req_error(req, ENOMEM);
++        return;
++    }
++
++    ret = ipa_host_info_recv(subreq, host, &host->num_hosts, &host->hosts,
++                             &host->num_hostgroups, &host->hostgroups);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "Unable to retrieve host information "
++                                 "[%d]: %s\n", ret, sss_strerror(ret));
++        state->dp_error = DP_ERR_FATAL;
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    subreq = ipa_sudo_fetch_send(state, state->ev, state->sysdb,
++                                 state->sudo_ctx, host,
++                                 state->sdap_opts->user_map,
++                                 state->sdap_opts->group_map,
++                                 state->ipa_opts->host_map,
++                                 state->ipa_opts->hostgroup_map, state->sh);
++    if (subreq == NULL) {
++        state->dp_error = DP_ERR_FATAL;
++        tevent_req_error(req, ENOMEM);
++        return;
++    }
++
++    tevent_req_set_callback(subreq, ipa_sudo_refresh_done, req);
++}
++
++static void
++ipa_sudo_refresh_done(struct tevent_req *subreq)
++{
++    struct ipa_sudo_refresh_state *state;
++    struct tevent_req *req;
++    bool in_transaction = false;
++    errno_t sret;
++    int ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_sudo_refresh_state);
++
++    ret = ipa_sudo_fetch_recv(state, subreq, &state->rules, &state->num_rules);
++    talloc_zfree(subreq);
++
++    ret = sdap_id_op_done(state->sdap_op, ret, &state->dp_error);
++    if (state->dp_error == DP_ERR_OK && ret != EOK) {
++        /* retry */
++        ret = ipa_sudo_refresh_retry(req);
++        if (ret != EOK) {
++            tevent_req_error(req, ret);
++        }
++        return;
++    } else if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    ret = sysdb_transaction_start(state->sysdb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to start transaction\n");
++        goto done;
++    }
++    in_transaction = true;
++
++    ret = sysdb_sudo_purge(state->domain, state->delete_filter,
++                           state->rules, state->num_rules);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    ret = sysdb_sudo_store(state->domain, state->rules, state->num_rules);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    ret = sysdb_transaction_commit(state->sysdb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to commit transaction\n");
++        goto done;
++    }
++    in_transaction = false;
++
++    DEBUG(SSSDBG_TRACE_FUNC, "Sudo rules are successfully stored in cache\n");
++
++done:
++    if (in_transaction) {
++        sret = sysdb_transaction_cancel(state->sysdb);
++        if (sret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "Could not cancel transaction\n");
++        }
++    }
++
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    tevent_req_done(req);
++}
++
++errno_t
++ipa_sudo_refresh_recv(struct tevent_req *req,
++                      int *dp_error,
++                      size_t *_num_rules)
++{
++    struct ipa_sudo_refresh_state *state = NULL;
++    state = tevent_req_data(req, struct ipa_sudo_refresh_state);
++
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    *dp_error = state->dp_error;
++
++    if (_num_rules != NULL) {
++        *_num_rules = state->num_rules;
++    }
++
++    return EOK;
++}
+diff --git a/src/providers/ipa/ipa_sudo_conversion.c b/src/providers/ipa/ipa_sudo_conversion.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..2f28f837e62b42406ddda25b3f63832c1abb950d
+--- /dev/null
++++ b/src/providers/ipa/ipa_sudo_conversion.c
+@@ -0,0 +1,1158 @@
++/*
++    Authors:
++        Pavel Březina <pbrezina@redhat.com>
++
++    Copyright (C) 2015 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <ldb.h>
++#include <talloc.h>
++#include <dhash.h>
++
++#include "providers/ldap/sdap.h"
++#include "providers/ipa/ipa_common.h"
++#include "providers/ipa/ipa_dn.h"
++#include "db/sysdb_sudo.h"
++#include "db/sysdb.h"
++#include "util/util.h"
++
++#define SUDO_DN_CMDGROUPS "sudocmdgroups"
++#define SUDO_DN_CMDS      "sudocmds"
++#define SUDO_DN_CONTAINER "sudo"
++#define SUDO_DN_CN        "cn"
++
++#define MATCHDN(cat)      SUDO_DN_CN, (cat), SUDO_DN_CN, SUDO_DN_CONTAINER
++#define MATCHDN_CMDGROUPS MATCHDN(SUDO_DN_CMDGROUPS)
++#define MATCHDN_CMDS      MATCHDN(SUDO_DN_CMDS)
++
++#define MATCHRDN_CMDGROUPS(map) (map)[IPA_AT_SUDOCMDGROUP_NAME].name, MATCHDN_CMDGROUPS
++#define MATCHRDN_CMDS(map)      (map)[IPA_AT_SUDOCMD_UUID].name, MATCHDN_CMDS
++
++#define MATCHRDN_USER(map)      (map)[SDAP_AT_USER_NAME].name, "cn", "users", "cn", "accounts"
++#define MATCHRDN_GROUP(map)     (map)[SDAP_AT_GROUP_NAME].name, "cn", "groups", "cn", "accounts"
++#define MATCHRDN_HOST(map)      (map)[IPA_AT_HOST_FQDN].name, "cn", "computers", "cn", "accounts"
++#define MATCHRDN_HOSTGROUP(map) (map)[IPA_AT_HOSTGROUP_NAME].name, "cn", "hostgroups", "cn", "accounts"
++
++struct ipa_sudo_conv {
++    struct sysdb_ctx *sysdb;
++
++    struct sdap_attr_map *map_rule;
++    struct sdap_attr_map *map_cmdgroup;
++    struct sdap_attr_map *map_cmd;
++    struct sdap_attr_map *map_user;
++    struct sdap_attr_map *map_group;
++    struct sdap_attr_map *map_host;
++    struct sdap_attr_map *map_hostgroup;
++
++    hash_table_t *rules;
++    hash_table_t *cmdgroups;
++    hash_table_t *cmds;
++};
++
++struct ipa_sudo_dn_list {
++    struct ipa_sudo_dn_list *prev, *next;
++    const char *dn;
++};
++
++struct ipa_sudo_rulemember {
++    struct ipa_sudo_dn_list *cmdgroups;
++    struct ipa_sudo_dn_list *cmds;
++};
++
++struct ipa_sudo_rule {
++    struct sysdb_attrs *attrs;
++    struct ipa_sudo_rulemember allow;
++    struct ipa_sudo_rulemember deny;
++};
++
++struct ipa_sudo_cmdgroup {
++    struct ipa_sudo_dn_list *cmds;
++    const char **expanded;
++};
++
++static size_t
++ipa_sudo_dn_list_count(struct ipa_sudo_dn_list *list)
++{
++    struct ipa_sudo_dn_list *item;
++    size_t i;
++
++    for (i = 0, item = list; item != NULL; item = item->next, i++) {
++        /* no op */
++    }
++
++    return i;
++}
++
++static errno_t
++ipa_sudo_conv_store(hash_table_t *table,
++                    const char *key,
++                    void *value)
++{
++    hash_key_t hkey;
++    hash_value_t hvalue;
++    int hret;
++
++    if (table == NULL || key == NULL) {
++        return EINVAL;
++    }
++
++    hkey.type = HASH_KEY_STRING;
++    hkey.str = discard_const(key);
++
++    /* If value is NULL we don't want to override existing entry. */
++    if (value == NULL && hash_has_key(table, &hkey)) {
++        return EEXIST;
++    }
++
++    hvalue.type = HASH_VALUE_PTR;
++    hvalue.ptr = value;
++
++    hret = hash_enter(table, &hkey, &hvalue);
++    if (hret != HASH_SUCCESS) {
++        return EIO;
++    }
++
++    if (value != NULL) {
++        talloc_steal(table, value);
++    }
++
++    return EOK;
++}
++
++static void *
++ipa_sudo_conv_lookup(hash_table_t *table,
++                     const char *key)
++{
++    hash_key_t hkey;
++    hash_value_t hvalue;
++    int hret;
++
++    hkey.type = HASH_KEY_STRING;
++    hkey.str = discard_const(key);
++
++    hret = hash_lookup(table, &hkey, &hvalue);
++    if (hret == HASH_ERROR_KEY_NOT_FOUND) {
++        DEBUG(SSSDBG_OP_FAILURE, "Key not found %s\n", key);
++        return NULL;
++    } else if (hret != HASH_SUCCESS) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to lookup value [%d]\n", hret);
++        return NULL;
++    }
++
++    return hvalue.ptr;
++}
++
++static errno_t
++store_rulemember(TALLOC_CTX *mem_ctx,
++                 struct ipa_sudo_dn_list **list,
++                 hash_table_t *table,
++                 const char *dn)
++{
++    struct ipa_sudo_dn_list *item;
++    errno_t ret;
++
++    item = talloc_zero(mem_ctx, struct ipa_sudo_dn_list);
++    if (item == NULL) {
++        return ENOMEM;
++    }
++
++    ret = ipa_sudo_conv_store(table, dn, NULL);
++    if (ret != EOK && ret != EEXIST) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to store DN %s [%d]: %s\n",
++              dn, ret, sss_strerror(ret));
++        goto done;
++    }
++
++    item->dn = talloc_steal(item, dn);
++    DLIST_ADD(*list, item);
++
++done:
++    if (ret != EOK && ret != EEXIST) {
++        talloc_free(item);
++    }
++
++    return ret;
++}
++
++static errno_t
++process_rulemember(TALLOC_CTX *mem_ctx,
++                   struct ipa_sudo_conv *conv,
++                   struct ipa_sudo_rulemember *rulemember,
++                   struct sysdb_attrs *rule,
++                   const char *attr)
++{
++    TALLOC_CTX *tmp_ctx;
++    const char **members;
++    errno_t ret;
++    int i;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    ret = sysdb_attrs_get_string_array(rule, attr, tmp_ctx, &members);
++    if (ret == ENOENT) {
++        ret = EOK;
++        goto done;
++    } else if (ret != EOK) {
++        goto done;
++    }
++
++    for (i = 0; members[i] != NULL; i++) {
++        if (ipa_check_rdn_bool(conv->sysdb, members[i],
++                MATCHRDN_CMDGROUPS(conv->map_cmdgroup))) {
++            ret = store_rulemember(mem_ctx, &rulemember->cmdgroups,
++                                   conv->cmdgroups, members[i]);
++            if (ret == EOK) {
++                DEBUG(SSSDBG_TRACE_INTERNAL, "Found sudo command group %s\n",
++                      members[i]);
++            } else if (ret != EEXIST) {
++                goto done;
++            }
++        } else if (ipa_check_rdn_bool(conv->sysdb, members[i],
++                MATCHRDN_CMDS(conv->map_cmd))) {
++            ret = store_rulemember(mem_ctx, &rulemember->cmds,
++                                   conv->cmds, members[i]);
++            if (ret == EOK) {
++                DEBUG(SSSDBG_TRACE_INTERNAL, "Found sudo command group %s\n",
++                      members[i]);
++            } else if (ret != EEXIST) {
++                goto done;
++            }
++        } else {
++            DEBUG(SSSDBG_MINOR_FAILURE, "Invalid member DN %s, skipping...\n",
++                  members[i]);
++            continue;
++        }
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static errno_t
++process_allowcmd(struct ipa_sudo_conv *conv,
++                 struct ipa_sudo_rule *rule)
++{
++    return process_rulemember(rule, conv, &rule->allow, rule->attrs,
++                              SYSDB_IPA_SUDORULE_ALLOWCMD);
++}
++
++static errno_t
++process_denycmd(struct ipa_sudo_conv *conv,
++                struct ipa_sudo_rule *rule)
++{
++    return process_rulemember(rule, conv, &rule->deny, rule->attrs,
++                              SYSDB_IPA_SUDORULE_DENYCMD);
++}
++
++static errno_t
++process_cmdgroupmember(struct ipa_sudo_conv *conv,
++                       struct ipa_sudo_cmdgroup *cmdgroup,
++                       struct sysdb_attrs *attrs)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct ipa_sudo_dn_list *item;
++    const char **members;
++    errno_t ret;
++    int i;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    ret = sysdb_attrs_get_string_array(attrs, SYSDB_MEMBER, tmp_ctx, &members);
++    if (ret == ENOENT) {
++        ret = EOK;
++        goto done;
++    } else if (ret != EOK) {
++        goto done;
++    }
++
++    for (i = 0; members[i] != NULL; i++) {
++        ret = ipa_sudo_conv_store(conv->cmds, members[i], NULL);
++        if (ret == EOK) {
++            DEBUG(SSSDBG_TRACE_INTERNAL, "Found sudo command %s\n",
++                  members[i]);
++        } else if (ret != EEXIST) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to store DN [%d]: %s\n",
++                  ret, sss_strerror(ret));
++            goto done;
++        }
++
++        item = talloc_zero(tmp_ctx, struct ipa_sudo_dn_list);
++        if (item == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++
++        item->dn = talloc_steal(item, members[i]);
++        DLIST_ADD(cmdgroup->cmds, item);
++        talloc_steal(cmdgroup, item);
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++struct ipa_sudo_conv *
++ipa_sudo_conv_init(TALLOC_CTX *mem_ctx,
++                   struct sysdb_ctx *sysdb,
++                   struct sdap_attr_map *map_rule,
++                   struct sdap_attr_map *map_cmdgroup,
++                   struct sdap_attr_map *map_cmd,
++                   struct sdap_attr_map *map_user,
++                   struct sdap_attr_map *map_group,
++                   struct sdap_attr_map *map_host,
++                   struct sdap_attr_map *map_hostgroup)
++{
++    struct ipa_sudo_conv *conv;
++    errno_t ret;
++
++    conv = talloc_zero(mem_ctx, struct ipa_sudo_conv);
++    if (conv == NULL) {
++        return NULL;
++    }
++
++    conv->sysdb = sysdb;
++    conv->map_rule = map_rule;
++    conv->map_cmdgroup = map_cmdgroup;
++    conv->map_cmd = map_cmd;
++    conv->map_user = map_user;
++    conv->map_group = map_group;
++    conv->map_host = map_host;
++    conv->map_hostgroup = map_hostgroup;
++
++    ret = sss_hash_create(conv, 20, &conv->rules);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to create hash table [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = sss_hash_create(conv, 20, &conv->cmdgroups);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to create hash table [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = sss_hash_create(conv, 20, &conv->cmds);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to create hash table [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++done:
++    if (ret != EOK) {
++        talloc_free(conv);
++        return NULL;
++    }
++
++    return conv;
++}
++
++errno_t
++ipa_sudo_conv_rules(struct ipa_sudo_conv *conv,
++                    struct sysdb_attrs **rules,
++                    size_t num_rules)
++{
++    struct ipa_sudo_rule *rule = NULL;
++    const char *key;
++    errno_t ret;
++    size_t i;
++
++    if (num_rules == 0) {
++        /* We're done here. */
++        return EOK;
++    }
++
++    for (i = 0; i < num_rules; i++) {
++        ret = sysdb_attrs_get_string(rules[i], SYSDB_NAME, &key);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_MINOR_FAILURE, "Failed to get rule name, skipping "
++                  "[%d]: %s\n", ret, sss_strerror(ret));
++            continue;
++        }
++
++        rule = talloc_zero(conv->rules, struct ipa_sudo_rule);
++        if (rule == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++
++        rule->attrs = rules[i];
++
++        ret = process_allowcmd(conv, rule);
++        if (ret != EOK && ret != EEXIST) {
++            DEBUG(SSSDBG_OP_FAILURE, "Failed to process memberAllowCmd "
++                  "[%d]: %s\n", ret, sss_strerror(ret));
++            return ret;
++        }
++
++        ret = process_denycmd(conv, rule);
++        if (ret != EOK && ret != EEXIST) {
++            DEBUG(SSSDBG_OP_FAILURE, "Failed to process memberDenyCmd "
++                  "[%d]: %s\n", ret, sss_strerror(ret));
++            return ret;
++        }
++
++        ret = ipa_sudo_conv_store(conv->rules, key, rule);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "Failed to store rule into table "
++                  "[%d]: %s\n", ret, sss_strerror(ret));
++            goto done;
++        }
++
++        talloc_steal(rule, rule->attrs);
++        rule = NULL;
++    }
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        talloc_free(rule);
++    }
++
++    return ret;
++}
++
++errno_t
++ipa_sudo_conv_cmdgroups(struct ipa_sudo_conv *conv,
++                        struct sysdb_attrs **cmdgroups,
++                        size_t num_cmdgroups)
++{
++    struct ipa_sudo_cmdgroup *cmdgroup = NULL;
++    const char *key;
++    errno_t ret;
++    size_t i;
++
++    if (num_cmdgroups == 0) {
++        /* We're done here. */
++        return EOK;
++    }
++
++    for (i = 0; i < num_cmdgroups; i++) {
++        ret = sysdb_attrs_get_string(cmdgroups[i], SYSDB_ORIG_DN, &key);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_MINOR_FAILURE, "Failed to get command group DN, "
++                  "skipping [%d]: %s\n", ret, sss_strerror(ret));
++            continue;
++        }
++
++        cmdgroup = talloc_zero(conv->cmdgroups, struct ipa_sudo_cmdgroup);
++        if (cmdgroup == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++
++        ret = process_cmdgroupmember(conv, cmdgroup, cmdgroups[i]);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "Failed to process member "
++                  "[%d]: %s\n", ret, sss_strerror(ret));
++            return ret;
++        }
++
++        ret = ipa_sudo_conv_store(conv->cmdgroups, key, cmdgroup);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "Failed to store command group into "
++                  "table [%d]: %s\n", ret, sss_strerror(ret));
++            goto done;
++        }
++
++        cmdgroup = NULL;
++    }
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        talloc_free(cmdgroup);
++    }
++
++    return ret;
++}
++
++errno_t
++ipa_sudo_conv_cmds(struct ipa_sudo_conv *conv,
++                   struct sysdb_attrs **cmds,
++                   size_t num_cmds)
++{
++    const char *key;
++    const char *cmd;
++    errno_t ret;
++    size_t i;
++
++    if (num_cmds == 0) {
++        /* We're done here. */
++        return EOK;
++    }
++
++    for (i = 0; i < num_cmds; i++) {
++        ret = sysdb_attrs_get_string(cmds[i], SYSDB_ORIG_DN, &key);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_MINOR_FAILURE, "Failed to get command DN, skipping "
++                  "[%d]: %s\n", ret, sss_strerror(ret));
++            continue;
++        }
++
++        ret = sysdb_attrs_get_string(cmds[i], SYSDB_IPA_SUDOCMD_SUDOCMD, &cmd);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_MINOR_FAILURE, "Failed to get command, skipping "
++                  "[%d]: %s\n", ret, sss_strerror(ret));
++            continue;
++        }
++
++        ret = ipa_sudo_conv_store(conv->cmds, key, discard_const(cmd));
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "Failed to store command into table "
++                  "[%d]: %s\n", ret, sss_strerror(ret));
++            goto done;
++        }
++    }
++
++    ret = EOK;
++
++done:
++    return ret;
++}
++
++bool
++ipa_sudo_conv_has_cmdgroups(struct ipa_sudo_conv *conv)
++{
++    return hash_count(conv->cmdgroups) == 0;
++}
++
++bool
++ipa_sudo_conv_has_cmds(struct ipa_sudo_conv *conv)
++{
++    return hash_count(conv->cmds) == 0;
++}
++
++static char *
++build_filter(TALLOC_CTX *mem_ctx,
++             struct sysdb_ctx *sysdb,
++             hash_table_t *table,
++             const char *class,
++             const char *rdn_attr,
++             const char *category)
++{
++    TALLOC_CTX *tmp_ctx;
++    hash_key_t *keys;
++    unsigned long int count;
++    unsigned long int i;
++    char *filter;
++    char *rdn_val;
++    char *safe_rdn;
++    errno_t ret;
++    int hret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return NULL;
++    }
++
++    hret = hash_keys(table, &count, &keys);
++    if (hret != HASH_SUCCESS) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    talloc_steal(tmp_ctx, keys);
++
++    filter = talloc_strdup(tmp_ctx, "");
++    if (filter == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    for (i = 0; i < count; i++) {
++        ret = ipa_get_rdn(tmp_ctx, sysdb, keys[i].str, &rdn_val,
++                          rdn_attr, MATCHDN(category));
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to get member %s [%d]: %s\n",
++                  keys[i].str, ret, sss_strerror(ret));
++            goto done;
++        }
++
++        ret = sss_filter_sanitize(tmp_ctx, rdn_val, &safe_rdn);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to sanitize DN "
++                  "[%d]: %s\n", ret, sss_strerror(ret));
++            goto done;
++        }
++
++        filter = talloc_asprintf_append(filter, "(%s=%s)", rdn_attr, safe_rdn);
++        if (filter == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++    }
++
++    filter = talloc_asprintf(filter, "(&(objectClass=%s)(|%s))",
++                                    class, filter);
++    if (filter == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    talloc_steal(mem_ctx, filter);
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++
++    if (ret != EOK) {
++        return NULL;
++    }
++
++    return filter;
++}
++
++char *
++ipa_sudo_conv_cmdgroup_filter(TALLOC_CTX *mem_ctx,
++                              struct ipa_sudo_conv *conv)
++{
++    const char *rdn_attr = conv->map_cmdgroup[IPA_AT_SUDOCMDGROUP_NAME].name;
++    const char *class = conv->map_cmdgroup[IPA_OC_SUDOCMDGROUP].name;
++
++    return build_filter(mem_ctx, conv->sysdb, conv->cmdgroups, class,
++                        rdn_attr, SUDO_DN_CMDGROUPS);
++}
++
++char *
++ipa_sudo_conv_cmd_filter(TALLOC_CTX *mem_ctx,
++                         struct ipa_sudo_conv *conv)
++{
++    const char *rdn_attr = conv->map_cmd[IPA_AT_SUDOCMD_UUID].name;
++    const char *class = conv->map_cmd[IPA_OC_SUDOCMD].name;
++
++    return build_filter(mem_ctx, conv->sysdb, conv->cmds, class,
++                        rdn_attr, SUDO_DN_CMDS);
++}
++
++struct ipa_sudo_conv_result_ctx {
++    struct ipa_sudo_conv *conv;
++    struct sysdb_attrs **rules;
++    size_t num_rules;
++    errno_t ret;
++};
++
++static const char *
++convert_host(TALLOC_CTX *mem_ctx,
++             struct ipa_sudo_conv *conv,
++             const char *value)
++{
++    char *rdn;
++    const char *group;
++    errno_t ret;
++
++    ret = ipa_get_rdn(mem_ctx, conv->sysdb, value, &rdn,
++                      MATCHRDN_HOST(conv->map_host));
++    if (ret == EOK) {
++        return rdn;
++    } else if (ret != ENOENT) {
++        DEBUG(SSSDBG_OP_FAILURE, "ipa_get_rdn() failed on value %s [%d]: %s\n",
++              value, ret, sss_strerror(ret));
++        return NULL;
++    }
++
++    ret = ipa_get_rdn(mem_ctx, conv->sysdb, value, &rdn,
++                      MATCHRDN_HOSTGROUP(conv->map_hostgroup));
++    if (ret == ENOENT) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unexpected DN %s\n", value);
++        return NULL;
++    } else if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "ipa_get_rdn() failed on value %s [%d]: %s\n",
++              value, ret, sss_strerror(ret));
++        return NULL;
++    }
++
++    group = talloc_asprintf(mem_ctx, "+%s", rdn);
++    talloc_free(rdn);
++
++    return group;
++}
++
++static const char *
++convert_user(TALLOC_CTX *mem_ctx,
++             struct ipa_sudo_conv *conv,
++             const char *value)
++{
++    char *rdn;
++    const char *group;
++    errno_t ret;
++
++    ret = ipa_get_rdn(mem_ctx, conv->sysdb, value, &rdn,
++                      MATCHRDN_USER(conv->map_user));
++    if (ret == EOK) {
++        return rdn;
++    } else if (ret != ENOENT) {
++        DEBUG(SSSDBG_OP_FAILURE, "ipa_get_rdn() failed on value %s [%d]: %s\n",
++              value, ret, sss_strerror(ret));
++        return NULL;
++    }
++
++    ret = ipa_get_rdn(mem_ctx, conv->sysdb, value, &rdn,
++                      MATCHRDN_GROUP(conv->map_group));
++    if (ret == ENOENT) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unexpected DN %s\n", value);
++        return NULL;
++    } else if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "ipa_get_rdn() failed on value %s [%d]: %s\n",
++              value, ret, sss_strerror(ret));
++        return NULL;
++    }
++
++    group = talloc_asprintf(mem_ctx, "%%%s", rdn);
++    talloc_free(rdn);
++
++    return group;
++}
++
++static const char *
++convert_group(TALLOC_CTX *mem_ctx,
++              struct ipa_sudo_conv *conv,
++              const char *value)
++{
++    char *rdn;
++    errno_t ret;
++
++    ret = ipa_get_rdn(mem_ctx, conv->sysdb, value, &rdn,
++                      MATCHRDN_GROUP(conv->map_group));
++    if (ret == ENOENT) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unexpected DN %s\n", value);
++        return NULL;
++    } else if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "ipa_get_rdn() failed on value %s [%d]: %s\n",
++              value, ret, sss_strerror(ret));
++        return NULL;
++    }
++
++    return rdn;
++}
++
++static const char *
++convert_cat(TALLOC_CTX *mem_ctx,
++            struct ipa_sudo_conv *conv,
++            const char *value)
++{
++    if (strcmp(value, "all") == 0) {
++        return talloc_strdup(mem_ctx, "ALL");
++    }
++
++    return value;
++}
++
++static errno_t
++convert_attributes(struct ipa_sudo_conv *conv,
++                   struct ipa_sudo_rule *rule,
++                   struct sysdb_attrs *attrs)
++{
++    TALLOC_CTX *tmp_ctx;
++    const char **values;
++    const char *value;
++    errno_t ret;
++    int i, j;
++    static struct {
++        const char *ipa;
++        const char *sudo;
++        const char *(*conv_fn)(TALLOC_CTX *mem_ctx,
++                               struct ipa_sudo_conv *conv,
++                               const char *value);
++    } table[] = {{SYSDB_NAME,                            SYSDB_SUDO_CACHE_AT_CN         , NULL},
++                 {SYSDB_IPA_SUDORULE_HOST,               SYSDB_SUDO_CACHE_AT_HOST       , convert_host},
++                 {SYSDB_IPA_SUDORULE_USER,               SYSDB_SUDO_CACHE_AT_USER       , convert_user},
++                 {SYSDB_IPA_SUDORULE_RUNASUSER,          SYSDB_SUDO_CACHE_AT_RUNASUSER  , convert_user},
++                 {SYSDB_IPA_SUDORULE_RUNASGROUP,         SYSDB_SUDO_CACHE_AT_RUNASGROUP , convert_group},
++                 {SYSDB_IPA_SUDORULE_OPTION,             SYSDB_SUDO_CACHE_AT_OPTION     , NULL},
++                 {SYSDB_IPA_SUDORULE_NOTAFTER,           SYSDB_SUDO_CACHE_AT_NOTAFTER   , NULL},
++                 {SYSDB_IPA_SUDORULE_NOTBEFORE,          SYSDB_SUDO_CACHE_AT_NOTBEFORE  , NULL},
++                 {SYSDB_IPA_SUDORULE_SUDOORDER,          SYSDB_SUDO_CACHE_AT_ORDER      , NULL},
++                 {SYSDB_IPA_SUDORULE_CMDCATEGORY,        SYSDB_SUDO_CACHE_AT_COMMAND    , convert_cat},
++                 {SYSDB_IPA_SUDORULE_HOSTCATEGORY,       SYSDB_SUDO_CACHE_AT_HOST       , convert_cat},
++                 {SYSDB_IPA_SUDORULE_USERCATEGORY,       SYSDB_SUDO_CACHE_AT_USER       , convert_cat},
++                 {SYSDB_IPA_SUDORULE_RUNASUSERCATEGORY,  SYSDB_SUDO_CACHE_AT_RUNASUSER  , convert_cat},
++                 {SYSDB_IPA_SUDORULE_RUNASGROUPCATEGORY, SYSDB_SUDO_CACHE_AT_RUNASGROUP , convert_cat},
++                 {SYSDB_IPA_SUDORULE_ALLOWCMD,           SYSDB_IPA_SUDORULE_ORIGCMD     , NULL},
++                 {SYSDB_IPA_SUDORULE_DENYCMD,            SYSDB_IPA_SUDORULE_ORIGCMD     , NULL},
++                 {NULL, NULL, NULL}};
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    for (i = 0; table[i].ipa != NULL; i++) {
++        ret = sysdb_attrs_get_string_array(rule->attrs, table[i].ipa,
++                                           tmp_ctx, &values);
++        if (ret == ENOENT) {
++            continue;
++        } else if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to read attribute "
++                  "%s [%d]: %s\n", table[i].ipa, ret, sss_strerror(ret));
++            goto done;
++        }
++
++        for (j = 0; values[j] != NULL; j++) {
++            if (table[i].conv_fn != NULL) {
++                value = table[i].conv_fn(tmp_ctx, conv, values[j]);
++                if (value == NULL) {
++                    ret = ENOMEM;
++                    goto done;
++                }
++            } else {
++                value = values[j];
++            }
++
++            ret = sysdb_attrs_add_string_safe(attrs, table[i].sudo, value);
++            if (ret != EOK) {
++                DEBUG(SSSDBG_CRIT_FAILURE, "Unable to add attribute "
++                      "%s [%d]: %s\n", table[i].sudo, ret, sss_strerror(ret));
++                goto done;
++            }
++        }
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static const char **
++combine_cmdgroups(TALLOC_CTX *mem_ctx,
++                  struct ipa_sudo_conv *conv,
++                  struct ipa_sudo_dn_list *list)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct ipa_sudo_cmdgroup *cmdgroup;
++    struct ipa_sudo_dn_list *listitem;
++    const char **values = NULL;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return NULL;
++    }
++
++    values = talloc_zero_array(tmp_ctx, const char *, 1);
++    if (values == NULL) {
++        talloc_free(tmp_ctx);
++        return NULL;
++    }
++
++    DLIST_FOR_EACH(listitem, list) {
++        cmdgroup = ipa_sudo_conv_lookup(conv->cmdgroups, listitem->dn);
++
++        ret = add_strings_lists(mem_ctx, values, cmdgroup->expanded,
++                                false, discard_const(&values));
++        if (ret != EOK) {
++            talloc_free(tmp_ctx);
++            return NULL;
++        }
++    }
++
++    talloc_steal(mem_ctx, values);
++    talloc_free(tmp_ctx);
++
++    return values;
++}
++
++static const char **
++combine_cmds(TALLOC_CTX *mem_ctx,
++             struct ipa_sudo_conv *conv,
++             struct ipa_sudo_dn_list *list)
++{
++    struct ipa_sudo_dn_list *listitem;
++    const char **values;
++    const char *command;
++    size_t count;
++    size_t i;
++
++    count = ipa_sudo_dn_list_count(list);
++
++    values = talloc_zero_array(mem_ctx, const char *, count + 1);
++    if (values == NULL) {
++        return NULL;
++    }
++
++    i = 0;
++    DLIST_FOR_EACH(listitem, list) {
++        command = ipa_sudo_conv_lookup(conv->cmds, listitem->dn);
++        if (command == NULL) {
++            continue;
++        }
++
++        values[i] = command;
++        i++;
++    }
++
++    return values;
++}
++
++static errno_t
++build_sudocommand(struct ipa_sudo_conv *conv,
++                  struct ipa_sudo_rulemember *mlist,
++                  struct sysdb_attrs *attrs,
++                  char prefix)
++{
++    TALLOC_CTX *tmp_ctx;
++    const char **cmds[2];
++    const char *command;
++    errno_t ret;
++    int i, j;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    cmds[0] = combine_cmdgroups(tmp_ctx, conv, mlist->cmdgroups);
++    if (cmds[0] == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    cmds[1] = combine_cmds(tmp_ctx, conv, mlist->cmds);
++    if (cmds[1] == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    for (i = 0; i < 2; i++) {
++        for (j = 0; cmds[i][j] != NULL; j++) {
++            if (prefix == '\0') {
++                command = cmds[i][j];
++            } else {
++                command = talloc_asprintf(tmp_ctx, "%c%s", prefix, cmds[i][j]);
++                if (command == NULL) {
++                    ret = ENOMEM;
++                    goto done;
++                }
++            }
++
++            ret = sysdb_attrs_add_string_safe(attrs,
++                        SYSDB_SUDO_CACHE_AT_COMMAND, command);
++            if (ret != EOK) {
++                DEBUG(SSSDBG_CRIT_FAILURE, "Unable to add attribute "
++                      "%s [%d]: %s\n", SYSDB_SUDO_CACHE_AT_COMMAND,
++                      ret, sss_strerror(ret));
++                goto done;
++            }
++        }
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static errno_t
++convert_sudocommand(struct ipa_sudo_conv *conv,
++                    struct ipa_sudo_rule *rule,
++                    struct sysdb_attrs *attrs)
++{
++    TALLOC_CTX *tmp_ctx;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    ret = build_sudocommand(conv, &rule->allow, attrs, '\0');
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to build allow commands "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = build_sudocommand(conv, &rule->deny, attrs, '!');
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to build deny commands "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static bool
++rules_iterator(hash_entry_t *item,
++               void *user_data)
++{
++    struct ipa_sudo_conv_result_ctx *ctx = user_data;
++    struct ipa_sudo_rule *rule = item->value.ptr;
++    struct sysdb_attrs *attrs;
++
++    if (ctx == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Bug: ctx is NULL\n");
++        return false;
++    }
++
++    if (rule == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Bug: rule is NULL\n");
++        ctx->ret = ERR_INTERNAL;
++        return false;
++    }
++
++    attrs = sysdb_new_attrs(ctx->rules);
++    if (attrs == NULL) {
++        ctx->ret = ENOMEM;
++        return false;
++    }
++
++    ctx->ret = convert_attributes(ctx->conv, rule, attrs);
++    if (ctx->ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "Unable to convert attributes [%d]: %s\n",
++              ctx->ret, sss_strerror(ctx->ret));
++        talloc_free(attrs);
++        return false;
++    }
++
++    ctx->ret = convert_sudocommand(ctx->conv, rule, attrs);
++    if (ctx->ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "Unable to build sudoCommand [%d]: %s\n",
++              ctx->ret, sss_strerror(ctx->ret));
++        talloc_free(attrs);
++        return false;
++    }
++
++    ctx->rules[ctx->num_rules] = attrs;
++    ctx->num_rules++;
++
++    return true;
++}
++
++static bool
++cmdgroups_iterator(hash_entry_t *item,
++                   void *user_data)
++{
++    struct ipa_sudo_conv_result_ctx *ctx = user_data;
++    struct ipa_sudo_cmdgroup *cmdgroup = item->value.ptr;
++    const char **values;
++
++    if (ctx == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Bug: ctx is NULL\n");
++        return false;
++    }
++
++    if (cmdgroup == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Bug: rule is NULL\n");
++        ctx->ret = ERR_INTERNAL;
++        return false;
++    }
++
++    values = combine_cmds(cmdgroup, ctx->conv, cmdgroup->cmds);
++    if (values == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to expand commands\n");
++        ctx->ret = ENOMEM;
++        return false;
++    }
++
++    cmdgroup->expanded = values;
++    ctx->ret = EOK;
++
++    return true;
++}
++
++errno_t
++ipa_sudo_conv_result(TALLOC_CTX *mem_ctx,
++                     struct ipa_sudo_conv *conv,
++                     struct sysdb_attrs ***_rules,
++                     size_t *_num_rules)
++{
++    struct ipa_sudo_conv_result_ctx ctx;
++    struct sysdb_attrs **rules;
++    unsigned long num_rules;
++    int hret;
++
++    num_rules = hash_count(conv->rules);
++    if (num_rules == 0) {
++        *_rules = NULL;
++        *_num_rules = 0;
++        return EOK;
++    }
++
++    ctx.conv = conv;
++    ctx.rules = NULL;
++    ctx.num_rules = 0;
++
++    /* If there are no cmdgroups the iterator is not called and ctx.ret is
++     * uninitialized. Since it is ok that there are no cmdgroups initializing
++     * ctx.ret to EOK. */
++    ctx.ret = EOK;
++
++    /* Expand commands in command groups. */
++    hret = hash_iterate(conv->cmdgroups, cmdgroups_iterator, &ctx);
++    if (hret != HASH_SUCCESS) {
++        DEBUG(SSSDBG_OP_FAILURE, "Unable to iterate over command groups "
++              "[%d]\n", hret);
++        return EIO;
++    }
++
++    if (ctx.ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to expand command grousp "
++              "[%d]: %s\n", ctx.ret, sss_strerror(ctx.ret));
++        return ctx.ret;
++    }
++
++    /* Convert rules. */
++    rules = talloc_zero_array(mem_ctx, struct sysdb_attrs *, num_rules);
++    if (rules == NULL) {
++        return ENOMEM;
++    }
++
++    ctx.rules = rules;
++    ctx.num_rules = 0;
++
++    hret = hash_iterate(conv->rules, rules_iterator, &ctx);
++    if (hret != HASH_SUCCESS) {
++        DEBUG(SSSDBG_OP_FAILURE, "Unable to iterate over rules [%d]\n", hret);
++        return EIO;
++    }
++
++    if (ctx.ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to convert rules [%d]: %s\n",
++              ctx.ret, sss_strerror(ctx.ret));
++        talloc_free(rules);
++        return ctx.ret;
++    }
++
++    *_rules = ctx.rules;
++    *_num_rules = ctx.num_rules;
++
++    return EOK;
++}
+diff --git a/src/providers/ipa/ipa_sudo_refresh.c b/src/providers/ipa/ipa_sudo_refresh.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..6fb8f66af607440ddcbb266c0b049ed99bf235b9
+--- /dev/null
++++ b/src/providers/ipa/ipa_sudo_refresh.c
+@@ -0,0 +1,195 @@
++/*
++    Authors:
++        Pavel Březina <pbrezina@redhat.com>
++
++    Copyright (C) 2015 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <errno.h>
++#include <talloc.h>
++#include <tevent.h>
++
++#include "util/util.h"
++#include "providers/dp_ptask.h"
++#include "providers/ipa/ipa_sudo.h"
++#include "providers/ldap/sdap_sudo_shared.h"
++#include "db/sysdb_sudo.h"
++
++struct ipa_sudo_full_refresh_state {
++    struct ipa_sudo_ctx *sudo_ctx;
++    struct sss_domain_info *domain;
++    int dp_error;
++};
++
++static void ipa_sudo_full_refresh_done(struct tevent_req *subreq);
++
++struct tevent_req *
++ipa_sudo_full_refresh_send(TALLOC_CTX *mem_ctx,
++                           struct tevent_context *ev,
++                           struct ipa_sudo_ctx *sudo_ctx)
++{
++    struct ipa_sudo_full_refresh_state *state;
++    struct tevent_req *subreq;
++    struct tevent_req *req;
++    char *delete_filter;
++    int ret;
++
++    req = tevent_req_create(mem_ctx, &state,
++                            struct ipa_sudo_full_refresh_state);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "tevent_req_create() failed\n");
++        return NULL;
++    }
++
++    sudo_ctx->full_refresh_in_progress = true;
++
++    state->domain = sudo_ctx->id_ctx->be->domain;
++    state->sudo_ctx = sudo_ctx;
++
++    /* Remove all rules from cache */
++    delete_filter = talloc_asprintf(state, "(%s=%s)", SYSDB_OBJECTCLASS,
++                                    SYSDB_SUDO_CACHE_OC);
++    if (delete_filter == NULL) {
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    DEBUG(SSSDBG_TRACE_FUNC, "Issuing a full refresh of sudo rules\n");
++
++    subreq = ipa_sudo_refresh_send(state, ev, sudo_ctx, NULL, delete_filter);
++    if (subreq == NULL) {
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    tevent_req_set_callback(subreq, ipa_sudo_full_refresh_done, req);
++
++    return req;
++
++immediately:
++    if (ret == EOK) {
++        tevent_req_done(req);
++    } else {
++        tevent_req_error(req, ret);
++    }
++    tevent_req_post(req, ev);
++
++    return req;
++}
++
++static void
++ipa_sudo_full_refresh_done(struct tevent_req *subreq)
++{
++    struct ipa_sudo_full_refresh_state *state;
++    struct tevent_req *req;
++    int ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_sudo_full_refresh_state);
++
++    ret = ipa_sudo_refresh_recv(subreq, &state->dp_error, NULL);
++    talloc_zfree(subreq);
++    if (ret != EOK || state->dp_error != DP_ERR_OK) {
++        goto done;
++    }
++
++    state->sudo_ctx->full_refresh_done = true;
++
++    ret = sysdb_sudo_set_last_full_refresh(state->domain, time(NULL));
++    if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE, "Unable to save time of "
++                                    "a successful full refresh\n");
++    }
++
++    DEBUG(SSSDBG_TRACE_FUNC, "Successful full refresh of sudo rules\n");
++
++done:
++    state->sudo_ctx->full_refresh_in_progress = false;
++
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    tevent_req_done(req);
++}
++
++int
++ipa_sudo_full_refresh_recv(struct tevent_req *req,
++                           int *dp_error)
++{
++    struct ipa_sudo_full_refresh_state *state;
++    state = tevent_req_data(req, struct ipa_sudo_full_refresh_state);
++
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    *dp_error = state->dp_error;
++
++    return EOK;
++}
++
++static struct tevent_req *
++ipa_sudo_ptask_full_refresh_send(TALLOC_CTX *mem_ctx,
++                                 struct tevent_context *ev,
++                                 struct be_ctx *be_ctx,
++                                 struct be_ptask *be_ptask,
++                                 void *pvt)
++{
++    struct ipa_sudo_ctx *sudo_ctx;
++    sudo_ctx = talloc_get_type(pvt, struct ipa_sudo_ctx);
++
++    return ipa_sudo_full_refresh_send(mem_ctx, be_ctx->ev, sudo_ctx);
++}
++
++static errno_t
++ipa_sudo_ptask_full_refresh_recv(struct tevent_req *req)
++{
++    int dp_error;
++
++    return ipa_sudo_full_refresh_recv(req, &dp_error);
++}
++
++static struct tevent_req *
++ipa_sudo_ptask_smart_refresh_send(TALLOC_CTX *mem_ctx,
++                                  struct tevent_context *ev,
++                                  struct be_ctx *be_ctx,
++                                  struct be_ptask *be_ptask,
++                                  void *pvt)
++{
++    struct ipa_sudo_ctx *sudo_ctx;
++    sudo_ctx = talloc_get_type(pvt, struct ipa_sudo_ctx);
++
++    return ipa_sudo_full_refresh_send(mem_ctx, be_ctx->ev, sudo_ctx);
++}
++
++static errno_t
++ipa_sudo_ptask_smart_refresh_recv(struct tevent_req *req)
++{
++    int dp_error;
++
++    return ipa_sudo_full_refresh_recv(req, &dp_error);
++}
++
++errno_t
++ipa_sudo_ptask_setup(struct be_ctx *be_ctx, struct ipa_sudo_ctx *sudo_ctx)
++{
++    return sdap_sudo_ptask_setup_generic(be_ctx, sudo_ctx->id_ctx->opts->basic,
++                                         ipa_sudo_ptask_full_refresh_send,
++                                         ipa_sudo_ptask_full_refresh_recv,
++                                         ipa_sudo_ptask_smart_refresh_send,
++                                         ipa_sudo_ptask_smart_refresh_recv,
++                                         sudo_ctx);
++}
+-- 
+2.5.0
+

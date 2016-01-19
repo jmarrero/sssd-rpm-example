@@ -1,0 +1,87 @@
+From df870fbd4c2d9fa573338714ff1511475e74e785 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 12 Jan 2016 12:12:17 +0100
+Subject: [PATCH 33/49] SUDO: remove full_refresh_in_progress
+
+When we switched to be_ptask this variable has become obsolete.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 43bbf5b158ec3152806791ca49ae224ee978de24)
+---
+ src/providers/ipa/ipa_sudo.h           | 1 -
+ src/providers/ipa/ipa_sudo_refresh.c   | 4 ----
+ src/providers/ldap/sdap_sudo.h         | 1 -
+ src/providers/ldap/sdap_sudo_refresh.c | 4 ----
+ 4 files changed, 10 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_sudo.h b/src/providers/ipa/ipa_sudo.h
+index 81ada14e46550fab815a7df262abd0b5fa11afd7..3c346c837be6ee4848d4786ac01f36bc80698d3f 100644
+--- a/src/providers/ipa/ipa_sudo.h
++++ b/src/providers/ipa/ipa_sudo.h
+@@ -29,7 +29,6 @@ struct ipa_sudo_ctx {
+     struct sdap_options *sdap_opts;
+ 
+     bool full_refresh_done;
+-    bool full_refresh_in_progress;
+ 
+     /* sudo */
+     struct sdap_attr_map *sudocmdgroup_map;
+diff --git a/src/providers/ipa/ipa_sudo_refresh.c b/src/providers/ipa/ipa_sudo_refresh.c
+index bdde4a0026f224898a4987476f49122ea92a6052..c8fb7d9216edc0568ee906c368fcff5ff1596022 100644
+--- a/src/providers/ipa/ipa_sudo_refresh.c
++++ b/src/providers/ipa/ipa_sudo_refresh.c
+@@ -54,8 +54,6 @@ ipa_sudo_full_refresh_send(TALLOC_CTX *mem_ctx,
+         return NULL;
+     }
+ 
+-    sudo_ctx->full_refresh_in_progress = true;
+-
+     state->domain = sudo_ctx->id_ctx->be->domain;
+     state->sudo_ctx = sudo_ctx;
+ 
+@@ -118,8 +116,6 @@ ipa_sudo_full_refresh_done(struct tevent_req *subreq)
+     DEBUG(SSSDBG_TRACE_FUNC, "Successful full refresh of sudo rules\n");
+ 
+ done:
+-    state->sudo_ctx->full_refresh_in_progress = false;
+-
+     if (ret != EOK) {
+         tevent_req_error(req, ret);
+         return;
+diff --git a/src/providers/ldap/sdap_sudo.h b/src/providers/ldap/sdap_sudo.h
+index d2fa9bec41a07bbae2aaf1739df67a20ea6a578a..060f9fe36d3f6fda6d041e2f1c9a0781d914265d 100644
+--- a/src/providers/ldap/sdap_sudo.h
++++ b/src/providers/ldap/sdap_sudo.h
+@@ -34,7 +34,6 @@ struct sdap_sudo_ctx {
+     bool use_host_filter;
+ 
+     bool full_refresh_done;
+-    bool full_refresh_in_progress;
+ 
+     bool run_hostinfo;
+ };
+diff --git a/src/providers/ldap/sdap_sudo_refresh.c b/src/providers/ldap/sdap_sudo_refresh.c
+index 5697818ce71240468d2bcaa8af7994ca6b8ea3ef..f1fb6a924c93ec5c71a890d4e03aaac3e9709d73 100644
+--- a/src/providers/ldap/sdap_sudo_refresh.c
++++ b/src/providers/ldap/sdap_sudo_refresh.c
+@@ -55,8 +55,6 @@ struct tevent_req *sdap_sudo_full_refresh_send(TALLOC_CTX *mem_ctx,
+         return NULL;
+     }
+ 
+-    sudo_ctx->full_refresh_in_progress = true;
+-
+     state->sudo_ctx = sudo_ctx;
+     state->id_ctx = id_ctx;
+     state->sysdb = id_ctx->be->domain->sysdb;
+@@ -132,8 +130,6 @@ static void sdap_sudo_full_refresh_done(struct tevent_req *subreq)
+     DEBUG(SSSDBG_TRACE_FUNC, "Successful full refresh of sudo rules\n");
+ 
+ done:
+-    state->sudo_ctx->full_refresh_in_progress = false;
+-
+     if (ret != EOK) {
+         tevent_req_error(req, ret);
+         return;
+-- 
+2.5.0
+

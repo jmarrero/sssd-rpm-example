@@ -1,0 +1,80 @@
+From da594641c3bb8718808205c20f0a4e8f96e80d71 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 5 Jan 2016 11:17:38 +0100
+Subject: [PATCH 30/49] SDAP: Add sdap_or_filters
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit ad5a48c4947183fda49308259e3411d17a8b0a13)
+---
+ src/providers/ldap/ldap_common.h |  4 ++++
+ src/providers/ldap/sdap_utils.c  | 30 +++++++++++++++++++++++-------
+ 2 files changed, 27 insertions(+), 7 deletions(-)
+
+diff --git a/src/providers/ldap/ldap_common.h b/src/providers/ldap/ldap_common.h
+index e5fee51e742a69d8876f2829f75b2af5f020ef6f..bdd02d8221850b8baef746cc1f28a7c8f8569924 100644
+--- a/src/providers/ldap/ldap_common.h
++++ b/src/providers/ldap/ldap_common.h
+@@ -264,6 +264,10 @@ errno_t list_missing_attrs(TALLOC_CTX *mem_ctx,
+ 
+ bool sdap_is_secure_uri(const char *uri);
+ 
++char *sdap_or_filters(TALLOC_CTX *mem_ctx,
++                      const char *base_filter,
++                      const char *extra_filter);
++
+ char *sdap_combine_filters(TALLOC_CTX *mem_ctx,
+                            const char *base_filter,
+                            const char *extra_filter);
+diff --git a/src/providers/ldap/sdap_utils.c b/src/providers/ldap/sdap_utils.c
+index 47921b8768b9c4c4b2d40a5eb28e28bf48238210..347206c21286ea1a491a7b9447a179694ded9b9b 100644
+--- a/src/providers/ldap/sdap_utils.c
++++ b/src/providers/ldap/sdap_utils.c
+@@ -149,9 +149,11 @@ errno_t deref_string_to_val(const char *str, int *val)
+     return EOK;
+ }
+ 
+-char *sdap_combine_filters(TALLOC_CTX *mem_ctx,
+-                           const char *base_filter,
+-                           const char *extra_filter)
++static char *
++sdap_combine_filters_ex(TALLOC_CTX *mem_ctx,
++                        char operator,
++                        const char *base_filter,
++                        const char *extra_filter)
+ {
+     char *filter = NULL;
+ 
+@@ -162,12 +164,26 @@ char *sdap_combine_filters(TALLOC_CTX *mem_ctx,
+     }
+ 
+     if (extra_filter[0] == '(') {
+-        filter = talloc_asprintf(mem_ctx, "(&%s%s)",
+-                                 base_filter, extra_filter);
++        filter = talloc_asprintf(mem_ctx, "(%c%s%s)",
++                                 operator, base_filter, extra_filter);
+     } else {
+-        filter = talloc_asprintf(mem_ctx, "(&%s(%s))",
+-                                 base_filter, extra_filter);
++        filter = talloc_asprintf(mem_ctx, "(%c%s(%s))",
++                                 operator, base_filter, extra_filter);
+     }
+ 
+     return filter; /* NULL or not */
+ }
++
++char *sdap_or_filters(TALLOC_CTX *mem_ctx,
++                      const char *base_filter,
++                      const char *extra_filter)
++{
++    return sdap_combine_filters_ex(mem_ctx, '|', base_filter, extra_filter);
++}
++
++char *sdap_combine_filters(TALLOC_CTX *mem_ctx,
++                           const char *base_filter,
++                           const char *extra_filter)
++{
++    return sdap_combine_filters_ex(mem_ctx, '&', base_filter, extra_filter);
++}
+-- 
+2.5.0
+

@@ -1,0 +1,169 @@
+From 3ab86013f8041070c866135b8b2c61ad8f3da40c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 1 Dec 2015 13:10:16 +0100
+Subject: [PATCH 23/49] IPA SUDO: Add ipasudorule mapping
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit a2057618f30a3c64bdffb35a2ef3c2ba148c8a03)
+---
+ src/config/etc/sssd.api.d/sssd-ipa.conf | 20 ++++++++++++++++++++
+ src/db/sysdb_sudo.h                     | 20 ++++++++++++++++++++
+ src/providers/ipa/ipa_common.h          | 25 +++++++++++++++++++++++++
+ src/providers/ipa/ipa_opts.c            | 24 ++++++++++++++++++++++++
+ src/providers/ipa/ipa_opts.h            |  2 ++
+ src/providers/ipa/ipa_sudo.c            |  1 +
+ 6 files changed, 92 insertions(+)
+
+diff --git a/src/config/etc/sssd.api.d/sssd-ipa.conf b/src/config/etc/sssd.api.d/sssd-ipa.conf
+index ab712fe55cdac6d247a085aeca5cc82d65966623..0e4e8c00b0fb1fcf9ee9ee82790c28f6c14d26d0 100644
+--- a/src/config/etc/sssd.api.d/sssd-ipa.conf
++++ b/src/config/etc/sssd.api.d/sssd-ipa.conf
+@@ -234,3 +234,23 @@ ldap_sudorule_runasgroup = str, None, false
+ ldap_sudorule_notbefore = str, None, false
+ ldap_sudorule_notafter = str, None, false
+ ldap_sudorule_order = str, None, false
++ipa_sudorule_object_class = str, None, false
++ipa_sudorule_name = str, None, false
++ipa_sudorule_uuid = str, None, false
++ipa_sudorule_enabled_flag = str, None, false
++ipa_sudorule_option = str, None, false
++ipa_sudorule_runasgroup = str, None, false
++ipa_sudorule_runasgroup = str, None, false
++ipa_sudorule_allowcmd = str, None, false
++ipa_sudorule_denycmd = str, None, false
++ipa_sudorule_host = str, None, false
++ipa_sudorule_user = str, None, false
++ipa_sudorule_notafter = str, None, false
++ipa_sudorule_notbefore = str, None, false
++ipa_sudorule_sudoorder = str, None, false
++ipa_sudorule_cmdcategory = str, None, false
++ipa_sudorule_hostcategory = str, None, false
++ipa_sudorule_usercategory = str, None, false
++ipa_sudorule_runasusercategory = str, None, false
++ipa_sudorule_runasgroupcategory = str, None, false
++ipa_sudorule_entry_usn = str, None, false
+diff --git a/src/db/sysdb_sudo.h b/src/db/sysdb_sudo.h
+index 6dd9ea7bb8ec947f5beceb89fd27bde156c27c36..cb4bcc236933d60adaba1c6ffcc52fc73f5df064 100644
+--- a/src/db/sysdb_sudo.h
++++ b/src/db/sysdb_sudo.h
+@@ -46,6 +46,26 @@
+ #define SYSDB_SUDO_CACHE_AT_NOTAFTER   "sudoNotAfter"
+ #define SYSDB_SUDO_CACHE_AT_ORDER      "sudoOrder"
+ 
++/* sysdb ipa attributes */
++#define SYSDB_IPA_SUDORULE_OC                 "ipasudorule"
++#define SYSDB_IPA_SUDORULE_ENABLED            "ipaEnabledFlag"
++#define SYSDB_IPA_SUDORULE_OPTION             "ipaSudoOpt"
++#define SYSDB_IPA_SUDORULE_RUNASUSER          "ipaSudoRunAs"
++#define SYSDB_IPA_SUDORULE_RUNASGROUP         "ipaSudoRunAsGroup"
++#define SYSDB_IPA_SUDORULE_ORIGCMD            "originalMemberCommand"
++#define SYSDB_IPA_SUDORULE_ALLOWCMD           "memberAllowCmd"
++#define SYSDB_IPA_SUDORULE_DENYCMD            "memberDenyCmd"
++#define SYSDB_IPA_SUDORULE_HOST               "memberHost"
++#define SYSDB_IPA_SUDORULE_USER               "memberUser"
++#define SYSDB_IPA_SUDORULE_NOTAFTER           "sudoNotAfter"
++#define SYSDB_IPA_SUDORULE_NOTBEFORE          "sudoNotBefore"
++#define SYSDB_IPA_SUDORULE_SUDOORDER          "sudoOrder"
++#define SYSDB_IPA_SUDORULE_CMDCATEGORY        "cmdCategory"
++#define SYSDB_IPA_SUDORULE_HOSTCATEGORY       "hostCategory"
++#define SYSDB_IPA_SUDORULE_USERCATEGORY       "userCategory"
++#define SYSDB_IPA_SUDORULE_RUNASUSERCATEGORY  "ipaSudoRunAsUserCategory"
++#define SYSDB_IPA_SUDORULE_RUNASGROUPCATEGORY "ipaSudoRunAsGroupCategory"
++
+ /* When constructing a sysdb filter, OR these values to include..   */
+ #define SYSDB_SUDO_FILTER_NONE           0x00       /* no additional filter */
+ #define SYSDB_SUDO_FILTER_USERNAME       0x01       /* username             */
+diff --git a/src/providers/ipa/ipa_common.h b/src/providers/ipa/ipa_common.h
+index fb36c702bee2e21860d64e2030f6a0c2b85f564e..d5527aeeda27a4684bc51e2d5bc420f9c3165a86 100644
+--- a/src/providers/ipa/ipa_common.h
++++ b/src/providers/ipa/ipa_common.h
+@@ -133,6 +133,31 @@ enum ipa_override_attrs {
+     IPA_OPTS_OVERRIDE
+ };
+ 
++enum ipa_sudorule_attrs {
++    IPA_OC_SUDORULE = 0,
++    IPA_AT_SUDORULE_NAME,
++    IPA_AT_SUDORULE_UUID,
++    IPA_AT_SUDORULE_ENABLED,
++    IPA_AT_SUDORULE_OPTION,
++    IPA_AT_SUDORULE_RUNASUSER,
++    IPA_AT_SUDORULE_RUNASGROUP,
++    IPA_AT_SUDORULE_ALLOWCMD,
++    IPA_AT_SUDORULE_DENYCMD,
++    IPA_AT_SUDORULE_HOST,
++    IPA_AT_SUDORULE_USER,
++    IPA_AT_SUDORULE_NOTAFTER,
++    IPA_AT_SUDORULE_NOTBEFORE,
++    IPA_AT_SUDORULE_SUDOORDER,
++    IPA_AT_SUDORULE_CMDCATEGORY,
++    IPA_AT_SUDORULE_HOSTCATEGORY,
++    IPA_AT_SUDORULE_USERCATEGORY,
++    IPA_AT_SUDORULE_RUNASUSERCATEGORY,
++    IPA_AT_SUDORULE_RUNASGROUPCATEGORY,
++    IPA_AT_SUDORULE_ENTRYUSN,
++
++    IPA_OPTS_SUDORULE
++};
++
+ struct ipa_auth_ctx {
+     struct krb5_ctx *krb5_auth_ctx;
+     struct sdap_id_ctx *sdap_id_ctx;
+diff --git a/src/providers/ipa/ipa_opts.c b/src/providers/ipa/ipa_opts.c
+index bc983ec32d63c37b6fdf06d6009df9084f82d4bf..25e9a009a142580e40e3bc2034d7b310ff8ae9c5 100644
+--- a/src/providers/ipa/ipa_opts.c
++++ b/src/providers/ipa/ipa_opts.c
+@@ -335,3 +335,27 @@ struct sdap_attr_map ipa_autofs_entry_map[] = {
+     { "ldap_autofs_entry_value", "automountInformation", SYSDB_AUTOFS_ENTRY_VALUE, NULL },
+     SDAP_ATTR_MAP_TERMINATOR
+ };
++
++struct sdap_attr_map ipa_sudorule_map[] = {
++    { "ipa_sudorule_object_class", "ipasudorule", SYSDB_IPA_SUDORULE_OC, NULL },
++    { "ipa_sudorule_name", "cn", SYSDB_NAME, NULL },
++    { "ipa_sudorule_uuid", "ipaUniqueID", SYSDB_UUID, NULL },
++    { "ipa_sudorule_enabled_flag", "ipaEnabledFlag", SYSDB_IPA_SUDORULE_ENABLED, NULL },
++    { "ipa_sudorule_option", "ipaSudoOpt", SYSDB_IPA_SUDORULE_OPTION, NULL },
++    { "ipa_sudorule_runasuser", "ipaSudoRunAs", SYSDB_IPA_SUDORULE_RUNASUSER, NULL },
++    { "ipa_sudorule_runasgroup", "ipaSudoRunAsGroup", SYSDB_IPA_SUDORULE_RUNASGROUP, NULL },
++    { "ipa_sudorule_allowcmd", "memberAllowCmd", SYSDB_IPA_SUDORULE_ALLOWCMD, NULL },
++    { "ipa_sudorule_denycmd", "memberDenyCmd", SYSDB_IPA_SUDORULE_DENYCMD, NULL },
++    { "ipa_sudorule_host", "memberHost", SYSDB_IPA_SUDORULE_HOST, NULL },
++    { "ipa_sudorule_user", "memberUser", SYSDB_IPA_SUDORULE_USER, NULL },
++    { "ipa_sudorule_notafter", "sudoNotAfter", SYSDB_IPA_SUDORULE_NOTAFTER, NULL },
++    { "ipa_sudorule_notbefore", "sudoNotBefore", SYSDB_IPA_SUDORULE_NOTBEFORE, NULL },
++    { "ipa_sudorule_sudoorder", "sudoOrder", SYSDB_IPA_SUDORULE_SUDOORDER, NULL },
++    { "ipa_sudorule_cmdcategory", "cmdCategory", SYSDB_IPA_SUDORULE_CMDCATEGORY, NULL },
++    { "ipa_sudorule_hostcategory", "hostCategory", SYSDB_IPA_SUDORULE_HOSTCATEGORY, NULL },
++    { "ipa_sudorule_usercategory", "userCategory", SYSDB_IPA_SUDORULE_USERCATEGORY, NULL },
++    { "ipa_sudorule_runasusercategory", "ipaSudoRunAsUserCategory", SYSDB_IPA_SUDORULE_RUNASUSERCATEGORY, NULL },
++    { "ipa_sudorule_runasgroupcategory", "ipaSudoRunAsGroupCategory", SYSDB_IPA_SUDORULE_RUNASGROUPCATEGORY, NULL },
++    { "ipa_sudorule_entry_usn", "entryUSN", SYSDB_USN, NULL },
++    SDAP_ATTR_MAP_TERMINATOR
++};
+diff --git a/src/providers/ipa/ipa_opts.h b/src/providers/ipa/ipa_opts.h
+index af12e63d80696d8341a963368e7d3a3694f16812..6d9e52f73ae1b5625c31d73adc67a76f018c3898 100644
+--- a/src/providers/ipa/ipa_opts.h
++++ b/src/providers/ipa/ipa_opts.h
+@@ -58,4 +58,6 @@ extern struct sdap_attr_map ipa_autofs_mobject_map[];
+ 
+ extern struct sdap_attr_map ipa_autofs_entry_map[];
+ 
++extern struct sdap_attr_map ipa_sudorule_map[];
++
+ #endif /* IPA_OPTS_H_ */
+diff --git a/src/providers/ipa/ipa_sudo.c b/src/providers/ipa/ipa_sudo.c
+index 3d159b3ac0f4ce8f423454506f66f23009eb463f..529fb5f0736a883654b60d43d9dcf248af5c8c21 100644
+--- a/src/providers/ipa/ipa_sudo.c
++++ b/src/providers/ipa/ipa_sudo.c
+@@ -20,6 +20,7 @@
+ 
+ #include "providers/ipa/ipa_common.h"
+ #include "providers/ldap/sdap_sudo.h"
++#include "db/sysdb_sudo.h"
+ 
+ enum sudo_schema {
+     SUDO_SCHEMA_IPA,
+-- 
+2.5.0
+

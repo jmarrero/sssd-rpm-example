@@ -1,0 +1,35 @@
+From 70828dd44d1c35a9084d39f8420e1b984fb2fcaa Mon Sep 17 00:00:00 2001
+From: Pavel Reichl <preichl@redhat.com>
+Date: Mon, 2 Nov 2015 14:59:49 +0100
+Subject: [PATCH 10/49] sudo: remove unused param name in sdap_sudo_get_usn()
+
+Reviewed-by: Petr Cech <pcech@redhat.com>
+(cherry picked from commit e307c269fe1dc94a1771b459c5925e449ba7668b)
+---
+ src/providers/ldap/sdap_sudo_cache.c | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/src/providers/ldap/sdap_sudo_cache.c b/src/providers/ldap/sdap_sudo_cache.c
+index 27203c227064bdcd918cda67bb93a5d62b42e4bd..56e84ce8f26338ea5856eb5c76627641eee93df1 100644
+--- a/src/providers/ldap/sdap_sudo_cache.c
++++ b/src/providers/ldap/sdap_sudo_cache.c
+@@ -28,7 +28,6 @@
+ static errno_t sdap_sudo_get_usn(TALLOC_CTX *mem_ctx,
+                                  struct sysdb_attrs *attrs,
+                                  struct sdap_attr_map *map,
+-                                 const char *name,
+                                  char **_usn)
+ {
+     const char *usn;
+@@ -86,7 +85,7 @@ sdap_save_native_sudorule(TALLOC_CTX *mem_ctx,
+         return ret;
+     }
+ 
+-    ret = sdap_sudo_get_usn(mem_ctx, attrs, map, rule_name, _usn);
++    ret = sdap_sudo_get_usn(mem_ctx, attrs, map, _usn);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_MINOR_FAILURE, "Could not read USN from %s\n", rule_name);
+         *_usn = NULL;
+-- 
+2.5.0
+

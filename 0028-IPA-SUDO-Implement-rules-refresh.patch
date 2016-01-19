@@ -1,0 +1,315 @@
+From 1f278025259661dbbec6d9d9cca4f4b8ba6decca Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 17 Dec 2015 14:00:21 +0100
+Subject: [PATCH 28/49] IPA SUDO: Implement rules refresh
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 9630a4614ba4d5f68e967d4e108893550a996f30)
+---
+ src/providers/ipa/ipa_sudo.c            |  11 +++
+ src/providers/ipa/ipa_sudo.h            |  11 +++
+ src/providers/ipa/ipa_sudo_async.c      |  12 ++-
+ src/providers/ipa/ipa_sudo_conversion.c |   2 +-
+ src/providers/ipa/ipa_sudo_refresh.c    | 155 ++++++++++++++++++++++++++++++++
+ 5 files changed, 186 insertions(+), 5 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_sudo.c b/src/providers/ipa/ipa_sudo.c
+index 3e73bd30fa86f394b3ef822d59c7b0e539c92ca2..b4633858f8b1eda870dd1014f998bd7215d0bdbf 100644
+--- a/src/providers/ipa/ipa_sudo.c
++++ b/src/providers/ipa/ipa_sudo.c
+@@ -211,6 +211,7 @@ ipa_sudo_reply(struct tevent_req *req)
+ {
+     struct be_sudo_req *sudo_req;
+     struct be_req *be_req;
++    bool deleted;
+     int dp_error;
+     int ret;
+ 
+@@ -221,6 +222,12 @@ ipa_sudo_reply(struct tevent_req *req)
+     case BE_REQ_SUDO_FULL:
+         ret = ipa_sudo_full_refresh_recv(req, &dp_error);
+         break;
++    case BE_REQ_SUDO_RULES:
++        ret = ipa_sudo_rules_refresh_recv(req, &dp_error, &deleted);
++        if (ret == EOK && deleted == true) {
++            ret = ENOENT;
++        }
++        break;
+     default:
+         DEBUG(SSSDBG_CRIT_FAILURE, "Invalid request type: %d\n",
+                                     sudo_req->type);
+@@ -256,6 +263,10 @@ ipa_sudo_handler(struct be_req *be_req)
+     case BE_REQ_SUDO_FULL:
+         req = ipa_sudo_full_refresh_send(be_req, be_ctx->ev, sudo_ctx);
+         break;
++    case BE_REQ_SUDO_RULES:
++        req = ipa_sudo_rules_refresh_send(be_req, be_ctx->ev, sudo_ctx,
++                                          sudo_req->rules);
++        break;
+     default:
+         DEBUG(SSSDBG_CRIT_FAILURE, "Invalid request type: %d\n",
+                                     sudo_req->type);
+diff --git a/src/providers/ipa/ipa_sudo.h b/src/providers/ipa/ipa_sudo.h
+index 1ef50a7f352182bdc6607b2fd8ee3d72ccab391d..9dd72948732f4b6e19f4a6546128c5319cd97bda 100644
+--- a/src/providers/ipa/ipa_sudo.h
++++ b/src/providers/ipa/ipa_sudo.h
+@@ -50,6 +50,11 @@ int
+ ipa_sudo_full_refresh_recv(struct tevent_req *req,
+                            int *dp_error);
+ 
++int
++ipa_sudo_rules_refresh_recv(struct tevent_req *req,
++                            int *dp_error,
++                            bool *deleted);
++
+ struct tevent_req *
+ ipa_sudo_refresh_send(TALLOC_CTX *mem_ctx,
+                       struct tevent_context *ev,
+@@ -57,6 +62,12 @@ ipa_sudo_refresh_send(TALLOC_CTX *mem_ctx,
+                       const char *search_filter,
+                       const char *delete_filter);
+ 
++struct tevent_req *
++ipa_sudo_rules_refresh_send(TALLOC_CTX *mem_ctx,
++                            struct tevent_context *ev,
++                            struct ipa_sudo_ctx *sudo_ctx,
++                            char **rules);
++
+ errno_t
+ ipa_sudo_refresh_recv(struct tevent_req *req,
+                       int *dp_error,
+diff --git a/src/providers/ipa/ipa_sudo_async.c b/src/providers/ipa/ipa_sudo_async.c
+index 9ddda1b41a0b3c6ceb33e6d665749948ae835a97..cea85cdbfc21598164557b70a7055fd4b786ba8a 100644
+--- a/src/providers/ipa/ipa_sudo_async.c
++++ b/src/providers/ipa/ipa_sudo_async.c
+@@ -140,6 +140,7 @@ struct ipa_sudo_fetch_state {
+     struct sdap_options *sdap_opts;
+     struct ipa_hostinfo *host;
+     struct sdap_handle *sh;
++    const char *search_filter;
+ 
+     struct sdap_attr_map *map_cmdgroup;
+     struct sdap_attr_map *map_rule;
+@@ -169,7 +170,8 @@ ipa_sudo_fetch_send(TALLOC_CTX *mem_ctx,
+                     struct sdap_attr_map *map_group,
+                     struct sdap_attr_map *map_host,
+                     struct sdap_attr_map *map_hostgroup,
+-                    struct sdap_handle *sh)
++                    struct sdap_handle *sh,
++                    const char *search_filter)
+ {
+     struct ipa_sudo_fetch_state *state = NULL;
+     struct tevent_req *req = NULL;
+@@ -188,6 +190,7 @@ ipa_sudo_fetch_send(TALLOC_CTX *mem_ctx,
+     state->sdap_opts = sudo_ctx->sdap_opts;
+     state->host = host;
+     state->sh = sh;
++    state->search_filter = search_filter == NULL ? "" : search_filter;
+ 
+     state->map_cmdgroup = sudo_ctx->sudocmdgroup_map;
+     state->map_rule = sudo_ctx->sudorule_map;
+@@ -241,10 +244,10 @@ ipa_sudo_fetch_rules(struct tevent_req *req)
+         return ENOMEM;
+     }
+ 
+-    filter = talloc_asprintf(state, "(&(objectClass=%s)(%s=TRUE)%s)",
++    filter = talloc_asprintf(state, "(&(objectClass=%s)(%s=TRUE)%s%s)",
+                              map[IPA_OC_SUDORULE].name,
+                              map[IPA_AT_SUDORULE_ENABLED].name,
+-                             host_filter);
++                             host_filter, state->search_filter);
+     talloc_zfree(host_filter);
+     if (filter == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to build filter\n");
+@@ -678,7 +681,8 @@ ipa_sudo_refresh_host_done(struct tevent_req *subreq)
+                                  state->sdap_opts->user_map,
+                                  state->sdap_opts->group_map,
+                                  state->ipa_opts->host_map,
+-                                 state->ipa_opts->hostgroup_map, state->sh);
++                                 state->ipa_opts->hostgroup_map, state->sh,
++                                 state->search_filter);
+     if (subreq == NULL) {
+         state->dp_error = DP_ERR_FATAL;
+         tevent_req_error(req, ENOMEM);
+diff --git a/src/providers/ipa/ipa_sudo_conversion.c b/src/providers/ipa/ipa_sudo_conversion.c
+index 2f28f837e62b42406ddda25b3f63832c1abb950d..195e40f248e15756a224335208276f6f7a646cd0 100644
+--- a/src/providers/ipa/ipa_sudo_conversion.c
++++ b/src/providers/ipa/ipa_sudo_conversion.c
+@@ -1124,7 +1124,7 @@ ipa_sudo_conv_result(TALLOC_CTX *mem_ctx,
+     }
+ 
+     if (ctx.ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to expand command grousp "
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to expand command groups "
+               "[%d]: %s\n", ctx.ret, sss_strerror(ctx.ret));
+         return ctx.ret;
+     }
+diff --git a/src/providers/ipa/ipa_sudo_refresh.c b/src/providers/ipa/ipa_sudo_refresh.c
+index 6fb8f66af607440ddcbb266c0b049ed99bf235b9..f1b99c0de96dd2226eb3181ce44e54c019139c6e 100644
+--- a/src/providers/ipa/ipa_sudo_refresh.c
++++ b/src/providers/ipa/ipa_sudo_refresh.c
+@@ -141,6 +141,161 @@ ipa_sudo_full_refresh_recv(struct tevent_req *req,
+     return EOK;
+ }
+ 
++struct ipa_sudo_rules_refresh_state {
++    size_t num_rules;
++    int dp_error;
++    bool deleted;
++};
++
++static void ipa_sudo_rules_refresh_done(struct tevent_req *subreq);
++
++struct tevent_req *
++ipa_sudo_rules_refresh_send(TALLOC_CTX *mem_ctx,
++                            struct tevent_context *ev,
++                            struct ipa_sudo_ctx *sudo_ctx,
++                            char **rules)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct ipa_sudo_rules_refresh_state *state;
++    struct tevent_req *subreq;
++    struct tevent_req *req;
++    char *search_filter;
++    char *delete_filter;
++    char *safe_rule;
++    errno_t ret;
++    int i;
++
++    req = tevent_req_create(mem_ctx, &state, struct ipa_sudo_rules_refresh_state);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "tevent_req_create() failed\n");
++        return NULL;
++    }
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_new() failed\n");
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    if (rules == NULL || rules[0] == NULL) {
++        state->dp_error = DP_ERR_OK;
++        state->num_rules = 0;
++        state->deleted = false;
++        ret = EOK;
++        goto immediately;
++    }
++
++    search_filter = talloc_zero(tmp_ctx, char); /* assign to tmp_ctx */
++    delete_filter = talloc_zero(tmp_ctx, char); /* assign to tmp_ctx */
++
++    /* Download only selected rules from LDAP. */
++    /* Remove all selected rules from cache. */
++    for (i = 0; rules[i] != NULL; i++) {
++        ret = sss_filter_sanitize(tmp_ctx, rules[i], &safe_rule);
++        if (ret != EOK) {
++            ret = ENOMEM;
++            goto immediately;
++        }
++
++        search_filter = talloc_asprintf_append_buffer(search_filter, "(%s=%s)",
++                             sudo_ctx->sudorule_map[IPA_AT_SUDORULE_NAME].name,
++                             safe_rule);
++        if (search_filter == NULL) {
++            ret = ENOMEM;
++            goto immediately;
++        }
++
++        delete_filter = talloc_asprintf_append_buffer(delete_filter, "(%s=%s)",
++                                                      SYSDB_NAME, safe_rule);
++        if (delete_filter == NULL) {
++            ret = ENOMEM;
++            goto immediately;
++        }
++    }
++
++    state->num_rules = i;
++
++    search_filter = talloc_asprintf(tmp_ctx, "(|%s)", search_filter);
++    if (search_filter == NULL) {
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    delete_filter = talloc_asprintf(tmp_ctx, "(&(%s=%s)(|%s))",
++                                    SYSDB_OBJECTCLASS, SYSDB_SUDO_CACHE_OC,
++                                    delete_filter);
++    if (delete_filter == NULL) {
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    subreq = ipa_sudo_refresh_send(req, ev, sudo_ctx, search_filter,
++                                   delete_filter);
++    if (subreq == NULL) {
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    tevent_req_set_callback(subreq, ipa_sudo_rules_refresh_done, req);
++
++    ret = EOK;
++
++immediately:
++    talloc_free(tmp_ctx);
++
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        tevent_req_post(req, ev);
++    }
++
++    return req;
++}
++
++static void
++ipa_sudo_rules_refresh_done(struct tevent_req *subreq)
++{
++    struct ipa_sudo_rules_refresh_state *state;
++    struct tevent_req *req = NULL;
++    size_t downloaded_rules_num;
++    int ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_sudo_rules_refresh_state);
++
++    ret = ipa_sudo_refresh_recv(subreq, &state->dp_error, &downloaded_rules_num);
++    talloc_zfree(subreq);
++    if (ret != EOK || state->dp_error != DP_ERR_OK) {
++        goto done;
++    }
++
++    state->deleted = downloaded_rules_num != state->num_rules ? true : false;
++
++done:
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    tevent_req_done(req);
++}
++
++int
++ipa_sudo_rules_refresh_recv(struct tevent_req *req,
++                            int *dp_error,
++                            bool *deleted)
++{
++    struct ipa_sudo_rules_refresh_state *state;
++    state = tevent_req_data(req, struct ipa_sudo_rules_refresh_state);
++
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    *dp_error = state->dp_error;
++    *deleted = state->deleted;
++
++    return EOK;
++}
++
+ static struct tevent_req *
+ ipa_sudo_ptask_full_refresh_send(TALLOC_CTX *mem_ctx,
+                                  struct tevent_context *ev,
+-- 
+2.5.0
+

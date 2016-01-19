@@ -1,0 +1,44 @@
+From 81dfc2be7f2ea92e5fe9749f1b5b64b6c7b12f21 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 6 Jan 2016 18:09:16 +0100
+Subject: [PATCH 05/49] SPEC: Change package ownership of
+ %{pubconfpath}/krb5.include.d
+
+krb5 domain mapping files are stored to the directory
+%{pubconfpath}/krb5.include.d. It can be stored by ipa or ad provider.
+However this directory was owned by sub-package sssd-ipa. And ad provider
+can be installed without this package. Therefore %{pubconfpath}/krb5.include.d
+should be owned by common dependency.
+
+The owner of this directory was also fixed to sssd.
+It's already done by make install. It was changed only in spec file.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit b978d3e423c18d5697e6c1398c07e444e6f98e3f)
+---
+ contrib/sssd.spec.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index 710ba92209d4a4d6e45b63bf7bf693fd5ec5f490..9855e11a8bb0ff3f50ceeae98f383c514011cc90 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -765,6 +765,7 @@ rm -rf $RPM_BUILD_ROOT
+ %files krb5-common
+ %defattr(-,root,root,-)
+ %doc COPYING
++%attr(755,sssd,sssd) %dir %{pubconfpath}/krb5.include.d
+ %attr(4750,root,sssd) %{_libexecdir}/%{servicename}/ldap_child
+ %attr(4750,root,sssd) %{_libexecdir}/%{servicename}/krb5_child
+ 
+@@ -782,7 +783,6 @@ rm -rf $RPM_BUILD_ROOT
+ %files ipa -f sssd_ipa.lang
+ %defattr(-,root,root,-)
+ %doc COPYING
+-%attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
+ %attr(700,sssd,sssd) %dir %{keytabdir}
+ %{_libdir}/%{name}/libsss_ipa.so
+ %attr(4750,root,sssd) %{_libexecdir}/%{servicename}/selinux_child
+-- 
+2.5.0
+
