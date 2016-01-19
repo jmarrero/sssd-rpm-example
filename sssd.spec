@@ -572,6 +572,12 @@ install -m644 src/examples/logrotate $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/s
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/rwtab.d
 install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
 
+%if (0%{?with_cifs_utils_plugin} == 1)
+# Create directory for cifs-idmap alternative
+# Otherwise this directory could not be owned by sssd-client
+mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/cifs-utils
+%endif
+
 # Remove .la files created by libtool
 find $RPM_BUILD_ROOT -name "*.la" -exec rm -f {} \;
 
@@ -688,7 +694,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/%{name}/libsss_semanage.so
 
 # 3rd party application libraries
-%{_libdir}/sssd/modules/libsss_autofs.so
+%dir %{_libdir}/%{name}/modules
+%{_libdir}/%{name}/modules/libsss_autofs.so
 %{_libdir}/libnfsidmap/sss.so
 
 %{ldb_modulesdir}/memberof.so
@@ -705,15 +712,17 @@ rm -rf $RPM_BUILD_ROOT
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/group
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/initgroups
 %attr(755,root,root) %dir %{pipepath}
+%attr(700,root,root) %dir %{pipepath}/private
 %attr(755,root,root) %dir %{pubconfpath}
 %attr(755,root,root) %dir %{gpocachepath}
-%attr(700,root,root) %dir %{pipepath}/private
 %attr(750,root,root) %dir %{_var}/log/%{name}
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
 %ghost %attr(0600,root,root) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 %attr(755,root,root) %dir %{_sysconfdir}/systemd/system/sssd.service.d
 %config(noreplace) %{_sysconfdir}/systemd/system/sssd.service.d/journal.conf
+%dir %{_sysconfdir}/logrotate.d
 %config(noreplace) %{_sysconfdir}/logrotate.d/sssd
+%dir %{_sysconfdir}/rwtab.d
 %config(noreplace) %{_sysconfdir}/rwtab.d/sssd
 %dir %{_datadir}/sssd
 %{_datadir}/sssd/sssd.api.conf
@@ -802,10 +811,14 @@ rm -rf $RPM_BUILD_ROOT
 %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
 %{_libdir}/krb5/plugins/authdata/sssd_pac_plugin.so
 %if (0%{?with_cifs_utils_plugin} == 1)
+%dir %{_libdir}/cifs-utils
 %{_libdir}/cifs-utils/cifs_idmap_sss.so
+%dir %{_sysconfdir}/cifs-utils
 %ghost %{_sysconfdir}/cifs-utils/idmap-plugin
 %endif
 %if (0%{?with_krb5_localauth_plugin} == 1)
+%dir %{_libdir}/%{name}
+%dir %{_libdir}/%{name}/modules
 %{_libdir}/%{name}/modules/sssd_krb5_localauth_plugin.so
 %endif
 %{_mandir}/man8/pam_sss.8*
@@ -851,6 +864,7 @@ rm -rf $RPM_BUILD_ROOT
 %defattr(-,root,root,-)
 %dir %{python3_sitelib}/SSSDConfig
 %{python3_sitelib}/SSSDConfig/*.py*
+%dir %{python3_sitelib}/SSSDConfig/__pycache__
 %{python3_sitelib}/SSSDConfig/__pycache__/*.py*
 
 %files -n python-sss
@@ -923,6 +937,8 @@ rm -rf $RPM_BUILD_ROOT
 
 %files libwbclient
 %defattr(-,root,root,-)
+%dir %{_libdir}/%{name}
+%dir %{_libdir}/%{name}/modules
 %{_libdir}/%{name}/modules/libwbclient.so.*
 
 %files libwbclient-devel
