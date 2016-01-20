@@ -1,0 +1,136 @@
+From 199a9d29c3e56c1c341fb331cfe790b35736a1f2 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 19 Jan 2016 14:54:45 +0100
+Subject: [PATCH 46/55] SDAP: Make it possible to silence errors from
+ dereference
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+https://fedorahosted.org/sssd/ticket/2791
+
+When a modern IPA client is connected to an old (3.x) IPA server, the
+attribute dereferenced during the ID views lookup does not exist, which
+triggers an error during the dereference processing and also a confusing
+syslog message.
+
+This patch suppresses the syslog message.
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+(cherry picked from commit 95c132e1a8c6bbab4be8b3a340333fadd8076122)
+---
+ src/providers/ipa/ipa_subdomains.c |  6 +++++-
+ src/providers/ldap/sdap_async.c    | 25 +++++++++++++++++--------
+ src/providers/ldap/sdap_async.h    |  7 ++++++-
+ 3 files changed, 28 insertions(+), 10 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_subdomains.c b/src/providers/ipa/ipa_subdomains.c
+index cd78506ffc59c392da4e834c764c9ca82dbc89b0..f13847f12a7eae42b13a51e3fe1d09b60878633b 100644
+--- a/src/providers/ipa/ipa_subdomains.c
++++ b/src/providers/ipa/ipa_subdomains.c
+@@ -792,6 +792,9 @@ static errno_t ipa_get_view_name(struct ipa_subdomains_req_ctx *ctx)
+         return EOK;
+     }
+ 
++    /* We add SDAP_DEREF_FLG_SILENT because old IPA servers don't have
++     * the attribute we dereference, causing the deref call to fail
++     */
+     req = sdap_deref_search_with_filter_send(ctx, ctx->sd_ctx->be_ctx->ev,
+                         ctx->sd_ctx->sdap_id_ctx->opts,
+                         sdap_id_op_handle(ctx->sdap_op),
+@@ -799,7 +802,8 @@ static errno_t ipa_get_view_name(struct ipa_subdomains_req_ctx *ctx)
+                         ctx->current_filter, IPA_ASSIGNED_ID_VIEW, attrs,
+                         1, maps,
+                         dp_opt_get_int(ctx->sd_ctx->sdap_id_ctx->opts->basic,
+-                                       SDAP_SEARCH_TIMEOUT));
++                                       SDAP_SEARCH_TIMEOUT),
++                        SDAP_DEREF_FLG_SILENT);
+ 
+     if (req == NULL) {
+         DEBUG(SSSDBG_OP_FAILURE, "sdap_get_generic_send failed.\n");
+diff --git a/src/providers/ldap/sdap_async.c b/src/providers/ldap/sdap_async.c
+index 5260aafebf7570291876b2433dbcf44ffb5b0011..6cc32323b4a4c43023a50e10a3a003bc4b2b8994 100644
+--- a/src/providers/ldap/sdap_async.c
++++ b/src/providers/ldap/sdap_async.c
+@@ -2763,6 +2763,7 @@ struct sdap_deref_search_state {
+     size_t reply_count;
+     struct sdap_deref_attrs **reply;
+     enum sdap_deref_type deref_type;
++    unsigned flags;
+ };
+ 
+ static void sdap_deref_search_done(struct tevent_req *subreq);
+@@ -2779,7 +2780,8 @@ sdap_deref_search_with_filter_send(TALLOC_CTX *memctx,
+                                    const char **attrs,
+                                    int num_maps,
+                                    struct sdap_attr_map_info *maps,
+-                                   int timeout)
++                                   int timeout,
++                                   unsigned flags)
+ {
+     struct tevent_req *req = NULL;
+     struct tevent_req *subreq = NULL;
+@@ -2791,6 +2793,7 @@ sdap_deref_search_with_filter_send(TALLOC_CTX *memctx,
+     state->sh = sh;
+     state->reply_count = 0;
+     state->reply = NULL;
++    state->flags = flags;
+ 
+     if (sdap_is_control_supported(sh, LDAP_CONTROL_X_DEREF)) {
+         DEBUG(SSSDBG_TRACE_INTERNAL, "Server supports OpenLDAP deref\n");
+@@ -2917,14 +2920,20 @@ static void sdap_deref_search_done(struct tevent_req *subreq)
+         DEBUG(SSSDBG_OP_FAILURE,
+               "dereference processing failed [%d]: %s\n", ret, strerror(ret));
+         if (ret == ENOTSUP) {
+-            sss_log(SSS_LOG_WARNING,
+-                "LDAP server claims to support deref, but deref search failed. "
+-                "Disabling deref for further requests. You can permanently "
+-                "disable deref by setting ldap_deref_threshold to 0 in domain "
+-                "configuration.");
+             state->sh->disable_deref = true;
+-        } else {
+-            sss_log(SSS_LOG_WARNING, "dereference processing failed : %s", strerror(ret));
++        }
++
++        if (!(state->flags & SDAP_DEREF_FLG_SILENT)) {
++            if (ret == ENOTSUP) {
++                sss_log(SSS_LOG_WARNING,
++                        "LDAP server claims to support deref, but deref search "
++                        "failed. Disabling deref for further requests. You can "
++                        "permanently disable deref by setting "
++                        "ldap_deref_threshold to 0 in domain configuration.");
++            } else {
++                sss_log(SSS_LOG_WARNING,
++                        "dereference processing failed : %s", strerror(ret));
++            }
+         }
+         tevent_req_error(req, ret);
+         return;
+diff --git a/src/providers/ldap/sdap_async.h b/src/providers/ldap/sdap_async.h
+index 09bc0d65407253f93514b30877850cc38009c625..f86f1890bc2971ede4fe70f42154d7bc39c43ac6 100644
+--- a/src/providers/ldap/sdap_async.h
++++ b/src/providers/ldap/sdap_async.h
+@@ -227,6 +227,10 @@ int sdap_get_generic_recv(struct tevent_req *req,
+ 
+ bool sdap_has_deref_support(struct sdap_handle *sh, struct sdap_options *opts);
+ 
++enum sdap_deref_flags {
++    SDAP_DEREF_FLG_SILENT = 1 << 0,     /* Do not warn if dereference fails */
++};
++
+ struct tevent_req *
+ sdap_deref_search_with_filter_send(TALLOC_CTX *memctx,
+                                    struct tevent_context *ev,
+@@ -238,7 +242,8 @@ sdap_deref_search_with_filter_send(TALLOC_CTX *memctx,
+                                    const char **attrs,
+                                    int num_maps,
+                                    struct sdap_attr_map_info *maps,
+-                                   int timeout);
++                                   int timeout,
++                                   unsigned flags);
+ int sdap_deref_search_with_filter_recv(struct tevent_req *req,
+                                        TALLOC_CTX *mem_ctx,
+                                        size_t *reply_count,
+-- 
+2.5.0
+

@@ -24,7 +24,7 @@
 
 Name: sssd
 Version: 1.13.3
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -77,6 +77,12 @@ Patch0041: 0041-AD-add-task-to-renew-the-machine-account-password-if.patch
 Patch0042: 0042-FO-add-fo_get_active_server.patch
 Patch0043: 0043-FO-add-be_fo_get_active_server_name.patch
 Patch0044: 0044-AD-try-to-use-current-server-in-the-renewal-task.patch
+Patch0045: 0045-sdap_connect_send-fail-if-uri-or-sockaddr-is-NULL.patch
+Patch0046: 0046-SDAP-Make-it-possible-to-silence-errors-from-derefer.patch
+Patch0047: 0047-p11-add-gnome-screensaver-to-list-of-allowed-service.patch
+Patch0048: 0048-IDMAP-Fix-computing-max-id-for-slice-range.patch
+Patch0049: 0049-IDMAP-New-structure-for-domain-range-params.patch
+Patch0050: 0050-IDMAP-Add-support-for-automatic-adding-of-ranges.patch
 Patch0100: 0100-FO-Don-t-free-rc-allocated-structure.patch
 Patch0101: 0101-tests-Reduce-failover-code-duplication.patch
 Patch0102: 0102-FO-Use-refcount-to-keep-track-of-servers-returned-to.patch
@@ -1063,6 +1069,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Jan 20 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.3-3
+- Additional upstream fixes
+
 * Tue Jan 19 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.3-2
 - Resolves: rhbz#1256849 - SUDO: Support the IPA schema
 
