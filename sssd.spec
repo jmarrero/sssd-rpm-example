@@ -1229,7 +1229,7 @@ fi
 - Rebuild for libldb 1.1.18
 
 * Wed Nov 26 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-4
-- Fix typo in libwbclient-devel %preun
+- Fix typo in libwbclient-devel %%preun
 
 * Tue Nov 25 2014 Jakub Hrozek <jhrozek@redhat.com> - 1.12.2-3
 - Use alternatives for libwbclient
@@ -1363,7 +1363,7 @@ fi
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_20_Mass_Rebuild
 
 * Wed Jul 31 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0.2beta2
-- Resolves: #906427 - Do not use %{_lib} in specfile for the nss and
+- Resolves: #906427 - Do not use %%{_lib} in specfile for the nss and
                       pam libraries
 
 * Wed Jul 24 2013 Jakub Hrozek <jhrozek@redhat.com> - 1.11.0.1beta2
