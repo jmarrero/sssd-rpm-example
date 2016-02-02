@@ -598,7 +598,6 @@ make %{?_smp_mflags} check VERBOSE=yes
 unset CK_TIMEOUT_MULTIPLIER
 
 %install
-rm -rf $RPM_BUILD_ROOT
 
 sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
 
@@ -705,10 +704,6 @@ do
     echo "sssd_$provider.lang:"
     cat sssd_$provider.lang
 done
-
-
-%clean
-rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(-,root,root,-)
