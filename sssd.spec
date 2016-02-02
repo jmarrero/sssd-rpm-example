@@ -507,7 +507,6 @@ the information from the SSSD to be transmitted over the system bus.
 Summary: The SSSD D-Bus responder helper library
 Group: Development/Libraries
 License: GPLv3+
-Requires: dbus-libs
 Requires: sssd-dbus = %{version}-%{release}
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
@@ -1031,6 +1030,10 @@ fi
 %post -n libsss_nss_idmap -p /sbin/ldconfig
 
 %postun -n libsss_nss_idmap -p /sbin/ldconfig
+
+%post -n libsss_simpleifp -p /sbin/ldconfig
+
+%postun -n libsss_simpleifp -p /sbin/ldconfig
 
 %posttrans libwbclient
 # Alternatives was removed only if package was uninstalled
