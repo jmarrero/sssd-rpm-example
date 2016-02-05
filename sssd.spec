@@ -24,7 +24,7 @@
 
 Name: sssd
 Version: 1.13.3
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1067,6 +1067,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Feb 05 2016 Fedora Release Engineering <releng@fedoraproject.org> - 1.13.3-4
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_24_Mass_Rebuild
+
 * Wed Jan 20 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.3-3
 - Additional upstream fixes
 
