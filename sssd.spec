@@ -95,7 +95,6 @@ Requires: sssd-common = %{version}-%{release}
 Requires: sssd-ldap = %{version}-%{release}
 Requires: sssd-krb5 = %{version}-%{release}
 Requires: sssd-ipa = %{version}-%{release}
-Requires: sssd-common-pac = %{version}-%{release}
 Requires: sssd-ad = %{version}-%{release}
 Requires: sssd-proxy = %{version}-%{release}
 Requires: python3-sssdconfig = %{version}-%{release}
@@ -179,10 +178,6 @@ License: GPLv3+
 Conflicts: selinux-policy < 3.10.0-46
 Conflicts: sssd < 1.10.0-8%{?dist}.beta2
 # Requires
-
-Requires: libldb%{?_isa} >= %{ldb_version}
-
-Requires: libtdb%{?_isa} >= 1.1.3
 Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: libsss_sudo = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
