@@ -180,6 +180,7 @@ Conflicts: sssd < 1.10.0-8%{?dist}.beta2
 # Requires
 Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: libsss_sudo = %{version}-%{release}
+Requires: libsss_autofs%{?_isa} = %{version}-%{release}
 Requires: libsss_idmap%{?_isa} = %{version}-%{release}
 Requires(post): systemd-units chkconfig
 Requires(preun): systemd-units chkconfig
@@ -189,8 +190,6 @@ Requires(postun): systemd-units chkconfig
 ### Provides ###
 Provides: libsss_sudo-devel = %{version}-%{release}
 Obsoletes: libsss_sudo-devel <= 1.10.0-7%{?dist}.beta1
-Provides: libsss_autofs = %{version}-%{release}
-Obsoletes: libsss_autofs <= 1.10.0-7%{?dist}.beta1
 
 %description common
 Common files for the SSSD. The common package includes all the files needed
@@ -219,6 +218,14 @@ Requires(postun): /sbin/ldconfig
 
 %description -n libsss_sudo
 A utility library to allow communication between SUDO and SSSD
+
+%package -n libsss_autofs
+Summary: A library to allow communication between Autofs and SSSD
+Group: Development/Libraries
+License: LGPLv3+
+
+%description -n libsss_autofs
+A utility library to allow communication between Autofs and SSSD
 
 %package tools
 Summary: Userspace tools for use with the SSSD
@@ -733,8 +740,6 @@ done
 %{_libdir}/%{name}/libsss_semanage.so
 
 # 3rd party application libraries
-%dir %{_libdir}/%{name}/modules
-%{_libdir}/%{name}/modules/libsss_autofs.so
 %{_libdir}/libnfsidmap/sss.so
 
 %{ldb_modulesdir}/memberof.so
@@ -867,6 +872,12 @@ done
 %defattr(-,root,root,-)
 %doc src/sss_client/COPYING
 %{_libdir}/libsss_sudo.so*
+
+%files -n libsss_autofs
+%defattr(-,root,root,-)
+%doc src/sss_client/COPYING src/sss_client/COPYING.LESSER
+%dir %{_libdir}/%{name}/modules
+%{_libdir}/%{name}/modules/libsss_autofs.so
 
 %files tools -f sssd_tools.lang
 %defattr(-,root,root,-)
