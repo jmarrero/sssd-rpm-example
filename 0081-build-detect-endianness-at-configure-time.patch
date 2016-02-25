@@ -1,0 +1,37 @@
+From 245710d26dfa11db998f8a1406b086e76fb8f49b Mon Sep 17 00:00:00 2001
+From: David Disseldorp <ddiss@samba.org>
+Date: Wed, 24 Feb 2016 17:18:00 +0100
+Subject: [PATCH 81/86] build: detect endianness at configure time
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+WORDS_BIGENDIAN, HAVE_BIG_ENDIAN and HAVE_LITTLE_ENDIAN are needed by
+Samba. See Samba's byteorder.h header for an example.
+
+Signed-off-by: David Disseldorp <ddiss@samba.org>
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit faa16fc9f0c9a02b26497e7cf148a92586144c08)
+(cherry picked from commit 15ccbb564d5cc7d6fc8e856811b7ed71c0e220a9)
+---
+ configure.ac | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/configure.ac b/configure.ac
+index 8ef2493c79a144d348200213f0ce1681d0fa3c1f..aebb3c3e9e8d3702295b1b5da28a04c46303af9b 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -76,6 +76,9 @@ AC_CHECK_FUNCS([ utimensat \
+ #Check for endian headers
+ AC_CHECK_HEADERS([endian.h sys/endian.h byteswap.h])
+ 
++AC_C_BIGENDIAN([AC_DEFINE(HAVE_BIG_ENDIAN, [1], [whether platform is big endian])],
++               [AC_DEFINE(HAVE_LITTLE_ENDIAN, [1], [whether platform is little endian])])
++
+ #Set the NSS library install path
+ AC_ARG_ENABLE([nsslibdir], [AS_HELP_STRING([--enable-nsslibdir],
+                                         [Where to install nss libraries ($libdir)])],
+-- 
+2.5.0
+

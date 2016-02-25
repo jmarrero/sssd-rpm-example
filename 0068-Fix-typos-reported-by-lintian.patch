@@ -1,0 +1,197 @@
+From 7832b422ec442ec2d80cf00bb1189ac2f38a783b Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 12 Feb 2016 22:05:21 +0100
+Subject: [PATCH 68/86] Fix typos reported by lintian
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit 42604cc8d11743febf5aa892cb3a7d3c32bfed48)
+(cherry picked from commit 7870820e8b188d755fef9fb31ef95b518c0f905b)
+---
+ src/ldb_modules/memberof.c            | 10 +++++-----
+ src/providers/krb5/krb5_utils.c       |  2 +-
+ src/providers/ldap/sdap.c             |  2 +-
+ src/python/pysss.c                    |  2 +-
+ src/responder/common/negcache.c       |  2 +-
+ src/responder/nss/nsssrv_mmap_cache.c |  2 +-
+ src/responder/pam/pamsrv_p11.c        |  2 +-
+ src/tools/tools_util.c                |  2 +-
+ src/util/nscd.c                       |  6 +++---
+ 9 files changed, 15 insertions(+), 15 deletions(-)
+
+diff --git a/src/ldb_modules/memberof.c b/src/ldb_modules/memberof.c
+index 4d7b23ea1b95bed0ec5c7cc717b95e6da3cd0717..83d93196c34854d75fcd8ac91ad056f64b26b659 100644
+--- a/src/ldb_modules/memberof.c
++++ b/src/ldb_modules/memberof.c
+@@ -411,7 +411,7 @@ static int mbof_add_fill_ghop_ex(struct mbof_add_ctx *add_ctx,
+         return LDB_SUCCESS;
+ 
+     default:
+-        /* an error occured, return */
++        /* an error occurred, return */
+         return ret;
+     }
+ 
+@@ -911,7 +911,7 @@ static int mbof_add_operation(struct mbof_add_operation *addop)
+         break;
+ 
+     default:
+-        /* an error occured, return */
++        /* an error occurred, return */
+         return ret;
+     }
+ 
+@@ -2133,7 +2133,7 @@ static int mbof_del_mod_entry(struct mbof_del_operation *delop)
+         is_user = false;
+         break;
+     default:
+-        /* an error occured, return */
++        /* an error occurred, return */
+         return ret;
+     }
+ 
+@@ -2457,7 +2457,7 @@ static int mbof_del_fill_muop(struct mbof_del_ctx *del_ctx,
+         return LDB_SUCCESS;
+ 
+     default:
+-        /* an error occured, return */
++        /* an error occurred, return */
+         return ret;
+     }
+ 
+@@ -2520,7 +2520,7 @@ static int mbof_del_fill_ghop_ex(struct mbof_del_ctx *del_ctx,
+         return LDB_SUCCESS;
+ 
+     default:
+-        /* an error occured, return */
++        /* an error occurred, return */
+         return ret;
+     }
+ 
+diff --git a/src/providers/krb5/krb5_utils.c b/src/providers/krb5/krb5_utils.c
+index 0b73880eca6015fc9dffa4a850b230afc5dfddfc..7fd490514a52f0bfa3f1ced75f2b6496a77dada6 100644
+--- a/src/providers/krb5/krb5_utils.c
++++ b/src/providers/krb5/krb5_utils.c
+@@ -386,7 +386,7 @@ char *expand_ccname_template(TALLOC_CTX *mem_ctx, struct krb5child_req *kr,
+                     rerun = true;
+                     continue;
+                 } else if (strncmp(n , S_EXP_EUID, L_EXP_EUID) == 0) {
+-                    /* SSSD does not distinguish betwen uid and euid,
++                    /* SSSD does not distinguish between uid and euid,
+                      * so we treat both the same way */
+                     action = 'U';
+                     n += L_EXP_EUID - 1;
+diff --git a/src/providers/ldap/sdap.c b/src/providers/ldap/sdap.c
+index f9b9ff7e6913c406547f36d341300b936e121693..c0863a6d5bbe4f8f074e25634cb5e236075ce55a 100644
+--- a/src/providers/ldap/sdap.c
++++ b/src/providers/ldap/sdap.c
+@@ -1284,7 +1284,7 @@ int sdap_get_server_opts_from_rootdse(TALLOC_CTX *memctx,
+                     break;
+                 default:
+                     DEBUG(SSSDBG_CRIT_FAILURE,
+-                          "Unkown error (%d) checking rootdse!\n", ret);
++                          "Unknown error (%d) checking rootdse!\n", ret);
+                 }
+             } else {
+                 if (!entry_usn_name) {
+diff --git a/src/python/pysss.c b/src/python/pysss.c
+index 50f80421739e579ff94e5b8d1c5b97433b460e06..6bd8f5a9261aefe5b8ca90998e14878dd3896eef 100644
+--- a/src/python/pysss.c
++++ b/src/python/pysss.c
+@@ -461,7 +461,7 @@ static PyObject *py_sss_usermod(PySssLocalObject *self,
+ 
+     if (lock && lock != DO_LOCK && lock != DO_UNLOCK) {
+         PyErr_SetString(PyExc_ValueError,
+-                        "Unkown value for lock parameter");
++                        "Unknown value for lock parameter");
+         goto fail;
+     }
+ 
+diff --git a/src/responder/common/negcache.c b/src/responder/common/negcache.c
+index f7af9e0280737f6c89c3034e8b19a6ecd393d355..5b0517ceba85d6e35515a935423412314c218143 100644
+--- a/src/responder/common/negcache.c
++++ b/src/responder/common/negcache.c
+@@ -806,7 +806,7 @@ errno_t sss_ncache_prepopulate(struct sss_nc_ctx *ncache,
+ 
+             if (domainname && strcmp(domainname, dom->name)) {
+                 DEBUG(SSSDBG_CRIT_FAILURE,
+-                      "Mismatch betwen domain name (%s) and name "
++                      "Mismatch between domain name (%s) and name "
+                           "set in FQN  (%s), skipping group %s\n",
+                           dom->name, domainname, name);
+                 continue;
+diff --git a/src/responder/nss/nsssrv_mmap_cache.c b/src/responder/nss/nsssrv_mmap_cache.c
+index 62f4c543c628712810b6dfbc669c586c39ca609d..f7f62733941cd3ae3b071d6d54c801f9be1ce800 100644
+--- a/src/responder/nss/nsssrv_mmap_cache.c
++++ b/src/responder/nss/nsssrv_mmap_cache.c
+@@ -1348,7 +1348,7 @@ errno_t sss_mmap_cache_reinit(TALLOC_CTX *mem_ctx, size_t n_elem,
+ 
+     if (mc_ctx == NULL || (*mc_ctx) == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+-              "Unable to re-init unitialized memory cache.\n");
++              "Unable to re-init uninitialized memory cache.\n");
+         return EINVAL;
+     }
+ 
+diff --git a/src/responder/pam/pamsrv_p11.c b/src/responder/pam/pamsrv_p11.c
+index ad1670136dbf8efc41df6950af744ff8b06e6a11..7a8002c2828c14e55ef2d827e37398035a0c6726 100644
+--- a/src/responder/pam/pamsrv_p11.c
++++ b/src/responder/pam/pamsrv_p11.c
+@@ -144,7 +144,7 @@ static errno_t parse_p11_child_response(TALLOC_CTX *mem_ctx, uint8_t *buf,
+ 
+     if (buf_len < 0) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+-              "Error occured while reading data from p11_child.\n");
++              "Error occurred while reading data from p11_child.\n");
+         return EIO;
+     }
+ 
+diff --git a/src/tools/tools_util.c b/src/tools/tools_util.c
+index 68f6588ea887da6391159fa59916fdece102472b..3112171a6c06a50b7099f1c1b58ea1ad581c7cb3 100644
+--- a/src/tools/tools_util.c
++++ b/src/tools/tools_util.c
+@@ -324,7 +324,7 @@ fini:
+  * Check is path is owned by uid
+  * returns  0 - owns
+  *         -1 - does not own
+- *         >0 - an error occured, error code
++ *         >0 - an error occurred, error code
+  */
+ static int is_owner(uid_t uid, const char *path)
+ {
+diff --git a/src/util/nscd.c b/src/util/nscd.c
+index f58aebcad69924bdd841a4bb51aedb0308237ac4..ab29f3d271970911a0c1467b83147ba4774c1ecb 100644
+--- a/src/util/nscd.c
++++ b/src/util/nscd.c
+@@ -139,7 +139,7 @@ errno_t sss_nscd_parse_conf(const char *conf_path)
+ {
+     FILE *fp;
+     int ret = EOK;
+-    unsigned int occured = 0;
++    unsigned int occurred = 0;
+     char *line, *entry, *service, *enabled, *pad;
+     size_t linelen = 0;
+ 
+@@ -195,7 +195,7 @@ errno_t sss_nscd_parse_conf(const char *conf_path)
+         if (!strcmp(entry, "enable-cache") &&
+             !strcmp(enabled, "yes")) {
+ 
+-            occured |= sss_nscd_check_service(service);
++            occurred |= sss_nscd_check_service(service);
+         }
+     };
+ 
+@@ -209,7 +209,7 @@ errno_t sss_nscd_parse_conf(const char *conf_path)
+     }
+ 
+     ret = EOK;
+-    if (occured != 0) {
++    if (occurred != 0) {
+         ret = EEXIST;
+         goto done;
+     }
+-- 
+2.5.0
+

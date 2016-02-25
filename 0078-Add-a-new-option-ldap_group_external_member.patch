@@ -1,0 +1,178 @@
+From 7dcecb5e2fb9fe83c3bbf52306e7c2b0365ff96d Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 25 Jan 2016 16:03:23 +0100
+Subject: [PATCH 78/86] Add a new option ldap_group_external_member
+
+Required for:
+    https://fedorahosted.org/sssd/ticket/2522
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 3cf7fdfcaedb986f42a6640e26aa057007b64045)
+(cherry picked from commit 7db3bdfd6b1b845866c1ff062d25de5804141e89)
+---
+ src/config/SSSDConfig/__init__.py.in     |  1 +
+ src/config/etc/sssd.api.d/sssd-ad.conf   |  1 +
+ src/config/etc/sssd.api.d/sssd-ipa.conf  |  1 +
+ src/config/etc/sssd.api.d/sssd-ldap.conf |  1 +
+ src/db/sysdb.h                           |  1 +
+ src/man/sssd-ldap.5.xml                  | 16 ++++++++++++++++
+ src/providers/ad/ad_opts.c               |  1 +
+ src/providers/ipa/ipa_opts.c             |  1 +
+ src/providers/ldap/ldap_opts.c           |  3 +++
+ src/providers/ldap/sdap.h                |  1 +
+ 10 files changed, 27 insertions(+)
+
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index 09284fdd7c8e630b3745367b33b8ea0424ff466f..a400c831eb0e44f562c010f2a3649def21913287 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -333,6 +333,7 @@ option_strings = {
+     'ldap_group_objectsid' : _("objectSID attribute"),
+     'ldap_group_modify_timestamp' : _('Modification time attribute for groups'),
+     'ldap_group_type' : _('Type of the group and other flags'),
++    'ldap_group_external_member' : _('The LDAP group external member attribute'),
+     #replaced by ldap_entry_usn# 'ldap_group_entry_usn' : _('entryUSN attribute'),
+     'ldap_group_nesting_level' : _('Maximum nesting level SSSd will follow'),
+ 
+diff --git a/src/config/etc/sssd.api.d/sssd-ad.conf b/src/config/etc/sssd.api.d/sssd-ad.conf
+index 149590f4f30de3438f2fc5534ae65c98ee0f10ad..23006d26ca6fe7ca2b912ef091b4c73d5d23bee1 100644
+--- a/src/config/etc/sssd.api.d/sssd-ad.conf
++++ b/src/config/etc/sssd.api.d/sssd-ad.conf
+@@ -110,6 +110,7 @@ ldap_group_objectsid = str, None, false
+ ldap_group_modify_timestamp = str, None, false
+ ldap_group_entry_usn = str, None, false
+ ldap_group_type = int, None, false
++ldap_group_external_member = str, None, false
+ ldap_force_upper_case_realm = bool, None, false
+ ldap_group_nesting_level = int, None, false
+ ldap_netgroup_search_base = str, None, false
+diff --git a/src/config/etc/sssd.api.d/sssd-ipa.conf b/src/config/etc/sssd.api.d/sssd-ipa.conf
+index 822599db6390ad2244a71db770c0b162345a3321..8cd20c0c621a513ca7bc85be6908de41d024b148 100644
+--- a/src/config/etc/sssd.api.d/sssd-ipa.conf
++++ b/src/config/etc/sssd.api.d/sssd-ipa.conf
+@@ -104,6 +104,7 @@ ldap_group_objectsid = str, None, false
+ ldap_group_modify_timestamp = str, None, false
+ ldap_group_entry_usn = str, None, false
+ ldap_group_type = int, None, false
++ldap_group_external_member = str, None, false
+ ldap_force_upper_case_realm = bool, None, false
+ ldap_group_nesting_level = int, None, false
+ ldap_netgroup_search_base = str, None, false
+diff --git a/src/config/etc/sssd.api.d/sssd-ldap.conf b/src/config/etc/sssd.api.d/sssd-ldap.conf
+index fc9fcefce94891760a3f3ada4c044dbcaf156945..8b52f268af195bc68d45389cda52a0ad0aba1aa3 100644
+--- a/src/config/etc/sssd.api.d/sssd-ldap.conf
++++ b/src/config/etc/sssd.api.d/sssd-ldap.conf
+@@ -98,6 +98,7 @@ ldap_group_objectsid = str, None, false
+ ldap_group_modify_timestamp = str, None, false
+ ldap_group_entry_usn = str, None, false
+ ldap_group_type = int, None, false
++ldap_group_external_member = str, None, false
+ ldap_group_nesting_level = int, None, false
+ ldap_force_upper_case_realm = bool, None, false
+ ldap_netgroup_search_base = str, None, false
+diff --git a/src/db/sysdb.h b/src/db/sysdb.h
+index 2e797fd7fa39163c2ab6a10e51228e0f1af3f9e3..95a9086766228a6c36c56d3a68a0bb0e493c0cbe 100644
+--- a/src/db/sysdb.h
++++ b/src/db/sysdb.h
+@@ -81,6 +81,7 @@
+ #define SYSDB_USER_CATEGORY "userCategory"
+ #define SYSDB_HOST_CATEGORY "hostCategory"
+ #define SYSDB_GROUP_TYPE "groupType"
++#define SYSDB_EXTERNAL_MEMBER "externalMember"
+ 
+ #define SYSDB_GECOS "gecos"
+ #define SYSDB_LAST_LOGIN "lastLogin"
+diff --git a/src/man/sssd-ldap.5.xml b/src/man/sssd-ldap.5.xml
+index 66b9024bcdc6faced67c4e44f9cde7caa9a5ecc8..a30100408c6e77f9156878cb6ff63dfbf7b041d1 100644
+--- a/src/man/sssd-ldap.5.xml
++++ b/src/man/sssd-ldap.5.xml
+@@ -942,6 +942,22 @@
+                 </varlistentry>
+ 
+                 <varlistentry>
++                    <term>ldap_group_external_member (string)</term>
++                    <listitem>
++                        <para>
++                            The LDAP attribute that references group
++                            members that are defined in an external
++                            domain. At the moment, only IPA's external
++                            members are supported.
++                        </para>
++                        <para>
++                            Default: ipaExternalMember in the IPA provider,
++                            otherwise unset.
++                        </para>
++                    </listitem>
++                </varlistentry>
++
++                <varlistentry>
+                     <term>ldap_group_nesting_level (integer)</term>
+                     <listitem>
+                         <para>
+diff --git a/src/providers/ad/ad_opts.c b/src/providers/ad/ad_opts.c
+index 28d4768b20bd035f7c1971c95f9b6b690844816e..15024adb7959de9e16cdc92ca30daa74bb5f648d 100644
+--- a/src/providers/ad/ad_opts.c
++++ b/src/providers/ad/ad_opts.c
+@@ -233,6 +233,7 @@ struct sdap_attr_map ad_2008r2_group_map[] = {
+     { "ldap_group_modify_timestamp", "whenChanged", SYSDB_ORIG_MODSTAMP, NULL },
+     { "ldap_group_entry_usn", SDAP_AD_USN, SYSDB_USN, NULL },
+     { "ldap_group_type", "groupType", SYSDB_GROUP_TYPE, NULL },
++    { "ldap_group_external_member", NULL, SYSDB_EXTERNAL_MEMBER, NULL },
+     SDAP_ATTR_MAP_TERMINATOR
+ };
+ 
+diff --git a/src/providers/ipa/ipa_opts.c b/src/providers/ipa/ipa_opts.c
+index cd87852e5891fd43d7ec728f76860f3050a54d2f..fe469852b527ad872502b3346c8c11ef9eea3bcd 100644
+--- a/src/providers/ipa/ipa_opts.c
++++ b/src/providers/ipa/ipa_opts.c
+@@ -219,6 +219,7 @@ struct sdap_attr_map ipa_group_map[] = {
+     { "ldap_group_modify_timestamp", "modifyTimestamp", SYSDB_ORIG_MODSTAMP, NULL },
+     { "ldap_group_entry_usn", NULL, SYSDB_USN, NULL },
+     { "ldap_group_type", NULL, SYSDB_GROUP_TYPE, NULL },
++    { "ldap_group_external_member", "ipaExternalMember", SYSDB_EXTERNAL_MEMBER, NULL },
+     SDAP_ATTR_MAP_TERMINATOR
+ };
+ 
+diff --git a/src/providers/ldap/ldap_opts.c b/src/providers/ldap/ldap_opts.c
+index 84ba2b54271bcb6650e0336131ace8bfc1a40fc8..ff9bf0d8b6d4a8f677e08219e5105e3750b7a4a8 100644
+--- a/src/providers/ldap/ldap_opts.c
++++ b/src/providers/ldap/ldap_opts.c
+@@ -195,6 +195,7 @@ struct sdap_attr_map rfc2307_group_map[] = {
+     { "ldap_group_modify_timestamp", "modifyTimestamp", SYSDB_ORIG_MODSTAMP, NULL },
+     { "ldap_group_entry_usn", NULL, SYSDB_USN, NULL },
+     { "ldap_group_type", NULL, SYSDB_GROUP_TYPE, NULL },
++    { "ldap_group_external_member", NULL, SYSDB_EXTERNAL_MEMBER, NULL },
+     SDAP_ATTR_MAP_TERMINATOR
+ };
+ 
+@@ -251,6 +252,7 @@ struct sdap_attr_map rfc2307bis_group_map[] = {
+     { "ldap_group_modify_timestamp", "modifyTimestamp", SYSDB_ORIG_MODSTAMP, NULL },
+     { "ldap_group_entry_usn", NULL, SYSDB_USN, NULL },
+     { "ldap_group_type", NULL, SYSDB_GROUP_TYPE, NULL },
++    { "ldap_group_external_member", NULL, SYSDB_EXTERNAL_MEMBER, NULL },
+     SDAP_ATTR_MAP_TERMINATOR
+ };
+ 
+@@ -307,6 +309,7 @@ struct sdap_attr_map gen_ad2008r2_group_map[] = {
+     { "ldap_group_modify_timestamp", "whenChanged", SYSDB_ORIG_MODSTAMP, NULL },
+     { "ldap_group_entry_usn", SDAP_AD_USN, SYSDB_USN, NULL },
+     { "ldap_group_type", "groupType", SYSDB_GROUP_TYPE, NULL },
++    { "ldap_group_external_member", NULL, SYSDB_EXTERNAL_MEMBER, NULL },
+     SDAP_ATTR_MAP_TERMINATOR
+ };
+ 
+diff --git a/src/providers/ldap/sdap.h b/src/providers/ldap/sdap.h
+index e06f2b6ac47990f21985fb86f8ad3f3ae5a74df3..9dc2e16a0da76246a1f4492cf70e9124edba4a31 100644
+--- a/src/providers/ldap/sdap.h
++++ b/src/providers/ldap/sdap.h
+@@ -304,6 +304,7 @@ enum sdap_group_attrs {
+     SDAP_AT_GROUP_MODSTAMP,
+     SDAP_AT_GROUP_USN,
+     SDAP_AT_GROUP_TYPE,
++    SDAP_AT_GROUP_EXT_MEMBER,
+ 
+     SDAP_OPTS_GROUP /* attrs counter */
+ };
+-- 
+2.5.0
+

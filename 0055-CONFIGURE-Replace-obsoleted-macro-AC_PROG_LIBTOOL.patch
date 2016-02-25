@@ -1,0 +1,30 @@
+From 92281a16d6e8988dec661fe40eac6361b7bcfb4a Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 1 Feb 2016 09:34:08 +0100
+Subject: [PATCH 55/86] CONFIGURE: Replace obsoleted macro AC_PROG_LIBTOOL
+
+The AC_PROG_LIBTOOL macro is obsoleted since libtool 2.0
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 700d45751e997c634504a4f22facd2edf82edea7)
+(cherry picked from commit dba300fe84fe40919a17a82bc4f4b9b672ed195d)
+---
+ configure.ac | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index 1ab64765968e9ffe94da9075496be2491bf33e9a..8ef2493c79a144d348200213f0ce1681d0fa3c1f 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -19,7 +19,7 @@ AM_PROG_CC_C_O
+ m4_ifdef([AM_PROG_AR], [AM_PROG_AR])
+ AC_DISABLE_STATIC
+ AC_PROG_INSTALL
+-AC_PROG_LIBTOOL
++LT_INIT
+ m4_ifdef([AC_PROG_MKDIR_P],
+          [AC_PROG_MKDIR_P],
+          [AC_SUBST([MKDIR_P], "mkdir -p")])
+-- 
+2.5.0
+

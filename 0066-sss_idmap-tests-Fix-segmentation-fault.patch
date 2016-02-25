@@ -1,0 +1,51 @@
+From 5897690a889c6f2a11135d1ed33089409ddb8c57 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 17 Feb 2016 17:23:37 +0100
+Subject: [PATCH 66/86] sss_idmap-tests: Fix segmentation fault
+
+I can reproduce it only with clang.
+But it's tipical off by one error.
+
+sh$ ./sss_idmap-tests
+Running suite(s): IDMAP
+Segmentation fault (core dumped)
+
+Running suite(s): IDMAP
+==2644== Process terminating with default action of signal 11 (SIGSEGV)
+==2644==  Access not within mapped region at address 0xA08F430
+==2644==    at 0x4C2CC53: strcmp (vg_replace_strmem.c:842)
+==2644==    by 0x4060DA: idmap_test_sid2uid_additional_secondary_slices (sss_idmap-tests.c:451)
+==2644==    by 0x503C78A: ??? (in /usr/lib64/libcheck.so.0.0.0)
+==2644==    by 0x503CB7C: srunner_run (in /usr/lib64/libcheck.so.0.0.0)
+==2644==    by 0x4061EE: main (sss_idmap-tests.c:965)
+==2644==  If you believe this happened as a result of a stack
+==2644==  overflow in your program's main thread (unlikely but
+==2644==  possible), you can try to increase the size of the
+==2644==  main thread stack using the --main-stacksize= flag.
+==2644==  The main thread stack size used in this run was 8388608.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 4f3a996561445ba82c854bb2b674f975f596e884)
+(cherry picked from commit 999af61d6a55bf816d86dbfc94214383436b18d3)
+---
+ src/tests/sss_idmap-tests.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/tests/sss_idmap-tests.c b/src/tests/sss_idmap-tests.c
+index 900b7bff1cd4f3c6f9cdffc4b012864d05e72913..885913645ed286636758f3f48a5a62d87cc9ab75 100644
+--- a/src/tests/sss_idmap-tests.c
++++ b/src/tests/sss_idmap-tests.c
+@@ -427,8 +427,8 @@ START_TEST(idmap_test_sid2uid_additional_secondary_slices)
+     struct TALLOC_CTX *tmp_ctx;
+     const char *dom_prefix = "S-1-5-21-1-2-3";
+     const int max_rid = 80;
+-    const char *sids[max_rid];
+-    unsigned int ids[max_rid];
++    const char *sids[max_rid + 1];
++    unsigned int ids[max_rid + 1];
+ 
+     tmp_ctx = talloc_new(NULL);
+     fail_unless(tmp_ctx != NULL, "Out of memory.");
+-- 
+2.5.0
+

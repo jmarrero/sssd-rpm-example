@@ -1,0 +1,97 @@
+From 55928e9989e53b8333ce44cded97ce244b5ce048 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 11 Jan 2016 11:06:22 +0100
+Subject: [PATCH 70/86] UTIL: Provide varargs version of debug_fn
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit 22bbd95a48d21452fa5bb1a96b43334503bf8132)
+(cherry picked from commit c99096a5f0a6e47c50e91ecd9ebbdf2a18195fa8)
+---
+ src/util/debug.c | 29 +++++++++++++++++++----------
+ src/util/util.h  |  6 ++++++
+ 2 files changed, 25 insertions(+), 10 deletions(-)
+
+diff --git a/src/util/debug.c b/src/util/debug.c
+index 570c80273c0bdda1cc8df0e6af825595cfa339e0..1b7aef467ff336e3316ab39f3a7d0b22ff3a0ed0 100644
+--- a/src/util/debug.c
++++ b/src/util/debug.c
+@@ -206,13 +206,13 @@ journal_done:
+ }
+ #endif /* WiTH_JOURNALD */
+ 
+-void sss_debug_fn(const char *file,
+-                  long line,
+-                  const char *function,
+-                  int level,
+-                  const char *format, ...)
++void sss_vdebug_fn(const char *file,
++                   long line,
++                   const char *function,
++                   int level,
++                   const char *format,
++                   va_list ap)
+ {
+-    va_list ap;
+     struct timeval tv;
+     struct tm *tm;
+     char datetime[20];
+@@ -230,10 +230,8 @@ void sss_debug_fn(const char *file,
+          * can also provide extra structuring data to make it more easily
+          * searchable.
+          */
+-        va_start(ap, format);
+         va_copy(ap_fallback, ap);
+         ret = journal_send(file, line, function, level, format, ap);
+-        va_end(ap);
+         if (ret != EOK) {
+             /* Emergency fallback, send to STDERR */
+             debug_vprintf(format, ap_fallback);
+@@ -266,12 +264,23 @@ void sss_debug_fn(const char *file,
+                      debug_prg_name, function, level);
+     }
+ 
+-    va_start(ap, format);
+     debug_vprintf(format, ap);
+-    va_end(ap);
+     debug_fflush();
+ }
+ 
++void sss_debug_fn(const char *file,
++                  long line,
++                  const char *function,
++                  int level,
++                  const char *format, ...)
++{
++    va_list ap;
++
++    va_start(ap, format);
++    sss_vdebug_fn(file, line, function, level, format, ap);
++    va_end(ap);
++}
++
+ void ldb_debug_messages(void *context, enum ldb_debug_level level,
+                         const char *fmt, va_list ap)
+ {
+diff --git a/src/util/util.h b/src/util/util.h
+index 0b50d5abf6f1651dcf350e2c235702b5a21536d1..9b5262995630b1b98f8658b3c32e1b83b0d31307 100644
+--- a/src/util/util.h
++++ b/src/util/util.h
+@@ -71,6 +71,12 @@ extern int debug_microseconds;
+ extern int debug_to_file;
+ extern int debug_to_stderr;
+ extern const char *debug_log_file;
++void sss_vdebug_fn(const char *file,
++                   long line,
++                   const char *function,
++                   int level,
++                   const char *format,
++                   va_list ap);
+ void sss_debug_fn(const char *file,
+                   long line,
+                   const char *function,
+-- 
+2.5.0
+

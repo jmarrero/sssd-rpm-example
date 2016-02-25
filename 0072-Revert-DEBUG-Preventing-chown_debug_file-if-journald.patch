@@ -1,0 +1,75 @@
+From 910cd1c35859213319537072c48429e768b53b86 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 25 Jan 2016 11:46:54 +0100
+Subject: [PATCH 72/86] Revert "DEBUG: Preventing chown_debug_file if journald
+ on"
+
+This reverts commit 6e2822b151c21ce6e3287a0cf25d40e9f10a6127.
+
+The function chown_debug_file is called before initialization
+of debug stuff in sssd. Therefore variable debug_file cannot be
+initialized. Therefore reverted commit completely turned off
+changing owner of debug files. Side effect of this change
+was that annoying error messages was not logged in case of
+journald.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2938
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 9f1186e7be7ece4d2b9bbbe444d3fc42ab57b808)
+---
+ src/util/debug.c | 35 ++++++++++++++++-------------------
+ 1 file changed, 16 insertions(+), 19 deletions(-)
+
+diff --git a/src/util/debug.c b/src/util/debug.c
+index 03dc26d6d4e976866a3f9395598840e28997f69a..d10b456acd14f32590e8b4111596f95a555ac828 100644
+--- a/src/util/debug.c
++++ b/src/util/debug.c
+@@ -316,27 +316,24 @@ int chown_debug_file(const char *filename,
+     const char *log_file;
+     errno_t ret;
+ 
+-    if (debug_file) {
++    if (filename == NULL) {
++        log_file = debug_log_file;
++    } else {
++        log_file = filename;
++    }
+ 
+-        if (filename == NULL) {
+-            log_file = debug_log_file;
+-        } else {
+-            log_file = filename;
+-        }
++    ret = asprintf(&logpath, "%s/%s.log", LOG_PATH, log_file);
++    if (ret == -1) {
++        return ENOMEM;
++    }
+ 
+-        ret = asprintf(&logpath, "%s/%s.log", LOG_PATH, log_file);
+-        if (ret == -1) {
+-            return ENOMEM;
+-        }
+-
+-        ret = chown(logpath, uid, gid);
+-        free(logpath);
+-        if (ret != 0) {
+-            ret = errno;
+-            DEBUG(SSSDBG_FATAL_FAILURE, "chown failed for [%s]: [%d]\n",
+-                  log_file, ret);
+-            return ret;
+-        }
++    ret = chown(logpath, uid, gid);
++    free(logpath);
++    if (ret != 0) {
++        ret = errno;
++        DEBUG(SSSDBG_FATAL_FAILURE, "chown failed for [%s]: [%d]\n",
++              log_file, ret);
++        return ret;
+     }
+ 
+     return EOK;
+-- 
+2.5.0
+

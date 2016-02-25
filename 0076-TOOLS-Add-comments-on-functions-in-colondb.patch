@@ -1,0 +1,74 @@
+From 3ca35b1781ef5a1f50c5165882b9ff4cebbbb7ac Mon Sep 17 00:00:00 2001
+From: Petr Cech <pcech@redhat.com>
+Date: Tue, 24 Nov 2015 10:34:10 -0500
+Subject: [PATCH 76/86] TOOLS: Add comments on functions in colondb
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The colondb API provides three function:
+* sss_colondb_open()
+* sss_colondb_write_field()
+* sss_colondb_read_field()
+
+It is not obvious that sss_colondb_open() add destructor on talloc
+context which close the colondb during free context. And there is
+expectation that SSS_COLONDB_SENTINEL is type of last item in line.
+
+So this patch adds simple lightening comments in doxygen style.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/2764
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit cf1109e30320a994187edeb438ac7cdc36f0dd2b)
+(cherry picked from commit fbf7d5683287fa2c7b450b8f5b0df63673f25d83)
+---
+ src/tools/common/sss_colondb.h | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/src/tools/common/sss_colondb.h b/src/tools/common/sss_colondb.h
+index 6edd99cbe3b9ef5c86a48632ac3fc71e8a3e55fe..cb9040088c65fdbe35c787b8942aaf1b14a2778d 100644
+--- a/src/tools/common/sss_colondb.h
++++ b/src/tools/common/sss_colondb.h
+@@ -59,14 +59,37 @@ struct sss_colondb_read_field {
+     union sss_colondb_read_data data;
+ };
+ 
++/**
++ * Open colon DB and return connection.
++ * @param[in|out] mem_ctx Memory context. Internal sss_colondb_close() is set
++ *                        on destructor of this memory context.
++ * @param[in] mode Open mode of db: SSS_COLONDB_READ or SSS_COLONDB_WRITE.
++ * @param[in] filename Name of file.
++ * @return Pointer to structure holding DB connection, or NULL if fail.
++ */
+ struct sss_colondb *sss_colondb_open(TALLOC_CTX *mem_ctx,
+                                      enum sss_colondb_mode mode,
+                                      const char *filename);
+ 
++/**
++ * Read line from colon DB.
++ * @param[in|out] mem_ctx Memory context.
++ * @param[in] db  Pointer to structure holding DB connection.
++ * @param[in|out] table Array of expected structure of line. It is expected
++ *                      that last item has SSS_COLONDB_SENTINEL type.
++ * @return EOK if success, else error code.
++ */
+ errno_t sss_colondb_readline(TALLOC_CTX *mem_ctx,
+                              struct sss_colondb *db,
+                              struct sss_colondb_read_field *table);
+ 
++/**
++ * Write line to colon DB.
++ * @param[in] db Pointer to structure holding DB connection.
++ * @param[in] table Array with data. It is expected that last item has
++ *                  SSS_COLONDB_SENTINEL type.
++ * @return EOK if success, else error code.
++ */
+ errno_t sss_colondb_writeline(struct sss_colondb *db,
+                               struct sss_colondb_write_field *table);
+ 
+-- 
+2.5.0
+

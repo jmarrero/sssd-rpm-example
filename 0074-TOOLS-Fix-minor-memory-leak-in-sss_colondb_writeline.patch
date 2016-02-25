@@ -1,0 +1,39 @@
+From dd7a1a508bdc60b62b5ef4ce22fcf31dace3f3c2 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 19 Feb 2016 16:18:02 +0100
+Subject: [PATCH 74/86] TOOLS: Fix minor memory leak in sss_colondb_writeline
+
+The variable line was initialized to NULL.
+The we created temporary context tmp_ctx.
+We use talloc_asprintf_append to append string to line which is initially
+NULL and therefore new context which was not connected to tmp_ctx.
+    man 3 talloc_string -> talloc_asprintf_append
+
+Reviewed-by: Petr Cech <pcech@redhat.com>
+(cherry picked from commit 6977d7c84145ac69195be58b3330861b9b8a3b72)
+(cherry picked from commit d75ac50d0c065974a7ec2330f60657ae85e487c0)
+---
+ src/tools/common/sss_colondb.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/tools/common/sss_colondb.c b/src/tools/common/sss_colondb.c
+index a41b12fb9c097ff0e03da6d1c5cfe2fb24b63d54..b9af5f7e50c1166ca518a4e342637dc62518c567 100644
+--- a/src/tools/common/sss_colondb.c
++++ b/src/tools/common/sss_colondb.c
+@@ -198,6 +198,13 @@ errno_t sss_colondb_writeline(struct sss_colondb *db,
+         return ENOMEM;
+     }
+ 
++    line = talloc_strdup(tmp_ctx, "");
++    if (line == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_new() failed.\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
+     for (i = 0; table[i].type != SSS_COLONDB_SENTINEL; i++) {
+         switch (table[i].type) {
+         case SSS_COLONDB_UINT32:
+-- 
+2.5.0
+

@@ -1,0 +1,45 @@
+From 90933a2aa0bc149fd8a1ca4feef0527ddfcf7258 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 17 Feb 2016 17:58:10 +0100
+Subject: [PATCH 65/86] UTIL: Backport error code ERR_ACCOUNT_LOCKED
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Required by:
+https://fedorahosted.org/sssd/ticket/2839
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+(cherry picked from commit af717c5b022d5c28141333fc02d5d9e1f322505c)
+---
+ src/util/util_errors.c | 1 +
+ src/util/util_errors.h | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/src/util/util_errors.c b/src/util/util_errors.c
+index 1d684d387b90b8db37609d5bc022e06fcac708f9..59ae63ab8d6e834a772349b162bf282f9a4f1c72 100644
+--- a/src/util/util_errors.c
++++ b/src/util/util_errors.c
+@@ -82,6 +82,7 @@ struct err_string error_to_str[] = {
+     { "Address family not supported" }, /* ERR_ADDR_FAMILY_NOT_SUPPORTED */
+     { "Message sender is the bus" }, /* ERR_SBUS_SENDER_BUS */
+     { "Subdomain is inactive" }, /* ERR_SUBDOM_INACTIVE */
++    { "Account is locked" }, /* ERR_ACCOUNT_LOCKED */
+     { "AD renewal child failed" }, /* ERR_RENEWAL_CHILD */
+     { "ERR_LAST" } /* ERR_LAST */
+ };
+diff --git a/src/util/util_errors.h b/src/util/util_errors.h
+index 5c02fdd8b4c6e0c59f7fd6f66a3fc8a8e48dc607..05791f2f08f107a8b4830b810b8826983763174f 100644
+--- a/src/util/util_errors.h
++++ b/src/util/util_errors.h
+@@ -104,6 +104,7 @@ enum sssd_errors {
+     ERR_ADDR_FAMILY_NOT_SUPPORTED,
+     ERR_SBUS_SENDER_BUS,
+     ERR_SUBDOM_INACTIVE,
++    ERR_ACCOUNT_LOCKED,
+     ERR_RENEWAL_CHILD,
+     ERR_LAST            /* ALWAYS LAST */
+ };
+-- 
+2.5.0
+

@@ -1,0 +1,82 @@
+From 1d7742a2b98c1494af2ce1c3eb3d6850ea1e78e9 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 27 Jan 2016 17:49:45 +0100
+Subject: [PATCH 58/86] PYTHON: Fix pep8 errors in sss_obfuscate
+
+src/tools/sss_obfuscate:12:1: E302 expected 2 blank lines, found 1
+src/tools/sss_obfuscate:29:80: E501 line too long (111 > 79 characters)
+src/tools/sss_obfuscate:35:1: E302 expected 2 blank lines, found 1
+src/tools/sss_obfuscate:47:80: E501 line too long (107 > 79 characters)
+src/tools/sss_obfuscate:50:13: E265 block comment should start with '# '
+src/tools/sss_obfuscate:58:17: E265 block comment should start with '# '
+src/tools/sss_obfuscate:107:5: E303 too many blank lines (2)
+
+Reviewed-by: Martin Basti <mbasti@redhat.com>
+(cherry picked from commit 37ea8e70fa13ff9ba563300fb15de0e5e6185d68)
+(cherry picked from commit f61eb0c92251dbe65a2868aa1ded470d1f2739c8)
+---
+ src/tools/sss_obfuscate | 13 ++++++++-----
+ 1 file changed, 8 insertions(+), 5 deletions(-)
+
+diff --git a/src/tools/sss_obfuscate b/src/tools/sss_obfuscate
+index 68ef30e386ced95b85afbea87696e3c69bea7b51..5981e81410af68fd8123781a5e21a0c7fa3bcb23 100644
+--- a/src/tools/sss_obfuscate
++++ b/src/tools/sss_obfuscate
+@@ -9,6 +9,7 @@ import pysss
+ import SSSDConfig
+ import getpass
+ 
++
+ def parse_options():
+     parser = OptionParser()
+     parser.set_description("sss_obfuscate converts a given password into \
+@@ -26,12 +27,14 @@ def parse_options():
+                       metavar="DOMNAME")
+     parser.add_option("-f", "--file",
+                       dest="filename", default=None,
+-                      help="Set input file to FILE (default: Use system default, usually /etc/sssd/sssd.conf)",
++                      help="Set input file to FILE (default: Use system "
++                           "default, usually /etc/sssd/sssd.conf)",
+                       metavar="FILE")
+     (options, args) = parser.parse_args()
+ 
+     return options, args
+ 
++
+ def main():
+     options, args = parse_options()
+     if not options:
+@@ -44,10 +47,11 @@ def main():
+ 
+     if not options.stdin:
+         try:
+-            pprompt = lambda: (getpass.getpass("Enter password: "), getpass.getpass("Re-enter password: "))
++            pprompt = lambda: (getpass.getpass("Enter password: "),
++                               getpass.getpass("Re-enter password: "))
+             p1, p2 = pprompt()
+ 
+-            #Work around bug in Python 2.6
++            # Work around bug in Python 2.6
+             if '\x03' in p1 or '\x03' in p2:
+                 raise KeyboardInterrupt
+ 
+@@ -55,7 +59,7 @@ def main():
+                 print('Passwords do not match. Try again')
+                 p1, p2 = pprompt()
+ 
+-                #Work around bug in Python 2.6
++                # Work around bug in Python 2.6
+                 if '\x03' in p1 or '\x03' in p2:
+                     raise KeyboardInterrupt
+             password = p1
+@@ -103,7 +107,6 @@ def main():
+               % options.domain)
+         return 1
+ 
+-
+     sssdconfig.save_domain(domain)
+     try:
+         sssdconfig.write()
+-- 
+2.5.0
+

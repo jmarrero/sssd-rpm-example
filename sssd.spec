@@ -24,7 +24,7 @@
 
 Name: sssd
 Version: 1.13.3
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -83,6 +83,37 @@ Patch0047: 0047-p11-add-gnome-screensaver-to-list-of-allowed-service.patch
 Patch0048: 0048-IDMAP-Fix-computing-max-id-for-slice-range.patch
 Patch0049: 0049-IDMAP-New-structure-for-domain-range-params.patch
 Patch0050: 0050-IDMAP-Add-support-for-automatic-adding-of-ranges.patch
+Patch0051: 0051-NSS-do-not-skip-cache-check-for-netgoups.patch
+Patch0052: 0052-cache_req-simplify-cache_req_cache_check.patch
+Patch0053: 0053-cache_req-do-not-lookup-views-if-possible.patch
+Patch0054: 0054-IDMAP-Fix-minor-memory-leak.patch
+Patch0055: 0055-CONFIGURE-Replace-obsoleted-macro-AC_PROG_LIBTOOL.patch
+Patch0056: 0056-TESTS-Fix-race-condition-in-python-test.patch
+Patch0057: 0057-PYTHON-sss_obfuscate-should-work-with-python3.patch
+Patch0058: 0058-PYTHON-Fix-pep8-errors-in-sss_obfuscate.patch
+Patch0059: 0059-IDMAP-Man-change-for-ldap_idmap_range_size-option.patch
+Patch0060: 0060-NSS-Fix-memory-leak-netgroup.patch
+Patch0061: 0061-IDMAP-Add-test-to-validate-off-by-one-bug.patch
+Patch0062: 0062-SDAP-Add-return-code-ERR_ACCOUNT_LOCKED.patch
+Patch0063: 0063-PAM-Pass-account-lockout-status-and-display-message.patch
+Patch0064: 0064-PAM-Fix-man-for-pam_account_-expired-locked-_message.patch
+Patch0065: 0065-UTIL-Backport-error-code-ERR_ACCOUNT_LOCKED.patch
+Patch0066: 0066-sss_idmap-tests-Fix-segmentation-fault.patch
+Patch0067: 0067-krb5_child-Warn-if-user-cannot-read-krb5.conf.patch
+Patch0068: 0068-Fix-typos-reported-by-lintian.patch
+Patch0069: 0069-UTIL-Use-prefix-for-debug-function.patch
+Patch0070: 0070-UTIL-Provide-varargs-version-of-debug_fn.patch
+Patch0071: 0071-UTIL-Use-sss_vdebug_fn-for-callbacks.patch
+Patch0072: 0072-Revert-DEBUG-Preventing-chown_debug_file-if-journald.patch
+Patch0073: 0073-DEBUG-Ignore-ENOENT-for-change-owner-of-log-files.patch
+Patch0074: 0074-TOOLS-Fix-minor-memory-leak-in-sss_colondb_writeline.patch
+Patch0075: 0075-TOOLS-Fix-memory-leak-after-getline-failed.patch
+Patch0076: 0076-TOOLS-Add-comments-on-functions-in-colondb.patch
+Patch0077: 0077-TEST_TOOLS_COLONDB-Add-tests-for-sss_colondb_.patch
+Patch0078: 0078-Add-a-new-option-ldap_group_external_member.patch
+Patch0079: 0079-IPA-Add-interface-to-call-into-IPA-provider-from-LDA.patch
+Patch0080: 0080-LDAP-Use-the-IPA-provider-interface-to-resolve-exter.patch
+Patch0081: 0081-build-detect-endianness-at-configure-time.patch
 Patch0100: 0100-FO-Don-t-free-rc-allocated-structure.patch
 Patch0101: 0101-tests-Reduce-failover-code-duplication.patch
 Patch0102: 0102-FO-Use-refcount-to-keep-track-of-servers-returned-to.patch
@@ -1073,6 +1104,12 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Feb 25 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.3-5
+- Resolves: rhbz#1310664 - [RFE] IPA: resolve external group memberships of IPA
+                           groups during getgrnam and getgrgid
+- Resolves: rhbz#1301303 - sss_obfuscate: SyntaxError: Missing parentheses
+                           in call to 'print'
+
 * Fri Feb 05 2016 Fedora Release Engineering <releng@fedoraproject.org> - 1.13.3-4
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_24_Mass_Rebuild
 
