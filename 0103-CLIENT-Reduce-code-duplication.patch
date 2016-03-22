@@ -1,0 +1,145 @@
+From 78050338d2f356d279f37a416ba77a9568abc1bf Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 26 Feb 2016 16:06:50 +0100
+Subject: [PATCH 103/108] CLIENT: Reduce code duplication
+
+Patch for #2626 will be simpler with this small refactoring
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit a452d199bc125e8d53033d7c00383b4a275ab85e)
+(cherry picked from commit c79e5f222e8de1ddc1cc260c1f3e5e204361580e)
+---
+ src/sss_client/common.c | 68 +++++++++++++++++++++++--------------------------
+ 1 file changed, 32 insertions(+), 36 deletions(-)
+
+diff --git a/src/sss_client/common.c b/src/sss_client/common.c
+index 0d9106a04c30054e6acc9c0c420ccdd43590709a..827f0c2ac3fa12cbe5a282f25ff108fc83bab76c 100644
+--- a/src/sss_client/common.c
++++ b/src/sss_client/common.c
+@@ -829,6 +829,7 @@ int sss_pam_make_request(enum sss_cli_command cmd,
+     enum sss_status status;
+     char *envval;
+     struct stat stat_buf;
++    const char *socket_name;
+ 
+     sss_pam_lock();
+ 
+@@ -841,7 +842,8 @@ int sss_pam_make_request(enum sss_cli_command cmd,
+ 
+     /* only root shall use the privileged pipe */
+     if (getuid() == 0 && getgid() == 0) {
+-        statret = stat(SSS_PAM_PRIV_SOCKET_NAME, &stat_buf);
++        socket_name = SSS_PAM_PRIV_SOCKET_NAME;
++        statret = stat(socket_name, &stat_buf);
+         if (statret != 0) {
+             ret = PAM_SERVICE_ERR;
+             goto out;
+@@ -854,10 +856,9 @@ int sss_pam_make_request(enum sss_cli_command cmd,
+             ret = PAM_SERVICE_ERR;
+             goto out;
+         }
+-
+-        status = sss_cli_check_socket(errnop, SSS_PAM_PRIV_SOCKET_NAME);
+     } else {
+-        statret = stat(SSS_PAM_SOCKET_NAME, &stat_buf);
++        socket_name = SSS_PAM_SOCKET_NAME;
++        statret = stat(socket_name, &stat_buf);
+         if (statret != 0) {
+             ret = PAM_SERVICE_ERR;
+             goto out;
+@@ -870,9 +871,9 @@ int sss_pam_make_request(enum sss_cli_command cmd,
+             ret = PAM_SERVICE_ERR;
+             goto out;
+         }
+-
+-        status = sss_cli_check_socket(errnop, SSS_PAM_SOCKET_NAME);
+     }
++
++    status = sss_cli_check_socket(errnop, socket_name);
+     if (status != SSS_STATUS_SUCCESS) {
+         ret = PAM_SERVICE_ERR;
+         goto out;
+@@ -910,21 +911,32 @@ void sss_pam_close_fd(void)
+     sss_pam_unlock();
+ }
+ 
++static enum sss_status
++sss_cli_make_request_with_checks(enum sss_cli_command cmd,
++                                 struct sss_cli_req_data *rd,
++                                 uint8_t **repbuf, size_t *replen,
++                                 int *errnop,
++                                 const char *socket_name)
++{
++    enum sss_status ret = SSS_STATUS_UNAVAIL;
++
++    ret = sss_cli_check_socket(errnop, socket_name);
++    if (ret != SSS_STATUS_SUCCESS) {
++        return SSS_STATUS_UNAVAIL;
++    }
++
++    ret = sss_cli_make_request_nochecks(cmd, rd, repbuf, replen, errnop);
++
++    return ret;
++}
++
+ int sss_sudo_make_request(enum sss_cli_command cmd,
+                           struct sss_cli_req_data *rd,
+                           uint8_t **repbuf, size_t *replen,
+                           int *errnop)
+ {
+-    enum sss_status ret = SSS_STATUS_UNAVAIL;
+-
+-    ret = sss_cli_check_socket(errnop, SSS_SUDO_SOCKET_NAME);
+-    if (ret != SSS_STATUS_SUCCESS) {
+-        return SSS_STATUS_UNAVAIL;
+-    }
+-
+-    ret = sss_cli_make_request_nochecks(cmd, rd, repbuf, replen, errnop);
+-
+-    return ret;
++    return sss_cli_make_request_with_checks(cmd, rd, repbuf, replen, errnop,
++                                            SSS_SUDO_SOCKET_NAME);
+ }
+ 
+ int sss_autofs_make_request(enum sss_cli_command cmd,
+@@ -932,16 +944,8 @@ int sss_autofs_make_request(enum sss_cli_command cmd,
+                             uint8_t **repbuf, size_t *replen,
+                             int *errnop)
+ {
+-    enum sss_status ret = SSS_STATUS_UNAVAIL;
+-
+-    ret = sss_cli_check_socket(errnop, SSS_AUTOFS_SOCKET_NAME);
+-    if (ret != SSS_STATUS_SUCCESS) {
+-        return SSS_STATUS_UNAVAIL;
+-    }
+-
+-    ret = sss_cli_make_request_nochecks(cmd, rd, repbuf, replen, errnop);
+-
+-    return ret;
++    return sss_cli_make_request_with_checks(cmd, rd, repbuf, replen, errnop,
++                                            SSS_AUTOFS_SOCKET_NAME);
+ }
+ 
+ int sss_ssh_make_request(enum sss_cli_command cmd,
+@@ -949,16 +953,8 @@ int sss_ssh_make_request(enum sss_cli_command cmd,
+                          uint8_t **repbuf, size_t *replen,
+                          int *errnop)
+ {
+-    enum sss_status ret = SSS_STATUS_UNAVAIL;
+-
+-    ret = sss_cli_check_socket(errnop, SSS_SSH_SOCKET_NAME);
+-    if (ret != SSS_STATUS_SUCCESS) {
+-        return SSS_STATUS_UNAVAIL;
+-    }
+-
+-    ret = sss_cli_make_request_nochecks(cmd, rd, repbuf, replen, errnop);
+-
+-    return ret;
++    return sss_cli_make_request_with_checks(cmd, rd, repbuf, replen, errnop,
++                                            SSS_SSH_SOCKET_NAME);
+ }
+ 
+ 
+-- 
+2.7.3
+

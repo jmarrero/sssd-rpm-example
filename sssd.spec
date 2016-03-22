@@ -114,11 +114,33 @@ Patch0078: 0078-Add-a-new-option-ldap_group_external_member.patch
 Patch0079: 0079-IPA-Add-interface-to-call-into-IPA-provider-from-LDA.patch
 Patch0080: 0080-LDAP-Use-the-IPA-provider-interface-to-resolve-exter.patch
 Patch0081: 0081-build-detect-endianness-at-configure-time.patch
-Patch0100: 0100-FO-Don-t-free-rc-allocated-structure.patch
-Patch0101: 0101-tests-Reduce-failover-code-duplication.patch
-Patch0102: 0102-FO-Use-refcount-to-keep-track-of-servers-returned-to.patch
-Patch0103: 0103-FAIL_OVER-Fix-warning-value-computed-is-not-used.patch
-Patch0104: 0104-FO-Use-tevent_req_defer_callback-when-notifying-call.patch
+patch0082: 0082-IPA-lookup-idview-name-even-if-there-is-no-master-do.patch
+patch0083: 0083-IPA-invalidate-override-data-if-original-view-is-mis.patch
+patch0084: 0084-GPO-Add-Cockpit-to-the-Remote-Interactive-defaults.patch
+patch0085: 0085-GPO-Add-other-display-managers-to-interactive-logon.patch
+patch0086: 0086-CI-Use-yum-deprecated-instead-of-dnf.patch
+patch0087: 0087-remove-user-certificate-if-not-found-on-the-server.patch
+patch0088: 0088-sdap-improve-filtering-of-multiple-results-in-GC-loo.patch
+patch0089: 0089-FO-Don-t-free-rc-allocated-structure.patch
+patch0090: 0090-tests-Reduce-failover-code-duplication.patch
+patch0091: 0091-FO-Use-refcount-to-keep-track-of-servers-returned-to.patch
+patch0092: 0092-FAIL_OVER-Fix-warning-value-computed-is-not-used.patch
+patch0093: 0093-FO-Use-tevent_req_defer_callback-when-notifying-call.patch
+patch0094: 0094-util-Continue-if-setlocale-fails.patch
+patch0095: 0095-server_setup-Log-failed-attempt-to-set-locale.patch
+patch0096: 0096-tests-Run-intgcheck-without-libsemanage.patch
+patch0097: 0097-tests-Regression-test-with-wrong-LC_ALL.patch
+patch0098: 0098-memberof-Don-t-allocate-on-a-NULL-context.patch
+patch0099: 0099-IPA-SUDO-download-externalUser-attribute.patch
+patch0100: 0100-UTIL-Fix-indentation-in-dlinklist.h.patch
+patch0101: 0101-UTIL-Fix-warning-misleading-indentation.patch
+patch0102: 0102-tests-Add-a-unit-test-for-the-external-groups-resolu.patch
+patch0103: 0103-CLIENT-Reduce-code-duplication.patch
+patch0104: 0104-CLIENT-Retry-request-after-EPIPE.patch
+patch0105: 0105-pam_sss-reorder-pam_message-array.patch
+patch0106: 0106-IPA-SUDO-fix-typo.patch
+patch0107: 0107-IPA-SUDO-support-old-ipasudocmd-rdn.patch
+patch0108: 0108-SUDO-be-able-to-parse-modifyTimestamp-correctly.patch
 
 ### Dependencies ###
 
@@ -1104,6 +1126,12 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Mar 22 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.3-6
+- Resolves: rhbz#1276868 - Sudo PAM Login should support multiple password
+                           prompts (e.g. Password + Token)
+- Resolves: rhbz#1313041 - ssh with sssd proxy fails with "Connection closed
+                           by remote host" if locale not available
+
 * Thu Feb 25 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.3-5
 - Resolves: rhbz#1310664 - [RFE] IPA: resolve external group memberships of IPA
                            groups during getgrnam and getgrgid

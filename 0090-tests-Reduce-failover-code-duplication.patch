@@ -1,13 +1,14 @@
-From 9b095121329b2cc5f929af61222ad94705e5d38e Mon Sep 17 00:00:00 2001
+From 386984d350c841d9fcb7d002015a4bf174aaa51e Mon Sep 17 00:00:00 2001
 From: Jakub Hrozek <jhrozek@redhat.com>
 Date: Sun, 11 Oct 2015 15:31:44 +0200
-Subject: [PATCH 101/103] tests: Reduce failover code duplication
+Subject: [PATCH 090/108] tests: Reduce failover code duplication
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
 Reviewed-by: Pavel Březina <pbrezina@redhat.com>
 (cherry picked from commit 4a4af8e1b6a9bab7c7a34d86055a400376e3829e)
+(cherry picked from commit 383bdbe8d40cba2d0848b2256716358c7f8e8f2d)
 ---
  src/tests/cmocka/test_fo_srv.c | 88 +++++++++++++++++-------------------------
  1 file changed, 35 insertions(+), 53 deletions(-)
@@ -158,5 +159,5 @@ index e892bab0a261779363ea78a10038b15acefc49b7..109f664c84238cf9c1055a1cbc1a8c88
      s1->next = s2;
  
 -- 
-2.5.0
+2.7.3
 

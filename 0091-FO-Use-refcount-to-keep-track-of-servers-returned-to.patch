@@ -1,7 +1,7 @@
-From 24ef73fe8bbea12ceedddad1953c7bd94ce36f31 Mon Sep 17 00:00:00 2001
+From 54d7922d287368fe419cafaa754aaf43b3ff1c93 Mon Sep 17 00:00:00 2001
 From: Jakub Hrozek <jhrozek@redhat.com>
 Date: Sun, 11 Oct 2015 15:34:44 +0200
-Subject: [PATCH 102/103] FO: Use refcount to keep track of servers returned to
+Subject: [PATCH 091/108] FO: Use refcount to keep track of servers returned to
  callers
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -12,6 +12,7 @@ Resolves:
 
 Reviewed-by: Pavel Březina <pbrezina@redhat.com>
 (cherry picked from commit 10c07e188323a2f9824b5e34379f3b1a9b37759e)
+(cherry picked from commit c532290fb1a85a63c3bc9ef95ba7d6248f0e94c1)
 ---
  src/providers/data_provider_fo.c           |  7 ++-
  src/providers/dp_backend.h                 |  4 +-
@@ -25,7 +26,7 @@ Reviewed-by: Pavel Březina <pbrezina@redhat.com>
  9 files changed, 115 insertions(+), 39 deletions(-)
 
 diff --git a/src/providers/data_provider_fo.c b/src/providers/data_provider_fo.c
-index cd57340a0ba0ac7e474dc502bf1f1b4de0e1f778..4c4d7b233bb4bd22aa7c7dcd1fec955c92fb08e4 100644
+index d1d8c4c5c94811ce73b550dc99166d3c913b95aa..39f57255af220b608d333da7c0bd1697788ea8f6 100644
 --- a/src/providers/data_provider_fo.c
 +++ b/src/providers/data_provider_fo.c
 @@ -606,7 +606,7 @@ errno_t be_resolve_server_process(struct tevent_req *subreq,
@@ -57,7 +58,7 @@ index cd57340a0ba0ac7e474dc502bf1f1b4de0e1f778..4c4d7b233bb4bd22aa7c7dcd1fec955c
      }
  
 diff --git a/src/providers/dp_backend.h b/src/providers/dp_backend.h
-index 0ced851be8468ce21a9d283e26461fc47194557e..f90d0b9c5fe69b1b14caa090bb515c60746de154 100644
+index ffeeca4a6bad976ae8922bc4964b839242290259..bc5f716ffb8b85244604e3830141d390b7979a7c 100644
 --- a/src/providers/dp_backend.h
 +++ b/src/providers/dp_backend.h
 @@ -258,7 +258,9 @@ struct tevent_req *be_resolve_server_send(TALLOC_CTX *memctx,
@@ -72,7 +73,7 @@ index 0ced851be8468ce21a9d283e26461fc47194557e..f90d0b9c5fe69b1b14caa090bb515c60
  #define be_fo_set_port_status(ctx, service_name, server, status) \
      _be_fo_set_port_status(ctx, service_name, server, status, \
 diff --git a/src/providers/fail_over.c b/src/providers/fail_over.c
-index b309f1c68d0f4219d4b97eb0c01416e53ea856d0..24aed9dfa469ad730d176244eb329522a43c6fd8 100644
+index 3e6f1c2a24aaf713288146cc25d9cc462f243160..65d4fb690d270fa04a0e22f7db37bd8521ad3ba1 100644
 --- a/src/providers/fail_over.c
 +++ b/src/providers/fail_over.c
 @@ -79,6 +79,8 @@ struct fo_service {
@@ -291,7 +292,7 @@ index b309f1c68d0f4219d4b97eb0c01416e53ea856d0..24aed9dfa469ad730d176244eb329522
      TEVENT_REQ_RETURN_ON_ERROR(req);
  
 diff --git a/src/providers/fail_over.h b/src/providers/fail_over.h
-index e49c6414a14eb6ca2cad333f8efbb58576811345..75bff8da1cc29dd6184b6ec0d3fad545eb7204c2 100644
+index b8272a0a16015ff6b5d287b775c33a77e23eba67..f24b5715f13931965400c20562a1578aaf756908 100644
 --- a/src/providers/fail_over.h
 +++ b/src/providers/fail_over.h
 @@ -128,7 +128,6 @@ int fo_add_server(struct fo_service *service,
@@ -337,7 +338,7 @@ index e3e9601b356efd72e50ab86e8b7cdd048e4e70d4..7b7a16a612332639aa474a7ebea6b966
      talloc_zfree(subreq);
  
 diff --git a/src/providers/ldap/ldap_auth.c b/src/providers/ldap/ldap_auth.c
-index 217e80fd07abc41f2594d19397783683d44600cd..c94ba15bb17aa1641eb36781cc59ce158d48ca66 100644
+index 2fab92e5d22a4dae870c5e9dde7ef162fc36cbe2..8d6a37b2ceb3347cb8092858889d07e5615e5c77 100644
 --- a/src/providers/ldap/ldap_auth.c
 +++ b/src/providers/ldap/ldap_auth.c
 @@ -695,7 +695,7 @@ static void auth_resolve_done(struct tevent_req *subreq)
@@ -350,10 +351,10 @@ index 217e80fd07abc41f2594d19397783683d44600cd..c94ba15bb17aa1641eb36781cc59ce15
      if (ret) {
          /* all servers have been tried and none
 diff --git a/src/providers/ldap/sdap_async_connection.c b/src/providers/ldap/sdap_async_connection.c
-index 8f5227d263f995693f6e65bd238171538aa52af7..ef7a1594954b4cb11f35d2cd56b0c4806ead797a 100644
+index 40256de99006815c97ee9390dfd2e997cf6fc072..f9074afb0c1340c7c2a50d4df0021eee4ae0d076 100644
 --- a/src/providers/ldap/sdap_async_connection.c
 +++ b/src/providers/ldap/sdap_async_connection.c
-@@ -1148,7 +1148,7 @@ static void sdap_kinit_kdc_resolved(struct tevent_req *subreq)
+@@ -1160,7 +1160,7 @@ static void sdap_kinit_kdc_resolved(struct tevent_req *subreq)
      struct tevent_req *tgtreq;
      int ret;
  
@@ -362,7 +363,7 @@ index 8f5227d263f995693f6e65bd238171538aa52af7..ef7a1594954b4cb11f35d2cd56b0c480
      talloc_zfree(subreq);
      if (ret != EOK) {
          /* all servers have been tried and none
-@@ -1508,7 +1508,7 @@ static void sdap_cli_resolve_done(struct tevent_req *subreq)
+@@ -1520,7 +1520,7 @@ static void sdap_cli_resolve_done(struct tevent_req *subreq)
                                               struct sdap_cli_connect_state);
      int ret;
  
@@ -471,10 +472,10 @@ index 109f664c84238cf9c1055a1cbc1a8c8870f2dc39..67f86fb17753bf90b88d007a6a1b309d
      check_server(test_ctx, srv, 389, "ldap3.sssd.com");
  
 diff --git a/src/tests/fail_over-tests.c b/src/tests/fail_over-tests.c
-index b21ead38229be5d55df2de10bec3dd00a8566d71..7c296d116968ae059c75920c91059f6e83ea0508 100644
+index c9bac68711cfcf624064b5881f5226d4f8449e39..020f9d474b6bc8cee4fe80098f9631c4e343cec6 100644
 --- a/src/tests/fail_over-tests.c
 +++ b/src/tests/fail_over-tests.c
-@@ -154,7 +154,7 @@ test_resolve_service_callback(struct tevent_req *req)
+@@ -156,7 +156,7 @@ test_resolve_service_callback(struct tevent_req *req)
  
      task->test_ctx->tasks--;
  
@@ -484,5 +485,5 @@ index b21ead38229be5d55df2de10bec3dd00a8566d71..7c296d116968ae059c75920c91059f6e
      fail_if(recv_status != task->recv, "%s: Expected return of %d, got %d",
              task->location, task->recv, recv_status);
 -- 
-2.5.0
+2.7.3
 

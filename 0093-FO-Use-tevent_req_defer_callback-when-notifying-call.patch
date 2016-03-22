@@ -1,7 +1,7 @@
-From bb102b392ff298ecd8a499f6ddc3904c59dcbba2 Mon Sep 17 00:00:00 2001
+From 34db150dae50363dd0f551175e160e9c238a251f Mon Sep 17 00:00:00 2001
 From: Jakub Hrozek <jhrozek@redhat.com>
 Date: Wed, 18 Nov 2015 20:48:51 +0100
-Subject: [PATCH 104/104] FO: Use tevent_req_defer_callback() when notifying
+Subject: [PATCH 093/108] FO: Use tevent_req_defer_callback() when notifying
  callers
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
@@ -19,13 +19,14 @@ for more details.
 
 Reviewed-by: Pavel Březina <pbrezina@redhat.com>
 (cherry picked from commit a92f68763a57b211a1bf6b80b6dd80c4a1aa2738)
+(cherry picked from commit bbfc3a4294c6a70426171e080c27c15d9706bec7)
 ---
  src/providers/fail_over.c      | 15 +++++++++++--
  src/tests/cmocka/test_fo_srv.c | 49 +++++++++++++++++++++++++++++++++++++++---
  2 files changed, 59 insertions(+), 5 deletions(-)
 
 diff --git a/src/providers/fail_over.c b/src/providers/fail_over.c
-index c60310d..0b99098 100644
+index b6f29a2a3e1d389560475ae05a4c9a846d817fdb..e945c9924597c7addeeb11090e1c1aee5596cb71 100644
 --- a/src/providers/fail_over.c
 +++ b/src/providers/fail_over.c
 @@ -131,6 +131,7 @@ struct resolve_service_request {
@@ -79,7 +80,7 @@ index c60310d..0b99098 100644
              tevent_req_error(request->req, ret);
          } else {
 diff --git a/src/tests/cmocka/test_fo_srv.c b/src/tests/cmocka/test_fo_srv.c
-index 67f86fb..a84ce43 100644
+index 67f86fb17753bf90b88d007a6a1b309df830c152..a84ce4348d2e59aaab4fc9ac1bd4cfd853ff491d 100644
 --- a/src/tests/cmocka/test_fo_srv.c
 +++ b/src/tests/cmocka/test_fo_srv.c
 @@ -575,10 +575,10 @@ static void test_fo_srv_before(struct tevent_req *req)
@@ -162,5 +163,5 @@ index 67f86fb..a84ce43 100644
      test_ctx->ctx->error = ERR_OK;
      test_ctx->ctx->done = true;
 -- 
-2.5.0
+2.7.3
 

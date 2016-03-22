@@ -1,18 +1,20 @@
-From a9e5c97001638eca5d5b4d88463edfb0e8b01cc0 Mon Sep 17 00:00:00 2001
+From ba9819a93951e0a38874c6d06abcba700b07d41d Mon Sep 17 00:00:00 2001
 From: Jakub Hrozek <jhrozek@redhat.com>
 Date: Sun, 11 Oct 2015 18:08:46 +0200
-Subject: [PATCH 100/103] FO: Don't free rc-allocated structure
+Subject: [PATCH 089/108] FO: Don't free rc-allocated structure
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
 
 Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit 63af9215ea9114062fd87003161e6b5982bf9b1f)
+(cherry picked from commit 5d485ce42a4d56581d44c7224e78083a4ff1e81b)
 ---
  src/providers/fail_over.c | 1 -
  1 file changed, 1 deletion(-)
 
 diff --git a/src/providers/fail_over.c b/src/providers/fail_over.c
-index b076687ac6e571f7e27402fd11ac60183ea46951..b309f1c68d0f4219d4b97eb0c01416e53ea856d0 100644
+index b51a6c99ce031a1566f5d021fcf41843891a2d1c..3e6f1c2a24aaf713288146cc25d9cc462f243160 100644
 --- a/src/providers/fail_over.c
 +++ b/src/providers/fail_over.c
 @@ -507,7 +507,6 @@ create_server_common(TALLOC_CTX *mem_ctx, struct fo_ctx *ctx, const char *name)
@@ -24,5 +26,5 @@ index b076687ac6e571f7e27402fd11ac60183ea46951..b309f1c68d0f4219d4b97eb0c01416e5
      }
  
 -- 
-2.5.0
+2.7.3
 

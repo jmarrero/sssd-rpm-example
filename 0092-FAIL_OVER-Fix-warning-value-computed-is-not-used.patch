@@ -1,7 +1,7 @@
-From 9d620a935122683e0e6d19953484084a9feb21f5 Mon Sep 17 00:00:00 2001
+From 2e4795b1b93ee740692491c8c4010e9103a0ecca Mon Sep 17 00:00:00 2001
 From: Lukas Slebodnik <lslebodn@redhat.com>
 Date: Tue, 10 Nov 2015 07:41:10 +0000
-Subject: [PATCH 103/103] FAIL_OVER: Fix warning value computed is not used
+Subject: [PATCH 092/108] FAIL_OVER: Fix warning value computed is not used
 MIME-Version: 1.0
 Content-Type: text/plain; charset=UTF-8
 Content-Transfer-Encoding: 8bit
@@ -11,12 +11,13 @@ src/providers/fail_over.c:861: warning: value computed is not used
 
 Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
 (cherry picked from commit acd615cffd144b69e2558a0fc45c6966423f2d02)
+(cherry picked from commit d0baabaa4e86ef2cf899be5f1369e294688c4b8a)
 ---
  src/providers/fail_over.c | 2 +-
  1 file changed, 1 insertion(+), 1 deletion(-)
 
 diff --git a/src/providers/fail_over.c b/src/providers/fail_over.c
-index 24aed9dfa469ad730d176244eb329522a43c6fd8..c60310d8f17b129be115a4d3724ac7e54549820e 100644
+index 65d4fb690d270fa04a0e22f7db37bd8521ad3ba1..b6f29a2a3e1d389560475ae05a4c9a846d817fdb 100644
 --- a/src/providers/fail_over.c
 +++ b/src/providers/fail_over.c
 @@ -858,7 +858,7 @@ void fo_ref_server(TALLOC_CTX *ref_ctx,
@@ -29,5 +30,5 @@ index 24aed9dfa469ad730d176244eb329522a43c6fd8..c60310d8f17b129be115a4d3724ac7e5
  }
  
 -- 
-2.5.0
+2.7.3
 

@@ -1,0 +1,28 @@
+From 141773889b17dae7ad3c3ba20bab28bb9bf5e6ba Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Fri, 4 Mar 2016 10:40:21 +0100
+Subject: [PATCH 106/108] IPA SUDO: fix typo
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit b0c4eb194cf1414d3440e0cccfb9af9074388c08)
+(cherry picked from commit 6ece710965c30cc34fb32e87c0350fbac5f36dad)
+---
+ src/providers/ipa/ipa_sudo_conversion.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_sudo_conversion.c b/src/providers/ipa/ipa_sudo_conversion.c
+index ff63551c045003bc81c440ee63aeb28f3fe06647..84de01e622d611d4fee9f9b12e3147d54654626b 100644
+--- a/src/providers/ipa/ipa_sudo_conversion.c
++++ b/src/providers/ipa/ipa_sudo_conversion.c
+@@ -228,7 +228,7 @@ process_rulemember(TALLOC_CTX *mem_ctx,
+             ret = store_rulemember(mem_ctx, &rulemember->cmds,
+                                    conv->cmds, members[i]);
+             if (ret == EOK) {
+-                DEBUG(SSSDBG_TRACE_INTERNAL, "Found sudo command group %s\n",
++                DEBUG(SSSDBG_TRACE_INTERNAL, "Found sudo command %s\n",
+                       members[i]);
+             } else if (ret != EEXIST) {
+                 goto done;
+-- 
+2.7.3
+

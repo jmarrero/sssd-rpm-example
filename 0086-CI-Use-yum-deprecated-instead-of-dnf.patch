@@ -1,0 +1,70 @@
+From a4b24aeab9f44b5fd937b456acc223a18d045bae Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 29 Feb 2016 10:41:50 +0100
+Subject: [PATCH 086/108] CI: Use yum-deprecated instead of dnf
+
+/usr/bin/yum is provided by the dnf-yum package and call /usr/bin/dnf
+on new fedora distributions. We should directly use old style yum
+which was renamed to /usr/bin/yum-deprecated and is still part of
+the yum package.
+
+Reviewed-by: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
+(cherry picked from commit 73585f9af928913200999c5b3b983bb9266ee266)
+(cherry picked from commit 8f0a510a8c324aa1fa0f318e340b554cd07baf8b)
+---
+ contrib/ci/README.md |  7 ++++++-
+ contrib/ci/distro.sh | 14 +++++++++++---
+ 2 files changed, 17 insertions(+), 4 deletions(-)
+
+diff --git a/contrib/ci/README.md b/contrib/ci/README.md
+index 50b73ec354f92e9909a57a82ec72ba1a8516aa1c..6bd2fd92c1bf2c0abe93a8ecb8432b6a7889e492 100644
+--- a/contrib/ci/README.md
++++ b/contrib/ci/README.md
+@@ -36,11 +36,16 @@ package and on Debian in `lsb-release`.
+ The rest of the required packages CI will attempt to install itself, using
+ the distribution's package manager invoked through sudo.
+ 
+-A sudo rule can be employed to selectively avoid password prompts on Red Hat
++A sudo rule can be employed to selectively avoid password prompts on RHEL
+ distros:
+ 
+     <USER> ALL=(ALL:ALL) NOPASSWD: /usr/bin/yum --assumeyes install -- *
+ 
++on Fedora distros:
++
++    # We need to use yum-deprecated on Fedora because of BZ1215208.
++    <USER> ALL=(ALL:ALL) NOPASSWD: /usr/bin/yum-deprecated --assumeyes install -- *
++
+ and Debian-based distros:
+ 
+     <USER> ALL=(ALL:ALL) NOPASSWD: /usr/bin/apt-get --yes install -- *
+diff --git a/contrib/ci/distro.sh b/contrib/ci/distro.sh
+index da797d02f4b110f9e2c074fc2c97f092ae7200af..374e55696d3f2519151b73ff0fc397c04ff48325 100644
+--- a/contrib/ci/distro.sh
++++ b/contrib/ci/distro.sh
+@@ -50,11 +50,19 @@ function distro_pkg_install()
+ {
+     declare prompt=$'Need root permissions to install packages.\n'
+     prompt+="Enter sudo password for $USER: "
+-    if [[ "$DISTRO_BRANCH" == -redhat-* ]]; then
++    if [[ "$DISTRO_BRANCH" == -redhat-fedora-2[2-9]* ]]; then
++        # TODO switch fedora to DNF once
++        # https://bugzilla.redhat.com/show_bug.cgi?id=1215208 is fixed
++        [ $# != 0 ] && sudo -p "$prompt" \
++                            yum-deprecated --assumeyes install -- "$@" |&
++            # Pass input to output, fail if a missing package is reported
++            awk 'BEGIN {s=0}
++                 /^No package .* available.$/ {s=1}
++                 {print}
++                 END {exit s}'
++    elif [[ "$DISTRO_BRANCH" == -redhat-* ]]; then
+         [ $# != 0 ] && sudo -p "$prompt" yum --assumeyes install -- "$@" |&
+             # Pass input to output, fail if a missing package is reported
+-            # TODO Remove and switch to DNF once
+-            # https://bugzilla.redhat.com/show_bug.cgi?id=1215208 is fixed
+             awk 'BEGIN {s=0}
+                  /^No package .* available.$/ {s=1}
+                  {print}
+-- 
+2.7.3
+
