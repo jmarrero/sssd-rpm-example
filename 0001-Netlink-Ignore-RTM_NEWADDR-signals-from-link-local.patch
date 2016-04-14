@@ -1,0 +1,88 @@
+From fcb8b9bdfa4eed9958e536e8afc8ec9ec7303002 Mon Sep 17 00:00:00 2001
+From: Stephen Gallagher <sgallagh@redhat.com>
+Date: Tue, 5 Apr 2016 12:43:49 -0400
+Subject: [PATCH] Netlink: Ignore RTM_NEWADDR signals from link-local
+
+We only need to go online if we receive a netlink signal that might
+indicate that the external connection might have become available. This
+will never be true for link-local addresses.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit a9d1b4b61b614a954c784f224b8fe7a47b6dd206)
+---
+ src/monitor/monitor_netlink.c | 50 +++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 50 insertions(+)
+
+diff --git a/src/monitor/monitor_netlink.c b/src/monitor/monitor_netlink.c
+index 7e6f8cbbd3c4815fb2c9991698ecfd4ee5deeeef..22262949c67744493dfa722ff38257a75a5b8291 100644
+--- a/src/monitor/monitor_netlink.c
++++ b/src/monitor/monitor_netlink.c
+@@ -669,8 +669,13 @@ static void addr_msg_debug_print(struct rtnl_addr *addr_obj)
+ 
+ static void addr_msg_handler(struct nl_object *obj, void *arg)
+ {
++    int err;
+     struct netlink_ctx *ctx = (struct netlink_ctx *) arg;
+     struct rtnl_addr *addr_obj;
++    struct nl_addr *local_addr;
++    struct sockaddr_in sa4;
++    struct sockaddr_in6 sa6;
++    socklen_t salen;
+ 
+     if (!nlw_is_addr_object(obj)) return;
+ 
+@@ -679,6 +684,51 @@ static void addr_msg_handler(struct nl_object *obj, void *arg)
+         addr_msg_debug_print(addr_obj);
+     }
+ 
++    local_addr = rtnl_addr_get_local(addr_obj);
++    if (local_addr == NULL) {
++    DEBUG(SSSDBG_MINOR_FAILURE,
++          "Received RTM_NEWADDR with no address\n");
++    return;
++    }
++
++    switch (nl_addr_get_family(local_addr)) {
++    case AF_INET6:
++        salen = sizeof(struct sockaddr_in6);
++        err = nl_addr_fill_sockaddr(local_addr,
++                                    (struct sockaddr *) &sa6,
++                                    &salen);
++        if (err < 0) {
++          DEBUG(SSSDBG_MINOR_FAILURE,
++                "Unknown error in nl_addr_fill_sockaddr\n");
++          return;
++        }
++
++        if (!check_ipv6_addr(&sa6.sin6_addr, SSS_NO_SPECIAL)) {
++            DEBUG(SSSDBG_TRACE_LIBS, "Ignoring special address.\n");
++            return;
++        }
++        break;
++
++    case AF_INET:
++        salen = sizeof(struct sockaddr_in);
++        err = nl_addr_fill_sockaddr(local_addr,
++                                    (struct sockaddr *) &sa4,
++                                     &salen);
++        if (err < 0) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++            "Unknown error in nl_addr_fill_sockaddr\n");
++            return;
++        }
++        if (check_ipv4_addr(&sa4.sin_addr, SSS_NO_SPECIAL)) {
++            DEBUG(SSSDBG_TRACE_LIBS, "Ignoring special address.\n");
++            return;
++        }
++        break;
++    default:
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unknown address family\n");
++        return;
++    }
++
+     ctx->change_cb(ctx->cb_data);
+ }
+ 
+-- 
+2.7.3
+

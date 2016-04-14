@@ -33,6 +33,7 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-Netlink-Ignore-RTM_NEWADDR-signals-from-link-local.patch
 
 ### Dependencies ###
 
