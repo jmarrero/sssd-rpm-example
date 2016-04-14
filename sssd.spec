@@ -23,8 +23,8 @@
 %endif
 
 Name: sssd
-Version: 1.13.3
-Release: 6%{?dist}
+Version: 1.13.4
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -33,114 +33,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-nfs-idmap-fix-infinite-loop.patch
-Patch0002: 0002-Use-right-domain-for-user-lookups.patch
-Patch0003: 0003-sdap_save_grpmem-determine-domain-by-SID-if-possible.patch
-Patch0004: 0004-ipa_s2n_save_objects-use-configured-user-and-group-t.patch
-Patch0005: 0005-SPEC-Change-package-ownership-of-pubconfpath-krb5.in.patch
-Patch0006: 0006-AD-SRV-prefer-site-local-DCs-in-LDAP-ping.patch
-Patch0007: 0007-ldap-remove-originalMeberOf-if-there-is-no-memberOf.patch
-Patch0008: 0008-KRB5-Adding-DNS-SRV-lookup-for-krb5-provider.patch
-Patch0009: 0009-SDAP-do-not-fail-if-refs-are-found-but-not-processed.patch
-Patch0010: 0010-sudo-remove-unused-param-name-in-sdap_sudo_get_usn.patch
-Patch0011: 0011-sudo-remove-unused-param.-in-ldap_get_sudo_options.patch
-Patch0012: 0012-SDAP-Add-request-that-iterates-over-all-search-bases.patch
-Patch0013: 0013-SDAP-rename-sdap_get_id_specific_filter.patch
-Patch0014: 0014-SDAP-support-empty-filters-in-sdap_combine_filters.patch
-Patch0015: 0015-SUDO-use-sdap_search_bases-instead-custom-sb-iterato.patch
-Patch0016: 0016-SUDO-make-sudo-sysdb-interface-more-reusable.patch
-Patch0017: 0017-SUDO-move-code-shared-between-ldap-and-ipa-to-separa.patch
-Patch0018: 0018-SUDO-allow-to-disable-ptask.patch
-Patch0019: 0019-SUDO-fail-on-failed-request-that-cannot-be-retry.patch
-Patch0020: 0020-IPA-add-ipa_get_rdn-and-ipa_check_rdn.patch
-Patch0021: 0021-SDAP-use-ipa_get_rdn-in-nested-groups.patch
-Patch0022: 0022-IPA-SUDO-choose-between-IPA-and-LDAP-schema.patch
-Patch0023: 0023-IPA-SUDO-Add-ipasudorule-mapping.patch
-Patch0024: 0024-IPA-SUDO-Add-ipasudocmdgrp-mapping.patch
-Patch0025: 0025-IPA-SUDO-Add-ipasudocmd-mapping.patch
-Patch0026: 0026-IPA-SUDO-Implement-sudo-handler.patch
-Patch0027: 0027-IPA-SUDO-Implement-full-refresh.patch
-Patch0028: 0028-IPA-SUDO-Implement-rules-refresh.patch
-Patch0029: 0029-IPA-SUDO-Remember-USN.patch
-Patch0030: 0030-SDAP-Add-sdap_or_filters.patch
-Patch0031: 0031-IPA-SUDO-Implement-smart-refresh.patch
-Patch0032: 0032-SUDO-sdap_sudo_set_usn-do-not-steal-usn.patch
-Patch0033: 0033-SUDO-remove-full_refresh_in_progress.patch
-Patch0034: 0034-SUDO-assume-zero-if-usn-is-unknown.patch
-Patch0035: 0035-SUDO-allow-disabling-full-refresh.patch
-Patch0036: 0036-SUDO-remember-usn-as-number-instead-of-string.patch
-Patch0037: 0037-SUDO-simplify-usn-filter.patch
-Patch0038: 0038-IPA-SUDO-Add-support-for-ipaSudoRunAsExt-attributes.patch
-Patch0039: 0039-UTIL-allow-to-skip-default-options-for-child-process.patch
-Patch0040: 0040-DP_TASK-add-be_ptask_get_timeout.patch
-Patch0041: 0041-AD-add-task-to-renew-the-machine-account-password-if.patch
-Patch0042: 0042-FO-add-fo_get_active_server.patch
-Patch0043: 0043-FO-add-be_fo_get_active_server_name.patch
-Patch0044: 0044-AD-try-to-use-current-server-in-the-renewal-task.patch
-Patch0045: 0045-sdap_connect_send-fail-if-uri-or-sockaddr-is-NULL.patch
-Patch0046: 0046-SDAP-Make-it-possible-to-silence-errors-from-derefer.patch
-Patch0047: 0047-p11-add-gnome-screensaver-to-list-of-allowed-service.patch
-Patch0048: 0048-IDMAP-Fix-computing-max-id-for-slice-range.patch
-Patch0049: 0049-IDMAP-New-structure-for-domain-range-params.patch
-Patch0050: 0050-IDMAP-Add-support-for-automatic-adding-of-ranges.patch
-Patch0051: 0051-NSS-do-not-skip-cache-check-for-netgoups.patch
-Patch0052: 0052-cache_req-simplify-cache_req_cache_check.patch
-Patch0053: 0053-cache_req-do-not-lookup-views-if-possible.patch
-Patch0054: 0054-IDMAP-Fix-minor-memory-leak.patch
-Patch0055: 0055-CONFIGURE-Replace-obsoleted-macro-AC_PROG_LIBTOOL.patch
-Patch0056: 0056-TESTS-Fix-race-condition-in-python-test.patch
-Patch0057: 0057-PYTHON-sss_obfuscate-should-work-with-python3.patch
-Patch0058: 0058-PYTHON-Fix-pep8-errors-in-sss_obfuscate.patch
-Patch0059: 0059-IDMAP-Man-change-for-ldap_idmap_range_size-option.patch
-Patch0060: 0060-NSS-Fix-memory-leak-netgroup.patch
-Patch0061: 0061-IDMAP-Add-test-to-validate-off-by-one-bug.patch
-Patch0062: 0062-SDAP-Add-return-code-ERR_ACCOUNT_LOCKED.patch
-Patch0063: 0063-PAM-Pass-account-lockout-status-and-display-message.patch
-Patch0064: 0064-PAM-Fix-man-for-pam_account_-expired-locked-_message.patch
-Patch0065: 0065-UTIL-Backport-error-code-ERR_ACCOUNT_LOCKED.patch
-Patch0066: 0066-sss_idmap-tests-Fix-segmentation-fault.patch
-Patch0067: 0067-krb5_child-Warn-if-user-cannot-read-krb5.conf.patch
-Patch0068: 0068-Fix-typos-reported-by-lintian.patch
-Patch0069: 0069-UTIL-Use-prefix-for-debug-function.patch
-Patch0070: 0070-UTIL-Provide-varargs-version-of-debug_fn.patch
-Patch0071: 0071-UTIL-Use-sss_vdebug_fn-for-callbacks.patch
-Patch0072: 0072-Revert-DEBUG-Preventing-chown_debug_file-if-journald.patch
-Patch0073: 0073-DEBUG-Ignore-ENOENT-for-change-owner-of-log-files.patch
-Patch0074: 0074-TOOLS-Fix-minor-memory-leak-in-sss_colondb_writeline.patch
-Patch0075: 0075-TOOLS-Fix-memory-leak-after-getline-failed.patch
-Patch0076: 0076-TOOLS-Add-comments-on-functions-in-colondb.patch
-Patch0077: 0077-TEST_TOOLS_COLONDB-Add-tests-for-sss_colondb_.patch
-Patch0078: 0078-Add-a-new-option-ldap_group_external_member.patch
-Patch0079: 0079-IPA-Add-interface-to-call-into-IPA-provider-from-LDA.patch
-Patch0080: 0080-LDAP-Use-the-IPA-provider-interface-to-resolve-exter.patch
-Patch0081: 0081-build-detect-endianness-at-configure-time.patch
-patch0082: 0082-IPA-lookup-idview-name-even-if-there-is-no-master-do.patch
-patch0083: 0083-IPA-invalidate-override-data-if-original-view-is-mis.patch
-patch0084: 0084-GPO-Add-Cockpit-to-the-Remote-Interactive-defaults.patch
-patch0085: 0085-GPO-Add-other-display-managers-to-interactive-logon.patch
-patch0086: 0086-CI-Use-yum-deprecated-instead-of-dnf.patch
-patch0087: 0087-remove-user-certificate-if-not-found-on-the-server.patch
-patch0088: 0088-sdap-improve-filtering-of-multiple-results-in-GC-loo.patch
-patch0089: 0089-FO-Don-t-free-rc-allocated-structure.patch
-patch0090: 0090-tests-Reduce-failover-code-duplication.patch
-patch0091: 0091-FO-Use-refcount-to-keep-track-of-servers-returned-to.patch
-patch0092: 0092-FAIL_OVER-Fix-warning-value-computed-is-not-used.patch
-patch0093: 0093-FO-Use-tevent_req_defer_callback-when-notifying-call.patch
-patch0094: 0094-util-Continue-if-setlocale-fails.patch
-patch0095: 0095-server_setup-Log-failed-attempt-to-set-locale.patch
-patch0096: 0096-tests-Run-intgcheck-without-libsemanage.patch
-patch0097: 0097-tests-Regression-test-with-wrong-LC_ALL.patch
-patch0098: 0098-memberof-Don-t-allocate-on-a-NULL-context.patch
-patch0099: 0099-IPA-SUDO-download-externalUser-attribute.patch
-patch0100: 0100-UTIL-Fix-indentation-in-dlinklist.h.patch
-patch0101: 0101-UTIL-Fix-warning-misleading-indentation.patch
-patch0102: 0102-tests-Add-a-unit-test-for-the-external-groups-resolu.patch
-patch0103: 0103-CLIENT-Reduce-code-duplication.patch
-patch0104: 0104-CLIENT-Retry-request-after-EPIPE.patch
-patch0105: 0105-pam_sss-reorder-pam_message-array.patch
-patch0106: 0106-IPA-SUDO-fix-typo.patch
-patch0107: 0107-IPA-SUDO-support-old-ipasudocmd-rdn.patch
-patch0108: 0108-SUDO-be-able-to-parse-modifyTimestamp-correctly.patch
 
 ### Dependencies ###
 
@@ -1126,6 +1018,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Apr 14 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.4-1
+- New upstream release 1.13.4
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.4
+
 * Tue Mar 22 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.3-6
 - Resolves: rhbz#1276868 - Sudo PAM Login should support multiple password
                            prompts (e.g. Password + Token)
