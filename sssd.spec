@@ -24,7 +24,7 @@
 
 Name: sssd
 Version: 1.13.4
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -33,7 +33,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-Netlink-Ignore-RTM_NEWADDR-signals-from-link-local.patch
+Patch0001: 0001-IPA-terminate-properly-if-view-name-lookup-fails.patch
+Patch1001: 1001-Netlink-Ignore-RTM_NEWADDR-signals-from-link-local.patch
 
 ### Dependencies ###
 
@@ -1019,6 +1020,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Apr 22 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.4-2
+- Resolves: rhbz#1328108 - Protocol error with FreeIPA on CentOS 6
+
 * Thu Apr 14 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.4-1
 - New upstream release 1.13.4
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.13.4
