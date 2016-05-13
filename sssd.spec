@@ -24,7 +24,7 @@
 
 Name: sssd
 Version: 1.13.4
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -34,6 +34,8 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001: 0001-IPA-terminate-properly-if-view-name-lookup-fails.patch
+Patch0002: 0002-UTIL-Add-ERR_SBUS_REQUEST_HANDLED.patch
+Patch0003: 0003-IFP-Do-not-crash-on-invalid-arguments-to-GetUserAttr.patch
 Patch1001: 1001-Netlink-Ignore-RTM_NEWADDR-signals-from-link-local.patch
 
 ### Dependencies ###
@@ -1020,6 +1022,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri May 13 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.4-3
+- Resolves: rhbz#1335639 - [abrt] sssd-dbus: ldb_msg_find_element():
+                           sssd_ifp killed by SIGSEGV
+
 * Fri Apr 22 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.4-2
 - Resolves: rhbz#1328108 - Protocol error with FreeIPA on CentOS 6
 
