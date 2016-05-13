@@ -194,13 +194,14 @@ Also provides several other administrative tools:
     * sss_seed which pre-creates a user entry for use in kickstarts
     * sss_obfuscate for generating an obfuscated LDAP password
 
-%package -n python-sssdconfig
+%package -n python2-sssdconfig
 Summary: SSSD and IPA configuration file manipulation classes and functions
 Group: Applications/System
 License: GPLv3+
 BuildArch: noarch
+%{?python_provide:%python_provide python2-sssdconfig}
 
-%description -n python-sssdconfig
+%description -n python2-sssdconfig
 Provides python2 files for manipulation SSSD and IPA configuration files.
 
 %package -n python3-sssdconfig
@@ -208,17 +209,19 @@ Summary: SSSD and IPA configuration file manipulation classes and functions
 Group: Applications/System
 License: GPLv3+
 BuildArch: noarch
+%{?python_provide:%python_provide python3-sssdconfig}
 
 %description -n python3-sssdconfig
 Provides python3 files for manipulation SSSD and IPA configuration files.
 
-%package -n python-sss
+%package -n python2-sss
 Summary: Python2 bindings for sssd
 Group: Development/Libraries
 License: LGPLv3+
 Requires: sssd-common = %{version}-%{release}
+%{?python_provide:%python_provide python2-sss}
 
-%description -n python-sss
+%description -n python2-sss
 Provides python2 module for manipulating users, groups, and nested groups in
 SSSD when using id_provider = local in /etc/sssd/sssd.conf.
 
@@ -231,6 +234,7 @@ Summary: Python3 bindings for sssd
 Group: Development/Libraries
 License: LGPLv3+
 Requires: sssd-common = %{version}-%{release}
+%{?python_provide:%python_provide python3-sss}
 
 %description -n python3-sss
 Provides python3 module for manipulating users, groups, and nested groups in
@@ -240,18 +244,20 @@ Also provides several other useful python3 bindings:
     * function for retrieving list of groups user belongs to.
     * class for obfuscation of passwords
 
-%package -n python-sss-murmur
+%package -n python2-sss-murmur
 Summary: Python2 bindings for murmur hash function
 Group: Development/Libraries
 License: LGPLv3+
+%{?python_provide:%python_provide python2-sss-murmur}
 
-%description -n python-sss-murmur
+%description -n python2-sss-murmur
 Provides python2 module for calculating the murmur hash version 3
 
 %package -n python3-sss-murmur
 Summary: Python3 bindings for murmur hash function
 Group: Development/Libraries
 License: LGPLv3+
+%{?python_provide:%python_provide python3-sss-murmur}
 
 %description -n python3-sss-murmur
 Provides python3 module for calculating the murmur hash version 3
@@ -380,15 +386,16 @@ Requires: libipa_hbac = %{version}-%{release}
 %description -n libipa_hbac-devel
 Utility library to validate FreeIPA HBAC rules for authorization requests
 
-%package -n python-libipa_hbac
+%package -n python2-libipa_hbac
 Summary: Python2 bindings for the FreeIPA HBAC Evaluator library
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libipa_hbac = %{version}-%{release}
 Provides: libipa_hbac-python = %{version}-%{release}
 Obsoletes: libipa_hbac-python < 1.13.0
+%{?python_provide:%python_provide python2-libipa_hbac}
 
-%description -n python-libipa_hbac
+%description -n python2-libipa_hbac
 The python-libipa_hbac contains the bindings so that libipa_hbac can be
 used by Python applications.
 
@@ -397,6 +404,7 @@ Summary: Python3 bindings for the FreeIPA HBAC Evaluator library
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libipa_hbac = %{version}-%{release}
+%{?python_provide:%python_provide python3-libipa_hbac}
 
 %description -n python3-libipa_hbac
 The python3-libipa_hbac contains the bindings so that libipa_hbac can be
@@ -421,16 +429,17 @@ Requires: libsss_nss_idmap = %{version}-%{release}
 %description -n libsss_nss_idmap-devel
 Utility library for SID based lookups
 
-%package -n python-libsss_nss_idmap
+%package -n python2-libsss_nss_idmap
 Summary: Python2 bindings for libsss_nss_idmap
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libsss_nss_idmap = %{version}-%{release}
 Provides: libsss_nss_idmap-python = %{version}-%{release}
 Obsoletes: libsss_nss_idmap-python < 1.13.0
+%{?python_provide:%python_provide python2-libsss_nss_idmap}
 
-%description -n python-libsss_nss_idmap
-The python-libsss_nss_idmap contains the bindings so that libsss_nss_idmap can
+%description -n python2-libsss_nss_idmap
+The python2-libsss_nss_idmap contains the bindings so that libsss_nss_idmap can
 be used by Python applications.
 
 %package -n python3-libsss_nss_idmap
@@ -438,6 +447,7 @@ Summary: Python3 bindings for libsss_nss_idmap
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libsss_nss_idmap = %{version}-%{release}
+%{?python_provide:%python_provide python3-libsss_nss_idmap}
 
 %description -n python3-libsss_nss_idmap
 The python3-libsss_nss_idmap contains the bindings so that libsss_nss_idmap can
@@ -854,7 +864,7 @@ done
 %{_mandir}/man8/sss_debuglevel.8*
 %{_mandir}/man8/sss_seed.8*
 
-%files -n python-sssdconfig -f python2_sssdconfig.lang
+%files -n python2-sssdconfig -f python2_sssdconfig.lang
 %defattr(-,root,root,-)
 %dir %{python2_sitelib}/SSSDConfig
 %{python2_sitelib}/SSSDConfig/*.py*
@@ -866,7 +876,7 @@ done
 %dir %{python3_sitelib}/SSSDConfig/__pycache__
 %{python3_sitelib}/SSSDConfig/__pycache__/*.py*
 
-%files -n python-sss
+%files -n python2-sss
 %defattr(-,root,root,-)
 %{python2_sitearch}/pysss.so
 
@@ -874,7 +884,7 @@ done
 %defattr(-,root,root,-)
 %{python3_sitearch}/pysss.so
 
-%files -n python-sss-murmur
+%files -n python2-sss-murmur
 %defattr(-,root,root,-)
 %{python2_sitearch}/pysss_murmur.so
 
@@ -918,7 +928,7 @@ done
 %{_libdir}/libsss_nss_idmap.so
 %{_libdir}/pkgconfig/sss_nss_idmap.pc
 
-%files -n python-libsss_nss_idmap
+%files -n python2-libsss_nss_idmap
 %defattr(-,root,root,-)
 %{python2_sitearch}/pysss_nss_idmap.so
 
@@ -926,7 +936,7 @@ done
 %defattr(-,root,root,-)
 %{python3_sitearch}/pysss_nss_idmap.so
 
-%files -n python-libipa_hbac
+%files -n python2-libipa_hbac
 %defattr(-,root,root,-)
 %{python2_sitearch}/pyhbac.so
 
