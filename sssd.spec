@@ -14,6 +14,7 @@
 
     %global with_krb5_localauth_plugin 1
 
+    %global enable_systemtap_opt --enable-systemtap
 
 %global libwbc_alternatives_version 0.12
 %global libwbc_lib_version %{libwbc_alternatives_version}.0
@@ -23,20 +24,16 @@
 %endif
 
 Name: sssd
-Version: 1.13.4
-Release: 3%{?dist}
+Version: 1.14.0
+Release: 1%{?dist}.alpha
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}alpha.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-IPA-terminate-properly-if-view-name-lookup-fails.patch
-Patch0002: 0002-UTIL-Add-ERR_SBUS_REQUEST_HANDLED.patch
-Patch0003: 0003-IFP-Do-not-crash-on-invalid-arguments-to-GetUserAttr.patch
-Patch1001: 1001-Netlink-Ignore-RTM_NEWADDR-signals-from-link-local.patch
 
 ### Dependencies ###
 
@@ -108,6 +105,7 @@ BuildRequires: cifs-utils-devel
 BuildRequires: libnfsidmap-devel
 BuildRequires: samba4-devel >= 4.0.0-59beta2
 BuildRequires: libsmbclient-devel
+BuildRequires: systemtap-sdt-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -520,7 +518,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q
+%setup -q -n %{name}-1.13.90
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -548,6 +546,7 @@ autoreconf -ivf
     --with-syslog=journald \
     --enable-sss-default-nss-plugin \
     %{?with_cifs_utils_plugin_option} \
+    %{?enable_systemtap_opt} \
 
 
 make %{?_smp_mflags} all docs
@@ -728,6 +727,9 @@ done
 %dir %{_sysconfdir}/rwtab.d
 %config(noreplace) %{_sysconfdir}/rwtab.d/sssd
 %dir %{_datadir}/sssd
+%{_sysconfdir}/pam.d/sssd-shadowutils
+%{_libdir}/%{name}/conf/sssd.conf
+
 %{_datadir}/sssd/sssd.api.conf
 %{_datadir}/sssd/sssd.api.d
 %{_mandir}/man1/sss_ssh_authorizedkeys.1*
@@ -738,6 +740,14 @@ done
 %{_mandir}/man5/sss_rpcidmapd.5*
 %{_mandir}/man8/sssd.8*
 %{_mandir}/man8/sss_cache.8*
+%dir %{_datadir}/sssd/systemtap
+%{_datadir}/sssd/systemtap/id_perf.stp
+%{_datadir}/sssd/systemtap/nested_group_perf.stp
+%dir %{_datadir}/systemtap
+%dir %{_datadir}/systemtap/tapset
+%{_datadir}/systemtap/tapset/sssd.stp
+%{_datadir}/systemtap/tapset/sssd_functions.stp
+
 
 %files ldap -f sssd_ldap.lang
 %defattr(-,root,root,-)
@@ -1032,6 +1042,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Jun 21 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.0-1.alpha
+- New upstream release 1.14 alpha
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.14.0alpha
+
 * Fri May 13 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.13.4-3
 - Resolves: rhbz#1335639 - [abrt] sssd-dbus: ldb_msg_find_element():
                            sssd_ifp killed by SIGSEGV
