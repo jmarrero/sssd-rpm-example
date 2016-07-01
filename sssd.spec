@@ -25,12 +25,12 @@
 
 Name: sssd
 Version: 1.14.0
-Release: 1%{?dist}.alpha
+Release: 2%{?dist}.beta
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}alpha.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -106,6 +106,8 @@ BuildRequires: libnfsidmap-devel
 BuildRequires: samba4-devel >= 4.0.0-59beta2
 BuildRequires: libsmbclient-devel
 BuildRequires: systemtap-sdt-devel
+BuildRequires: http-parser-devel
+BuildRequires: jansson-devel
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -191,6 +193,7 @@ Also provides several other administrative tools:
     * sss_debuglevel to change the debug level on the fly
     * sss_seed which pre-creates a user entry for use in kickstarts
     * sss_obfuscate for generating an obfuscated LDAP password
+    * sssctl -- an sssd status and control utility
 
 %package -n python2-sssdconfig
 Summary: SSSD and IPA configuration file manipulation classes and functions
@@ -409,23 +412,23 @@ The python3-libipa_hbac contains the bindings so that libipa_hbac can be
 used by Python applications.
 
 %package -n libsss_nss_idmap
-Summary: Library for SID based lookups
+Summary: Library for SID and certificate based lookups
 Group: Development/Libraries
 License: LGPLv3+
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 
 %description -n libsss_nss_idmap
-Utility library for SID based lookups
+Utility library for SID and certificate based lookups
 
 %package -n libsss_nss_idmap-devel
-Summary: Library for SID based lookups
+Summary: Library for SID and certificate based lookups
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libsss_nss_idmap = %{version}-%{release}
 
 %description -n libsss_nss_idmap-devel
-Utility library for SID based lookups
+Utility library for SID and certificate based lookups
 
 %package -n python2-libsss_nss_idmap
 Summary: Python2 bindings for libsss_nss_idmap
@@ -501,6 +504,15 @@ Conflicts: libwbclient-devel < 4.2.0-0.2.rc2
 
 %description libwbclient-devel
 Development libraries for the SSSD libwbclient implementation.
+
+%package winbind-idmap
+Summary: SSSSD's idmap_sss Backend for Winbind
+Group:  Applications/System
+License: GPLv3+ and LGPLv3+
+
+%description winbind-idmap
+The idmap_sss module provides a way for Winbind to call SSSD to map UIDs/GIDs
+and SIDs.
 
 %prep
 # Update timestamps on the files touched by a patch, to avoid non-equal
@@ -680,6 +692,7 @@ done
 %{_libexecdir}/%{servicename}/sssd_nss
 %{_libexecdir}/%{servicename}/sssd_pam
 %{_libexecdir}/%{servicename}/sssd_autofs
+%{_libexecdir}/%{servicename}/sssd_secrets
 %{_libexecdir}/%{servicename}/sssd_ssh
 %{_libexecdir}/%{servicename}/sssd_sudo
 %{_libexecdir}/%{servicename}/p11_child
@@ -719,6 +732,7 @@ done
 %attr(755,root,root) %dir %{gpocachepath}
 %attr(750,root,root) %dir %{_var}/log/%{name}
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
+%attr(711,root,root) %dir %{_sysconfdir}/sssd/conf.d
 %ghost %attr(0600,root,root) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 %attr(755,root,root) %dir %{_sysconfdir}/systemd/system/sssd.service.d
 %config(noreplace) %{_sysconfdir}/systemd/system/sssd.service.d/journal.conf
@@ -730,6 +744,7 @@ done
 %{_sysconfdir}/pam.d/sssd-shadowutils
 %{_libdir}/%{name}/conf/sssd.conf
 
+%{_datadir}/sssd/cfg_rules.ini
 %{_datadir}/sssd/sssd.api.conf
 %{_datadir}/sssd/sssd.api.d
 %{_mandir}/man1/sss_ssh_authorizedkeys.1*
@@ -862,6 +877,7 @@ done
 %{_sbindir}/sss_override
 %{_sbindir}/sss_debuglevel
 %{_sbindir}/sss_seed
+%{_sbindir}/sssctl
 %{_mandir}/man8/sss_groupadd.8*
 %{_mandir}/man8/sss_groupdel.8*
 %{_mandir}/man8/sss_groupmod.8*
@@ -966,6 +982,11 @@ done
 %{_libdir}/%{name}/modules/libwbclient.so
 %{_libdir}/pkgconfig/wbclient_sssd.pc
 
+%files winbind-idmap
+%dir %{_libdir}/samba/idmap
+%{_libdir}/samba/idmap/sss.so
+%{_mandir}/man8/idmap_sss.8*
+
 %post common
 %systemd_post sssd.service
 
@@ -1042,6 +1063,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Jul 01 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.0-2.beta
+- New upstream release 1.14 beta
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.14.0beta
+
 * Tue Jun 21 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.0-1.alpha
 - New upstream release 1.14 alpha
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.14.0alpha
