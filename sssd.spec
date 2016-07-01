@@ -25,12 +25,12 @@
 
 Name: sssd
 Version: 1.14.0
-Release: 2%{?dist}.beta
+Release: 2%{?dist}.beta1
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -530,7 +530,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.13.90
+%setup -q -n %{name}-1.13.91
 
 for p in %patches ; do
     %__patch -p1 -i $p
