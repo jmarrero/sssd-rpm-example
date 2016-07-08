@@ -25,12 +25,12 @@
 
 Name: sssd
 Version: 1.14.0
-Release: 2%{?dist}.beta1
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}beta1.tar.gz
+Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
@@ -506,7 +506,7 @@ Conflicts: libwbclient-devel < 4.2.0-0.2.rc2
 Development libraries for the SSSD libwbclient implementation.
 
 %package winbind-idmap
-Summary: SSSSD's idmap_sss Backend for Winbind
+Summary: SSSD's idmap_sss Backend for Winbind
 Group:  Applications/System
 License: GPLv3+ and LGPLv3+
 
@@ -530,7 +530,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n %{name}-1.13.91
+%setup -q
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -889,6 +889,7 @@ done
 %{_mandir}/man8/sss_override.8*
 %{_mandir}/man8/sss_debuglevel.8*
 %{_mandir}/man8/sss_seed.8*
+%{_mandir}/man8/sssctl.8*
 
 %files -n python2-sssdconfig -f python2_sssdconfig.lang
 %defattr(-,root,root,-)
@@ -1063,6 +1064,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Jul 08 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.0-3
+- New upstream release 1.14.0
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.14.0
+
 * Fri Jul 01 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.0-2.beta
 - New upstream release 1.14 beta
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.14.0beta
