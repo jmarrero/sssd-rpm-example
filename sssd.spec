@@ -25,7 +25,7 @@
 
 Name: sssd
 Version: 1.14.0
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1064,6 +1064,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Jul 19 2016 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.14.0-4
+- https://fedoraproject.org/wiki/Changes/Automatic_Provides_for_Python_RPM_Packages
+
 * Fri Jul 08 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.0-3
 - New upstream release 1.14.0
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.14.0
