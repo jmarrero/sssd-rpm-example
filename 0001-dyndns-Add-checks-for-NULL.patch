@@ -1,0 +1,61 @@
+From 43e2cc0fdb715b89c13dac126ac8382ef0e756cc Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Tue, 12 Jul 2016 12:11:18 +0200
+Subject: [PATCH] dyndns: Add checks for NULL
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Fixes:
+https://fedorahosted.org/sssd/ticket/3076
+
+We segfaulted in this area once. This patch
+makes the code more defensive and adds
+some DEBUG messages.
+
+Normally the structures are filled in online
+and/or resolve callbacks.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/providers/ipa/ipa_dyndns.c | 20 ++++++++++++++++++++
+ 1 file changed, 20 insertions(+)
+
+diff --git a/src/providers/ipa/ipa_dyndns.c b/src/providers/ipa/ipa_dyndns.c
+index 7217c61452e7ead2949a9f7d57b2f2fc58953af1..dc910770c771d4b7a7ee62d25be7c48e16c988a7 100644
+--- a/src/providers/ipa/ipa_dyndns.c
++++ b/src/providers/ipa/ipa_dyndns.c
+@@ -160,10 +160,30 @@ ipa_dyndns_update_send(struct ipa_options *ctx)
+     if (req == NULL) {
+         return NULL;
+     }
+     state->ipa_ctx = ctx;
+ 
++    /* The following three checks are here to prevent SEGFAULT
++     * from ticket #3076. */
++    if (ctx->service == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "service structure not initialized\n");
++        ret = EINVAL;
++        goto done;
++    }
++
++    if (ctx->service->sdap == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "sdap structure not initialized\n");
++        ret = EINVAL;
++        goto done;
++    }
++
++    if (ctx->service->sdap->uri == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "LDAP uri not set\n");
++        ret = EINVAL;
++        goto done;
++    }
++
+     if (ctx->dyndns_ctx->last_refresh + 60 > time(NULL) ||
+         ctx->dyndns_ctx->timer_in_progress) {
+         DEBUG(SSSDBG_FUNC_DATA, "Last periodic update ran recently or timer "
+               "in progress, not scheduling another update\n");
+         tevent_req_done(req);
+-- 
+2.7.4
+

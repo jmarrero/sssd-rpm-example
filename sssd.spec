@@ -25,7 +25,7 @@
 
 Name: sssd
 Version: 1.14.0
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -34,6 +34,9 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+
+# Band-aid for RHBZ #1366403
+Patch0001: 0001-dyndns-Add-checks-for-NULL.patch
 
 ### Dependencies ###
 
@@ -1064,6 +1067,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Aug 15 2016 Stephen Gallagher <sgallagh@redhat.com> - 1.14.0-5
+- Add workaround patch for RHBZ #1366403
+
 * Tue Jul 19 2016 Fedora Release Engineering <rel-eng@lists.fedoraproject.org> - 1.14.0-4
 - https://fedoraproject.org/wiki/Changes/Automatic_Provides_for_Python_RPM_Packages
 
