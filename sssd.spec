@@ -14,6 +14,7 @@
 
     %global with_krb5_localauth_plugin 1
 
+%global enable_systemtap 1
     %global enable_systemtap_opt --enable-systemtap
 
 %global libwbc_alternatives_version 0.12
@@ -24,8 +25,8 @@
 %endif
 
 Name: sssd
-Version: 1.14.0
-Release: 5%{?dist}
+Version: 1.14.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -34,9 +35,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-
-# Band-aid for RHBZ #1366403
-Patch0001: 0001-dyndns-Add-checks-for-NULL.patch
 
 ### Dependencies ###
 
@@ -56,6 +54,7 @@ Requires: python3-sssdconfig = %{version}-%{release}
 %global mcpath %{sssdstatedir}/mc
 %global pubconfpath %{sssdstatedir}/pubconf
 %global gpocachepath %{sssdstatedir}/gpo_cache
+%global secdbpath %{sssdstatedir}/secrets
 
 ### Build Dependencies ###
 
@@ -106,7 +105,7 @@ BuildRequires: systemd-devel
 BuildRequires: cifs-utils-devel
 %endif
 BuildRequires: libnfsidmap-devel
-BuildRequires: samba4-devel >= 4.0.0-59beta2
+BuildRequires: samba4-devel
 BuildRequires: libsmbclient-devel
 BuildRequires: systemtap-sdt-devel
 BuildRequires: http-parser-devel
@@ -133,7 +132,7 @@ Conflicts: sssd < 1.10.0-8%{?dist}.beta2
 Requires: sssd-client%{?_isa} = %{version}-%{release}
 Requires: libsss_sudo = %{version}-%{release}
 Requires: libsss_autofs%{?_isa} = %{version}-%{release}
-Requires: libsss_idmap%{?_isa} = %{version}-%{release}
+Requires: libsss_idmap = %{version}-%{release}
 Requires(post): systemd-units chkconfig
 Requires(preun): systemd-units chkconfig
 Requires(postun): systemd-units chkconfig
@@ -517,6 +516,16 @@ License: GPLv3+ and LGPLv3+
 The idmap_sss module provides a way for Winbind to call SSSD to map UIDs/GIDs
 and SIDs.
 
+%package nfs-idmap
+Summary: SSSD plug-in for NFSv4 rpc.idmapd
+Group:  Applications/System
+License: GPLv3+
+
+%description nfs-idmap
+The libnfsidmap sssd module provides a way for rpc.idmapd to call SSSD to map
+UIDs/GIDs to names and vice versa. It can be also used for mapping principal
+(user) name to IDs(UID or GID) or to obtain groups which user are member of.
+
 %prep
 # Update timestamps on the files touched by a patch, to avoid non-equal
 # .pyc/.pyo files across the multilib peers within a build, where "Level"
@@ -689,6 +698,8 @@ done
 %doc src/examples/sssd-example.conf
 %{_sbindir}/sssd
 %{_unitdir}/sssd.service
+%{_unitdir}/sssd-secrets.socket
+%{_unitdir}/sssd-secrets.service
 
 %dir %{_libexecdir}/%{servicename}
 %{_libexecdir}/%{servicename}/sssd_be
@@ -713,9 +724,6 @@ done
 %{_libdir}/%{name}/libsss_util.so
 %{_libdir}/%{name}/libsss_semanage.so
 
-# 3rd party application libraries
-%{_libdir}/libnfsidmap/sss.so
-
 %{ldb_modulesdir}/memberof.so
 %{_bindir}/sss_ssh_authorizedkeys
 %{_bindir}/sss_ssh_knownhostsproxy
@@ -726,6 +734,7 @@ done
 %dir %{_localstatedir}/cache/krb5rcache
 %attr(700,root,root) %dir %{dbpath}
 %attr(755,root,root) %dir %{mcpath}
+%attr(700,root,root) %dir %{secdbpath}
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/passwd
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/group
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/initgroups
@@ -991,14 +1000,21 @@ done
 %{_libdir}/samba/idmap/sss.so
 %{_mandir}/man8/idmap_sss.8*
 
+%files nfs-idmap
+%{_libdir}/libnfsidmap/sss.so
+
 %post common
 %systemd_post sssd.service
+%systemd_post sssd-secrets.socket
 
 %preun common
 %systemd_preun sssd.service
+%systemd_preun sssd-secrets.socket
 
 %postun common
 %systemd_postun_with_restart sssd.service
+%systemd_postun_with_restart sssd-secrets.socket
+%systemd_postun_with_restart sssd-secrets.service
 
 %if (0%{?with_cifs_utils_plugin} == 1)
 %post client
@@ -1067,6 +1083,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Aug 19 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.1-1
+- New upstream release 1.14.0
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.14.1
+
 * Mon Aug 15 2016 Stephen Gallagher <sgallagh@redhat.com> - 1.14.0-5
 - Add workaround patch for RHBZ #1366403
 
