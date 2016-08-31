@@ -1,0 +1,34 @@
+From 9e21f9157d7eaf62e48ee9ab43332d336c12708c Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Thu, 1 Sep 2016 08:08:00 +0200
+Subject: [PATCH 36/39] DEBUG: Apend line feed to messages from libsemanage
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It wasn't simple to read log files from libsemanage
+because they were on single line.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit a6d279489c35896432e60daa70be5728f0b6c243)
+---
+ src/util/sss_semanage.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/util/sss_semanage.c b/src/util/sss_semanage.c
+index 81068da98db611e55df8ac2de1a55f5980c3e552..fe06bee1dfec3abca3aa3cd5e85e55386ac11343 100644
+--- a/src/util/sss_semanage.c
++++ b/src/util/sss_semanage.c
+@@ -55,7 +55,8 @@ static void sss_semanage_error_callback(void *varg,
+ 
+     va_start(ap, fmt);
+     if (DEBUG_IS_SET(level)) {
+-        sss_vdebug_fn(__FILE__, __LINE__, "libsemanage", level, 0, fmt, ap);
++        sss_vdebug_fn(__FILE__, __LINE__, "libsemanage", level,
++                      APPEND_LINE_FEED, fmt, ap);
+     }
+     va_end(ap);
+ }
+-- 
+2.9.3
+

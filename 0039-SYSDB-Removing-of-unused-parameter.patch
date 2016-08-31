@@ -1,0 +1,50 @@
+From c620bb359ff03f40ffbc36a03d74c921346ecfc3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20=C4=8Cech?= <pcech@redhat.com>
+Date: Wed, 31 Aug 2016 08:50:01 +0200
+Subject: [PATCH 39/39] SYSDB: Removing of unused parameter
+
+There were unused parameter struct ldb_message *cached_group
+in sysdb_store_group_attrs().
+
+This parameter was introduced by
+40de79d69860ec7f04bf7795bd88b641ec42fd23
+SYSDB: Check if group attributes differ before saving a group
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 0d1d9d8001232f74eca63cbba6c400d507b33823)
+---
+ src/db/sysdb_ops.c | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/db/sysdb_ops.c b/src/db/sysdb_ops.c
+index e4c8e1e285e3bc49710f71c896ba9a30c742d4fa..5d9c9fb24a149f8215b3027dcb4b0e1a183e4b43 100644
+--- a/src/db/sysdb_ops.c
++++ b/src/db/sysdb_ops.c
+@@ -2661,7 +2661,6 @@ static errno_t sysdb_store_new_group(struct sss_domain_info *domain,
+ static errno_t sysdb_store_group_attrs(struct sss_domain_info *domain,
+                                        const char *name,
+                                        gid_t gid,
+-                                       struct ldb_message *cached_group,
+                                        struct sysdb_attrs *attrs,
+                                        uint64_t cache_timeout,
+                                        time_t now);
+@@ -2731,7 +2730,7 @@ int sysdb_store_group(struct sss_domain_info *domain,
+         ret = sysdb_store_new_group(domain, name, gid, attrs,
+                                     cache_timeout, now);
+     } else {
+-        ret = sysdb_store_group_attrs(domain, name, gid, msg, attrs,
++        ret = sysdb_store_group_attrs(domain, name, gid, attrs,
+                                       cache_timeout, now);
+     }
+     if (ret != EOK) {
+@@ -2811,7 +2810,6 @@ static errno_t sysdb_store_new_group(struct sss_domain_info *domain,
+ static errno_t sysdb_store_group_attrs(struct sss_domain_info *domain,
+                                        const char *name,
+                                        gid_t gid,
+-                                       struct ldb_message *cached_group,
+                                        struct sysdb_attrs *attrs,
+                                        uint64_t cache_timeout,
+                                        time_t now)
+-- 
+2.9.3
+

@@ -1,0 +1,81 @@
+From b37a86a8a84255742bbcffcb47e9e1a1dded0113 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 19 Aug 2016 11:48:20 +0200
+Subject: [PATCH 02/39] CONFIG: session_provider does not exist anymore
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The session_provider used to exist a long time ago when we used to set
+the SELinux context from it, but the provider had been removed for a
+long time. We just forgot to remove the value from the config API and
+the validator.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit d940593e647731c0caec1fd04cf16a1b23578f32)
+---
+ src/config/SSSDConfig/__init__.py.in | 1 -
+ src/config/SSSDConfigTest.py         | 2 --
+ src/config/cfg_rules.ini             | 1 -
+ src/config/etc/sssd.api.conf         | 1 -
+ 4 files changed, 5 deletions(-)
+
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index 9683ea63e042115c20010cfb0904b2f65d76468b..b3f04ac26309bb5b518fb87cd0dae2962e853179 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -126,7 +126,6 @@ option_strings = {
+     'chpass_provider' : _('Password change provider'),
+     'sudo_provider' : _('SUDO provider'),
+     'autofs_provider' : _('Autofs provider'),
+-    'session_provider' : _('Session-loading provider'),
+     'hostid_provider' : _('Host identity provider'),
+     'selinux_provider' : _('SELinux provider'),
+ 
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index 09adf1faad767968dc1df2cc1668144526ffe504..8fcd1a55c36035a7026f1fb4c8116aaae24e78ef 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -554,7 +554,6 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+             'chpass_provider',
+             'sudo_provider',
+             'autofs_provider',
+-            'session_provider',
+             'hostid_provider',
+             'subdomains_provider',
+             'selinux_provider',
+@@ -924,7 +923,6 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+             'chpass_provider',
+             'sudo_provider',
+             'autofs_provider',
+-            'session_provider',
+             'hostid_provider',
+             'subdomains_provider',
+             'selinux_provider',
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index f0b4c4e7640aa24cf14815b2717327c742fcd89a..df10538dee4a547a1b1af62a4cfe37b89e236b18 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -248,7 +248,6 @@ option = access_provider
+ option = chpass_provider
+ option = sudo_provider
+ option = autofs_provider
+-option = session_provider
+ option = hostid_provider
+ option = subdomains_provider
+ option = selinux_provider
+diff --git a/src/config/etc/sssd.api.conf b/src/config/etc/sssd.api.conf
+index 94edb45ad2b85e3f4200a917c914a8f4fcb29c28..5e69414f2a490977bdaf1555325814ad61202071 100644
+--- a/src/config/etc/sssd.api.conf
++++ b/src/config/etc/sssd.api.conf
+@@ -103,7 +103,6 @@ access_provider = str, None, false
+ chpass_provider = str, None, false
+ sudo_provider = str, None, false
+ autofs_provider = str, None, false
+-session_provider = str, None, false
+ hostid_provider = str, None, false
+ subdomains_provider = str, None, false
+ selinux_provider = str, None, false
+-- 
+2.9.3
+

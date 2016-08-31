@@ -1,0 +1,44 @@
+From e293e3a1418e95560498f29147c4e5b1be0b729a Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 15 Aug 2016 12:54:20 +0200
+Subject: [PATCH 27/39] WATCHDOG: define and use _MAX_TICKS as 3
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Instead of using the number 3 directly, let's introduce and use
+WATCHDOG_MAX_TICKS.
+
+Reviewed-by: Petr Čech <pcech@redhat.com>
+(cherry picked from commit d7075a255a1f28e890539072e06d0140ffe0927c)
+---
+ src/util/util_watchdog.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/util/util_watchdog.c b/src/util/util_watchdog.c
+index 1c27d73f13b3042ecb549a2184e1368e8339d199..c184fbd759bdbca4a9eae379ff0d87e2d1628470 100644
+--- a/src/util/util_watchdog.c
++++ b/src/util/util_watchdog.c
+@@ -22,6 +22,7 @@
+ #include "util/util.h"
+ 
+ #define WATCHDOG_DEF_INTERVAL 10
++#define WATCHDOG_MAX_TICKS 3
+ 
+ /* this is intentionally a global variable */
+ struct watchdog_ctx {
+@@ -75,9 +76,8 @@ static void watchdog_handler(int sig)
+         return;
+     }
+ 
+-    /* if 3 ticks passed by kills itself */
+-
+-    if (__sync_add_and_fetch(&watchdog_ctx.ticks, 1) > 3) {
++    /* if a pre-defined number of ticks passed by kills itself */
++    if (__sync_add_and_fetch(&watchdog_ctx.ticks, 1) > WATCHDOG_MAX_TICKS) {
+         DEBUG(SSSDBG_FATAL_FAILURE,
+               "Watchdog timer overflow, killing process!\n");
+         orderly_shutdown(1);
+-- 
+2.9.3
+

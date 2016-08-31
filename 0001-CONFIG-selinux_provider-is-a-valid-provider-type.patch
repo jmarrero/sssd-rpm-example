@@ -1,0 +1,79 @@
+From 78db9b76d9be4aa307fbaaba7315b121421e8826 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 19 Aug 2016 11:36:41 +0200
+Subject: [PATCH 01/39] CONFIG: selinux_provider is a valid provider type
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We should not warn about it in the validator and should allow
+selinux_provider from the config API.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit dec00197181ee8f7efbfbdadd73629f66f80f1ff)
+---
+ src/config/SSSDConfig/__init__.py.in | 1 +
+ src/config/SSSDConfigTest.py         | 2 ++
+ src/config/cfg_rules.ini             | 1 +
+ src/config/etc/sssd.api.conf         | 1 +
+ 4 files changed, 5 insertions(+)
+
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index 1718a9babf390b95710ec356f25f09ea679bdd73..9683ea63e042115c20010cfb0904b2f65d76468b 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -128,6 +128,7 @@ option_strings = {
+     'autofs_provider' : _('Autofs provider'),
+     'session_provider' : _('Session-loading provider'),
+     'hostid_provider' : _('Host identity provider'),
++    'selinux_provider' : _('SELinux provider'),
+ 
+     # [domain]
+     'min_id' : _('Minimum user ID'),
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index 00c688f1e57c5f481d3adba2fe0374145216bc33..09adf1faad767968dc1df2cc1668144526ffe504 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -557,6 +557,7 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+             'session_provider',
+             'hostid_provider',
+             'subdomains_provider',
++            'selinux_provider',
+             'realmd_tags',
+             'subdomain_refresh_interval',
+             'subdomain_inherit',
+@@ -926,6 +927,7 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+             'session_provider',
+             'hostid_provider',
+             'subdomains_provider',
++            'selinux_provider',
+             'realmd_tags',
+             'subdomain_refresh_interval',
+             'subdomain_inherit',
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index ef6435b08aee416e377fe854e6768f3fa4fd9650..f0b4c4e7640aa24cf14815b2717327c742fcd89a 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -251,6 +251,7 @@ option = autofs_provider
+ option = session_provider
+ option = hostid_provider
+ option = subdomains_provider
++option = selinux_provider
+ 
+ # Options available to all domains
+ option = min_id
+diff --git a/src/config/etc/sssd.api.conf b/src/config/etc/sssd.api.conf
+index 5ac6f79521f5f776fc17319c3afb87d44961afca..94edb45ad2b85e3f4200a917c914a8f4fcb29c28 100644
+--- a/src/config/etc/sssd.api.conf
++++ b/src/config/etc/sssd.api.conf
+@@ -106,6 +106,7 @@ autofs_provider = str, None, false
+ session_provider = str, None, false
+ hostid_provider = str, None, false
+ subdomains_provider = str, None, false
++selinux_provider = str, None, false
+ 
+ [domain]
+ # Options available to all domains
+-- 
+2.9.3
+

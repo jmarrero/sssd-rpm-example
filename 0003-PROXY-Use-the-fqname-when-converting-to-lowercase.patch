@@ -1,0 +1,40 @@
+From 224612480eb4a64b23e096a96e7c5ea0d746d25a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Tue, 23 Aug 2016 23:46:59 +0200
+Subject: [PATCH 03/39] PROXY: Use the fqname when converting to lowercase
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When saving the user there is a comparison between the "cased alias"
+and the "lowercase password name". However, the first doesn't use fully
+qualified name while the second does, resulting in a not expected
+override of the "nameAlias" attribute of a stored user when trying to
+authenticate more than once using an alias.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3134
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 5691b2d668541585d2a8ae3ddb834f29d828036e)
+---
+ src/providers/proxy/proxy_id.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/proxy/proxy_id.c b/src/providers/proxy/proxy_id.c
+index 26f4d7499c02272e524ba9b713108189cd910bfd..b0c82807b42d91a4212578ca98af7f96484735b1 100644
+--- a/src/providers/proxy/proxy_id.c
++++ b/src/providers/proxy/proxy_id.c
+@@ -256,7 +256,7 @@ static int save_user(struct sss_domain_info *domain,
+     }
+ 
+     if (lowercase) {
+-        lc_pw_name = sss_tc_utf8_str_tolower(attrs, pwd->pw_name);
++        lc_pw_name = sss_tc_utf8_str_tolower(attrs, real_name);
+         if (lc_pw_name == NULL) {
+             DEBUG(SSSDBG_OP_FAILURE, "Cannot convert name to lowercase.\n");
+             ret = ENOMEM;
+-- 
+2.9.3
+

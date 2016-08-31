@@ -1,0 +1,36 @@
+From 1a28f2ce26d49617eaf865e39d52136181d9663d Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 30 Aug 2016 17:30:10 +0200
+Subject: [PATCH 38/39] sdap_initgr_nested_get_membership_diff: use
+ fully-qualified names
+
+I think this is a leftover from the change to use fully-qualified names
+in sysdb. To verify this you can create a nested group in IPA. Without
+this patch the id command will only show the groups the user is a direct
+member of. With the patch the indirect groups memberships should be
+shown as well.
+
+https://fedorahosted.org/sssd/ticket/3163
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 5bd3bef4a655fdfacd2f5df8a2343fe7bc68a771)
+---
+ src/providers/ldap/sdap_async_initgroups.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ldap/sdap_async_initgroups.c b/src/providers/ldap/sdap_async_initgroups.c
+index 82c708c226bf1a645ff5a395947dfdbad71e0f1f..f9593f0dfaa2dc6e33fd6c9d1f0c9b78cad3a1d9 100644
+--- a/src/providers/ldap/sdap_async_initgroups.c
++++ b/src/providers/ldap/sdap_async_initgroups.c
+@@ -1414,7 +1414,7 @@ sdap_initgr_nested_get_membership_diff(TALLOC_CTX *mem_ctx,
+                group_name, parents_count);
+ 
+     if (parents_count > 0) {
+-        ret = sysdb_attrs_primary_name_list(dom, tmp_ctx,
++        ret = sysdb_attrs_primary_fqdn_list(dom, tmp_ctx,
+                                             ldap_parentlist,
+                                             parents_count,
+                                             opts->group_map[SDAP_AT_GROUP_NAME].name,
+-- 
+2.9.3
+

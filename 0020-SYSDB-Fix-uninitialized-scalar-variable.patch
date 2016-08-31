@@ -1,0 +1,36 @@
+From 007341bedfcc7e356f4bcb1af8b29acab133300a Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 29 Aug 2016 09:13:49 +0200
+Subject: [PATCH 20/39] SYSDB: Fix uninitialized scalar variable
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The boolean variable newly_created could be used uninitialized
+in done section in case of failure. The variable was firstly initialized
+to true after succesfull execution of function sysdb_cache_create_empty.
+
+Uninitialized variable usually means true for boolean variable.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 975d0b67a40847265523d195438bf4753d18ff1c)
+---
+ src/db/sysdb_init.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/db/sysdb_init.c b/src/db/sysdb_init.c
+index c387c1b12c116f38d5a13f1adeac5ef64d593af8..d110aa7a2878e47650db177cfd342d0ac32248ab 100644
+--- a/src/db/sysdb_init.c
++++ b/src/db/sysdb_init.c
+@@ -545,7 +545,7 @@ static errno_t sysdb_cache_connect_helper(TALLOC_CTX *mem_ctx,
+     const char *version = NULL;
+     int ret;
+     struct ldb_context *ldb;
+-    bool newly_created;
++    bool newly_created = false;
+ 
+     tmp_ctx = talloc_new(NULL);
+     if (!tmp_ctx) {
+-- 
+2.9.3
+

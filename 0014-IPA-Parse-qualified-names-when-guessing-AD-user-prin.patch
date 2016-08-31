@@ -1,0 +1,62 @@
+From 82ccc38b4143b996ca9741f3682c2bb1f2694bef Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 9 Aug 2016 22:08:27 +0200
+Subject: [PATCH 14/39] IPA: Parse qualified names when guessing AD user
+ principal
+
+Most AD users store their UPN in an attribute. If they don't, or the sssd
+was configured (typically in earlier versions to work around a bug) to not
+look at the principal attribute, then sssd is supposed to guess
+the attribute.
+
+That currently doesn't work in 1.14, because the username is already
+qualified and then we also append the realm name to it. We need to parse
+the simple username from the qualified name first.
+
+The issue can be reproduced simply by authenticating as the Administrator
+account in IPA-AD trust setups.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3127
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 0302e3e7b3b06b809bd63c7911a42ab3e0a7ebf9)
+---
+ src/providers/ipa/ipa_s2n_exop.c | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index a8c415b4c86ccd3bd3b180c8df835c75420fbb21..07bbb2b4d252c8ca9ada4d890c36c903c9f75773 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -1941,6 +1941,7 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+     struct sss_nss_homedir_ctx homedir_ctx;
+     char *name = NULL;
+     char *realm;
++    char *short_name = NULL;
+     char *upn = NULL;
+     gid_t gid;
+     gid_t orig_gid = 0;
+@@ -2092,8 +2093,17 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+                     ret = ENOMEM;
+                     goto done;
+                 }
+-                upn = talloc_asprintf(tmp_ctx, "%s@%s",
+-                                      attrs->a.user.pw_name, realm);
++
++                ret = sss_parse_internal_fqname(tmp_ctx, attrs->a.user.pw_name,
++                                                &short_name, NULL);
++                if (ret != EOK) {
++                    DEBUG(SSSDBG_CRIT_FAILURE,
++                          "Cannot parse internal name %s\n",
++                          attrs->a.user.pw_name);
++                    goto done;
++                }
++
++                upn = talloc_asprintf(tmp_ctx, "%s@%s", short_name, realm);
+                 if (!upn) {
+                     DEBUG(SSSDBG_OP_FAILURE, "failed to format UPN.\n");
+                     ret = ENOMEM;
+-- 
+2.9.3
+

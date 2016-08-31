@@ -1,0 +1,27 @@
+From 8fbc37dac506556c53f7fcb63a219af71eeaa9be Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 19 Aug 2016 18:06:45 +0200
+Subject: [PATCH 13/39] SPEC: Fix typo in Summary
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit afa6891a809db262a49f68913f82a3a6137d8e2e)
+---
+ contrib/sssd.spec.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index 1e058ca63c25513253c4b350d286208f40f6b660..1f79ca7cd0a56dc1ab9c951abe11dc216ef3ad03 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -588,7 +588,7 @@ License: GPLv3+ and LGPLv3+
+ Development libraries for the SSSD libwbclient implementation.
+ 
+ %package winbind-idmap
+-Summary: SSSSD's idmap_sss Backend for Winbind
++Summary: SSSD's idmap_sss Backend for Winbind
+ Group:  Applications/System
+ License: GPLv3+ and LGPLv3+
+ 
+-- 
+2.9.3
+

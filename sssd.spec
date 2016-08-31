@@ -26,7 +26,7 @@
 
 Name: sssd
 Version: 1.14.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -35,6 +35,45 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-CONFIG-selinux_provider-is-a-valid-provider-type.patch
+Patch0002: 0002-CONFIG-session_provider-does-not-exist-anymore.patch
+Patch0003: 0003-PROXY-Use-the-fqname-when-converting-to-lowercase.patch
+Patch0004: 0004-sssd_netgroup.py-Resolve-nested-netgroups.patch
+Patch0005: 0005-LDAP-Fixing-of-removing-netgroup-from-cache.patch
+Patch0006: 0006-INTG-Adding-support-for-netgroups-to-ldap_ent.patch
+Patch0007: 0007-INTG-Tests-for-ldap-nested-netgroups.patch
+Patch0008: 0008-watchdog-cope-with-time-shift.patch
+Patch0009: 0009-BUILD-Allow-to-read-private-pipes-for-root.patch
+Patch0010: 0010-SYSDB-Rework-sysdb_cache_connect.patch
+Patch0011: 0011-SYSDB-Remove-the-timestamp-cache-for-a-newly-created.patch
+Patch0012: 0012-SECRETS-Return-ENOENT-when_deleting-a-non-existent-s.patch
+Patch0013: 0013-SPEC-Fix-typo-in-Summary.patch
+Patch0014: 0014-IPA-Parse-qualified-names-when-guessing-AD-user-prin.patch
+Patch0015: 0015-PROXY-Remove-lowercase-attribute-from-save_user.patch
+Patch0016: 0016-PROXY-Remove-cache_timeout-attribute-from-save_user.patch
+Patch0017: 0017-PROXY-Remove-cache_timeout-attribute-from-save_group.patch
+Patch0018: 0018-PROXY-Mention-that-save_user-s-parameters-are-alread.patch
+Patch0019: 0019-PROXY-Share-common-code-of-save_-group-user.patch
+Patch0020: 0020-SYSDB-Fix-uninitialized-scalar-variable.patch
+Patch0021: 0021-BUILD-Add-a-few-more-targets-for-intg-tests.patch
+Patch0022: 0022-BUILD-Clean-up-prerelease-targets.patch
+Patch0023: 0023-BUILD-Fix-typo-in-intgcheck-run-rule.patch
+Patch0024: 0024-BUILD-Remove-leftover-after-sysdb-refactoring.patch
+Patch0025: 0025-MONITOR-Remove-the-no-longer-used-diag_cmd-command.patch
+Patch0026: 0026-MONITOR-Remove-the-no-longer-used-kill_service-comma.patch
+Patch0027: 0027-WATCHDOG-define-and-use-_MAX_TICKS-as-3.patch
+Patch0028: 0028-PROXY-Use-right-name-in-ldap-filter.patch
+Patch0029: 0029-SECRETS-Make-internal-function-static.patch
+Patch0030: 0030-SECRETS-Make-reading-the-config-options-more-uniform.patch
+Patch0031: 0031-dyndns-fix-typo-and-unify-ipa-with-ad-debug-message-.patch
+Patch0032: 0032-netlink-Don-t-define-USE_GNU.patch
+Patch0033: 0033-MONITOR-Remove-leftovers-from-diag_cmd.patch
+Patch0034: 0034-MONITOR-Remove-leftovers-from-kill_service.patch
+Patch0035: 0035-SYSDB-Fix-error-handling-in-sysdb_get_user_members_r.patch
+Patch0036: 0036-DEBUG-Apend-line-feed-to-messages-from-libsemanage.patch
+Patch0037: 0037-MAN-Document-the-ldap_user_primary_group-option.patch
+Patch0038: 0038-sdap_initgr_nested_get_membership_diff-use-fully-qua.patch
+Patch0039: 0039-SYSDB-Removing-of-unused-parameter.patch
 
 ### Dependencies ###
 
@@ -1083,6 +1122,13 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Sep 01 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.1-2
+- Backport important patches from upstream 1.14.2 prerelease
+- Resolves: upstream #3154 - sssd exits if clock is adjusted backwards after
+                             boot
+- Resolves: upstream #3163 - resolving IPA nested user group is broken in 1.14
+
+
 * Fri Aug 19 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.1-1
 - New upstream release 1.14.0
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.14.1

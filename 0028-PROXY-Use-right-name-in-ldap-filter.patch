@@ -1,0 +1,52 @@
+From f7c519962070d797822c960d297f7de7fa42426a Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 26 Aug 2016 14:57:22 +0200
+Subject: [PATCH 28/39] PROXY: Use right name in ldap filter
+
+We used internal fq name in ldap filter
+with id_provider proxy to files and auth provider
+ldap
+
+[sssd[be[LDAP]]] [sdap_get_generic_ext_step]
+    (0x0400): calling ldap_search_ext with
+    [(&(uid=testuser1@ldap)(objectclass=posixAccount))][dc=example,dc=com].
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit b4c6060b10b14257e6f01038ae44e46c5a429f33)
+---
+ src/providers/ldap/ldap_auth.c | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/src/providers/ldap/ldap_auth.c b/src/providers/ldap/ldap_auth.c
+index 35f16b0d4a6f8e566b0cf63b65ba46f31e7c1bcd..00d38284e428eea42254820fd08ee4fb125235a6 100644
+--- a/src/providers/ldap/ldap_auth.c
++++ b/src/providers/ldap/ldap_auth.c
+@@ -361,7 +361,7 @@ shadow_fail:
+ 
+ /* ==Get-User-DN========================================================== */
+ struct get_user_dn_state {
+-    const char *username;
++    char *username;
+ 
+     char *orig_dn;
+ };
+@@ -386,9 +386,14 @@ static struct tevent_req *get_user_dn_send(TALLOC_CTX *memctx,
+     req = tevent_req_create(memctx, &state, struct get_user_dn_state);
+     if (!req) return NULL;
+ 
+-    state->username = username;
++    ret = sss_parse_internal_fqname(state, username,
++                                    &state->username, NULL);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "Cannot parse %s\n", username);
++        goto done;
++    }
+ 
+-    ret = sss_filter_sanitize(state, username, &clean_name);
++    ret = sss_filter_sanitize(state, state->username, &clean_name);
+     if (ret != EOK) {
+         goto done;
+     }
+-- 
+2.9.3
+

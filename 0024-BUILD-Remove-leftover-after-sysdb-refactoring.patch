@@ -1,0 +1,29 @@
+From ce87fa6dd3fb47f28f9e80b730c50f23b099e835 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 29 Aug 2016 17:50:17 +0200
+Subject: [PATCH 24/39] BUILD: Remove leftover after sysdb refactoring
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 4229ffb929bd7029f8b94d92099032d3350f5cf4)
+---
+ Makefile.am | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 25a81b93b8881ec6dfa18397ddcc3430e6a3ebd0..f89af5a9d6d26c732574aa3651de8c175f538b28 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -3077,7 +3077,6 @@ endif
+ #####################
+ 
+ intgcheck-prepare:
+-	echo "temporarily disabled"
+ 	set -e; \
+ 	rm -Rf intg; \
+ 	$(MKDIR_P) intg/bld; \
+-- 
+2.9.3
+

@@ -1,0 +1,34 @@
+From 665ef221b1c2144a78ed9f98263bb8b9acce6f6d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 29 Aug 2016 16:01:59 +0200
+Subject: [PATCH 23/39] BUILD: Fix typo in intgcheck-run rule
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+During the review process "intgcheck-build" ended up being merged to the
+"intgcheck-prepare" rule.
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 9639cf410dd6ba9670748535811f061e0c475bc6)
+---
+ Makefile.am | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 4a56d8b0a3ea49c9fae35bf5717871ea515813b8..25a81b93b8881ec6dfa18397ddcc3430e6a3ebd0 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -3099,7 +3099,7 @@ intgcheck-prepare:
+ 	cd ../..
+ 
+ intgcheck-run:
+-	if [ ! -d intg/pfx ]; then $(MAKE) intgcheck-build; fi; \
++	if [ ! -d intg/pfx ]; then $(MAKE) intgcheck-prepare; fi; \
+ 	cd intg/bld; \
+ 	$(MAKE) $(AM_MAKEFLAGS) -C src/tests/intg intgcheck-installed; \
+ 	cd ../..
+-- 
+2.9.3
+
