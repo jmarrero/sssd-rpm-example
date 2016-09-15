@@ -241,7 +241,7 @@ Summary: SSSD and IPA configuration file manipulation classes and functions
 Group: Applications/System
 License: GPLv3+
 BuildArch: noarch
-%{?python_provide:%python_provide python2-sssdconfig}
+%{python_provide python2-sssdconfig}
 
 %description -n python2-sssdconfig
 Provides python2 files for manipulation SSSD and IPA configuration files.
@@ -251,7 +251,7 @@ Summary: SSSD and IPA configuration file manipulation classes and functions
 Group: Applications/System
 License: GPLv3+
 BuildArch: noarch
-%{?python_provide:%python_provide python3-sssdconfig}
+%{python_provide python3-sssdconfig}
 
 %description -n python3-sssdconfig
 Provides python3 files for manipulation SSSD and IPA configuration files.
@@ -261,7 +261,7 @@ Summary: Python2 bindings for sssd
 Group: Development/Libraries
 License: LGPLv3+
 Requires: sssd-common = %{version}-%{release}
-%{?python_provide:%python_provide python2-sss}
+%{python_provide python2-sss}
 
 %description -n python2-sss
 Provides python2 module for manipulating users, groups, and nested groups in
@@ -276,7 +276,7 @@ Summary: Python3 bindings for sssd
 Group: Development/Libraries
 License: LGPLv3+
 Requires: sssd-common = %{version}-%{release}
-%{?python_provide:%python_provide python3-sss}
+%{python_provide python3-sss}
 
 %description -n python3-sss
 Provides python3 module for manipulating users, groups, and nested groups in
@@ -290,7 +290,7 @@ Also provides several other useful python3 bindings:
 Summary: Python2 bindings for murmur hash function
 Group: Development/Libraries
 License: LGPLv3+
-%{?python_provide:%python_provide python2-sss-murmur}
+%{python_provide python2-sss-murmur}
 
 %description -n python2-sss-murmur
 Provides python2 module for calculating the murmur hash version 3
@@ -299,7 +299,7 @@ Provides python2 module for calculating the murmur hash version 3
 Summary: Python3 bindings for murmur hash function
 Group: Development/Libraries
 License: LGPLv3+
-%{?python_provide:%python_provide python3-sss-murmur}
+%{python_provide python3-sss-murmur}
 
 %description -n python3-sss-murmur
 Provides python3 module for calculating the murmur hash version 3
@@ -435,10 +435,10 @@ License: LGPLv3+
 Requires: libipa_hbac = %{version}-%{release}
 Provides: libipa_hbac-python = %{version}-%{release}
 Obsoletes: libipa_hbac-python < 1.13.0
-%{?python_provide:%python_provide python2-libipa_hbac}
+%{python_provide python2-libipa_hbac}
 
 %description -n python2-libipa_hbac
-The python-libipa_hbac contains the bindings so that libipa_hbac can be
+The python2-libipa_hbac contains the bindings so that libipa_hbac can be
 used by Python applications.
 
 %package -n python3-libipa_hbac
@@ -446,7 +446,7 @@ Summary: Python3 bindings for the FreeIPA HBAC Evaluator library
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libipa_hbac = %{version}-%{release}
-%{?python_provide:%python_provide python3-libipa_hbac}
+%{python_provide python3-libipa_hbac}
 
 %description -n python3-libipa_hbac
 The python3-libipa_hbac contains the bindings so that libipa_hbac can be
@@ -478,7 +478,7 @@ License: LGPLv3+
 Requires: libsss_nss_idmap = %{version}-%{release}
 Provides: libsss_nss_idmap-python = %{version}-%{release}
 Obsoletes: libsss_nss_idmap-python < 1.13.0
-%{?python_provide:%python_provide python2-libsss_nss_idmap}
+%{python_provide python2-libsss_nss_idmap}
 
 %description -n python2-libsss_nss_idmap
 The python2-libsss_nss_idmap contains the bindings so that libsss_nss_idmap can
@@ -489,7 +489,7 @@ Summary: Python3 bindings for libsss_nss_idmap
 Group: Development/Libraries
 License: LGPLv3+
 Requires: libsss_nss_idmap = %{version}-%{release}
-%{?python_provide:%python_provide python3-libsss_nss_idmap}
+%{python_provide python3-libsss_nss_idmap}
 
 %description -n python3-libsss_nss_idmap
 The python3-libsss_nss_idmap contains the bindings so that libsss_nss_idmap can
