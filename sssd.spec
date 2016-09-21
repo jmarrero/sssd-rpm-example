@@ -82,8 +82,9 @@ Requires: sssd-ldap = %{version}-%{release}
 Requires: sssd-krb5 = %{version}-%{release}
 Requires: sssd-ipa = %{version}-%{release}
 Requires: sssd-ad = %{version}-%{release}
-Requires: sssd-proxy = %{version}-%{release}
+Recommends: sssd-proxy = %{version}-%{release}
 Requires: python3-sssdconfig = %{version}-%{release}
+Suggests: sssd-dbus = %{version}-%{release}
 
 %global servicename sssd
 %global sssdstatedir %{_localstatedir}/lib/sss
@@ -169,8 +170,9 @@ Conflicts: selinux-policy < 3.10.0-46
 Conflicts: sssd < 1.10.0-8%{?dist}.beta2
 # Requires
 Requires: sssd-client%{?_isa} = %{version}-%{release}
-Requires: libsss_sudo = %{version}-%{release}
-Requires: libsss_autofs%{?_isa} = %{version}-%{release}
+Recommends: libsss_sudo = %{version}-%{release}
+Recommends: libsss_autofs%{?_isa} = %{version}-%{release}
+Recommends: sssd-nfs-idmap = %{version}-%{release}
 Requires: libsss_idmap = %{version}-%{release}
 Requires(post): systemd-units chkconfig
 Requires(preun): systemd-units chkconfig
@@ -358,7 +360,7 @@ Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
-Requires: bind-utils
+Recommends: bind-utils
 Requires: sssd-common-pac = %{version}-%{release}
 
 %description ipa
@@ -372,8 +374,11 @@ License: GPLv3+
 Conflicts: sssd < 1.10.0-8.beta2
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
-Requires: bind-utils
 Requires: sssd-common-pac = %{version}-%{release}
+Recommends: bind-utils
+Recommends: adcli
+Suggests: sssd-libwbclient = %{version}-%{release}
+Suggests: sssd-winbind-idmap = %{version}-%{release}
 
 %description ad
 Provides the Active Directory back end that the SSSD can utilize to fetch
