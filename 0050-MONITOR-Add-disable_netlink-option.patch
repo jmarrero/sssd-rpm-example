@@ -1,0 +1,163 @@
+From ed7875afc4ab7e8441eb70f346c774dd49ddfd9b Mon Sep 17 00:00:00 2001
+From: Justin Stephenson <jstephen@redhat.com>
+Date: Fri, 26 Aug 2016 17:43:25 -0400
+Subject: [PATCH 50/79] MONITOR: Add disable_netlink option
+
+Adding a new monitor boolean option to disable netlink support.
+This will give users more control over sssd state changes without
+having to modify systemd unit files.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3142
+
+Reviewed-by: Petr Cech <pcech@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 081c6d8c7c8e75487d1c4e42862964be1e85b575)
+---
+ src/confdb/confdb.h                  |  1 +
+ src/config/SSSDConfig/__init__.py.in |  1 +
+ src/config/SSSDConfigTest.py         |  3 ++-
+ src/config/cfg_rules.ini             |  1 +
+ src/config/etc/sssd.api.conf         |  1 +
+ src/man/sssd.conf.5.xml              | 18 ++++++++++++++++++
+ src/monitor/monitor.c                | 21 ++++++++++++++++++---
+ 7 files changed, 42 insertions(+), 4 deletions(-)
+
+diff --git a/src/confdb/confdb.h b/src/confdb/confdb.h
+index 401e5fbf7ed6bb9e8d7158dfab378c8159aa03db..2d650900170d5f2214aa56f00fc749980e53f516 100644
+--- a/src/confdb/confdb.h
++++ b/src/confdb/confdb.h
+@@ -73,6 +73,7 @@
+ #define CONFDB_MONITOR_OVERRIDE_SPACE "override_space"
+ #define CONFDB_MONITOR_USER_RUNAS "user"
+ #define CONFDB_MONITOR_CERT_VERIFICATION "certificate_verification"
++#define CONFDB_MONITOR_DISABLE_NETLINK "disable_netlink"
+ 
+ /* Both monitor and domains */
+ #define CONFDB_NAME_REGEX   "re_expression"
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index 0191920f93ab9016508e08785c25dd043c180c0b..2027028f7b4e972c7bc0dd5156fd85157ae192f4 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -62,6 +62,7 @@ option_strings = {
+     'user' : _('The user to drop privileges to'),
+     'certificate_verification' : _('Tune certificate verification'),
+     'override_space': _('All spaces in group or user names will be replaced with this character'),
++    'disable_netlink' : _('Tune sssd to honor or ignore netlink state changes'),
+ 
+     # [nss]
+     'enum_cache_timeout' : _('Enumeration cache timeout length (seconds)'),
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index 6a0fdf0ea5215103b48dc8521a43ae945342c0e2..8a64a257ab978b81ae4b26918c683b25a30fe7c1 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -310,7 +310,8 @@ class SSSDConfigTestSSSDService(unittest.TestCase):
+             'client_idle_timeout',
+             'description',
+             'certificate_verification',
+-            'override_space']
++            'override_space',
++            'disable_netlink']
+ 
+         self.assertTrue(type(options) == dict,
+                         "Options should be a dictionary")
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index 5e248066bd554d2a654a764f406f6b33c4d66733..93c10e2b7892027f0ee7a7af096814fb7cac333a 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -38,6 +38,7 @@ option = default_domain_suffix
+ option = certificate_verification
+ option = override_space
+ option = config_file_version
++option = disable_netlink
+ 
+ [rule/allowed_nss_options]
+ validator = ini_allowed_options
+diff --git a/src/config/etc/sssd.api.conf b/src/config/etc/sssd.api.conf
+index 525f939cd204f4d484caa7b490d85b0d50de00ef..9e4bf2f6e5d536099af75a82126bc577e10386b4 100644
+--- a/src/config/etc/sssd.api.conf
++++ b/src/config/etc/sssd.api.conf
+@@ -28,6 +28,7 @@ user = str, None, false
+ default_domain_suffix = str, None, false
+ certificate_verification = str, None, false
+ override_space = str, None, false
++disable_netlink = bool, None, false
+ 
+ [nss]
+ # Name service
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index ae291e0fc8f2f9afabcdf32f18a5ec12252bbbbf..6f231b8ab8fc078d83331bb7ef5b980528a30bd6 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -482,6 +482,24 @@
+                             </para>
+                         </listitem>
+                     </varlistentry>
++                    <varlistentry>
++                        <term>disable_netlink (boolean)</term>
++                        <listitem>
++                            <para>
++                                SSSD hooks into the netlink interface to
++                                monitor changes to routes, addresses, links
++                                and trigger certain actions.
++                            </para>
++                            <para>
++                                The SSSD state changes caused by netlink
++                                events may be undesirable and can be disabled
++                                by setting this option to 'true'
++                            </para>
++                            <para>
++                                Default: false (netlink changes are detected)
++                            </para>
++                        </listitem>
++                    </varlistentry>
+                 </variablelist>
+             </para>
+         </refsect2>
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index 442bdbc423aaa1224d17b9f357193ec73b045d29..84a144e56294c7af5d818b71fbe3664cd2fc1a94 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -2052,6 +2052,7 @@ static int monitor_process_init(struct mt_ctx *ctx,
+     int num_providers;
+     int ret;
+     int error;
++    bool disable_netlink;
+     struct sysdb_upgrade_ctx db_up_ctx;
+ 
+     /* Set up the environment variable for the Kerberos Replay Cache */
+@@ -2172,14 +2173,28 @@ static int monitor_process_init(struct mt_ctx *ctx,
+         return ret;
+     }
+ 
+-    ret = setup_netlink(ctx, ctx->ev, network_status_change_cb,
+-                        ctx, &ctx->nlctx);
++    ret = confdb_get_bool(ctx->cdb,
++                          CONFDB_MONITOR_CONF_ENTRY,
++                          CONFDB_MONITOR_DISABLE_NETLINK,
++                          false, &disable_netlink);
++
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+-              "Cannot set up listening for network notifications\n");
++              "Failed to read disable_netlink from confdb: [%d] %s\n",
++              ret, sss_strerror(ret));
+         return ret;
+     }
+ 
++    if (disable_netlink == false) {
++        ret = setup_netlink(ctx, ctx->ev, network_status_change_cb,
++                            ctx, &ctx->nlctx);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "Cannot set up listening for network notifications\n");
++            return ret;
++        }
++    }
++
+     /* start providers */
+     num_providers = 0;
+     for (dom = ctx->domains; dom; dom = get_next_domain(dom, 0)) {
+-- 
+2.9.3
+

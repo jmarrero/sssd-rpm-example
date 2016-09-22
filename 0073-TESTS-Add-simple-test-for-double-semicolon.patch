@@ -1,0 +1,98 @@
+From 7017c022affd3ad1d0c29cb89aa825231c93fa29 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Sat, 17 Sep 2016 21:12:36 +0200
+Subject: [PATCH 73/79] TESTS: Add simple test for double semicolon
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit 6ad1f2da4055e2cfe9bf8c79b79e408dba171691)
+---
+ Makefile.am                     |  2 ++
+ contrib/ci/run                  |  3 ++-
+ src/tests/double_semicolon_test | 38 ++++++++++++++++++++++++++++++++++++++
+ 3 files changed, 42 insertions(+), 1 deletion(-)
+ create mode 100755 src/tests/double_semicolon_test
+
+diff --git a/Makefile.am b/Makefile.am
+index f792ed6a6b531d9e6e2c886c2fbe64e1e2345b73..17c5f26ce9db1e183b30178f1a8714deca1dab03 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -321,6 +321,7 @@ TESTS = \
+     $(non_interactive_cmocka_based_tests) \
+     $(non_interactive_check_based_tests) \
+     src/tests/whitespace_test \
++    src/tests/double_semicolon_test \
+     $(NULL)
+ 
+ sssdlib_LTLIBRARIES = \
+@@ -410,6 +411,7 @@ dist_noinst_SCRIPTS = \
+     src/tests/pysss_murmur-test.py3.sh \
+     src/tests/python-test.py \
+     src/tests/whitespace_test \
++    src/tests/double_semicolon_test \
+     src/tests/krb5_proxy_check_test_data.conf \
+     $(NULL)
+ 
+diff --git a/contrib/ci/run b/contrib/ci/run
+index 1b230f584b7c42d66bfc8c99c118420478d4128b..f96476ff8d4e118375777abf7f1e3475c1ed07bb 100755
+--- a/contrib/ci/run
++++ b/contrib/ci/run
+@@ -187,7 +187,8 @@ function build_debug()
+ {
+     # Extended glob pattern matching tests to run under Valgrind.
+     # NOTE: The particular pattern below is inverted
+-    declare -r valgrind_test_pattern="!(*.py|*/dlopen-tests|*/whitespace_test)"
++    declare -r valgrind_test_pattern="\
++        !(*.py|*/dlopen-tests|*/whitespace_test|*/double_semicolon_test)"
+     export CFLAGS="$DEBUG_CFLAGS"
+     declare test_dir
+     declare test_dir_distcheck
+diff --git a/src/tests/double_semicolon_test b/src/tests/double_semicolon_test
+new file mode 100755
+index 0000000000000000000000000000000000000000..bbc05fa22ab557919daacbf5a222bb6f1d9678b4
+--- /dev/null
++++ b/src/tests/double_semicolon_test
+@@ -0,0 +1,38 @@
++#!/bin/bash
++
++set -e -u -o pipefail
++
++# An AWK regex matching tracked file paths to be included for the search.
++# Example: '.*\.po|README'
++PATH_INCLUDE_REGEX='.*\.c|.*\.h'
++
++export GIT_DIR="$ABS_TOP_SRCDIR/.git"
++export GIT_WORK_TREE="$ABS_TOP_SRCDIR"
++
++if [ ! -d "$GIT_DIR" ]; then
++    echo "Git repository is required for this test!" 1>&2
++    exit 77
++fi
++
++{
++    # Look for lines with double semicolon at the end of line
++    # in all files tracked by Git
++    git grep -n -I ';\s*;$' -- "$(git rev-parse --show-toplevel)" ||
++        # Don't fail if no such lines were found anywhere
++        [[ $? == 1 ]]
++} |
++    awk -- "
++        BEGIN {
++            found = 0
++        }
++        /^($PATH_INCLUDE_REGEX):/ {
++            if (!found) {
++                print \"Double semicolon found:\"
++                found = 1
++            }
++            print
++        }
++        END {
++            exit found
++        }
++    "
+-- 
+2.9.3
+

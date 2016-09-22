@@ -1,0 +1,54 @@
+From b42d29d5fed3df1662dc7b9b46a57ab27298b138 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 30 Aug 2016 16:39:49 +0200
+Subject: [PATCH 56/79] SDAP: Fix settig paging attribute in
+ sdap_get_generic_ext_send
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We should set pagging flag in state and not in local
+variable which is not read anywhere in the function.
+
+Found by clang static analyzer.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 6c335dee38da943796710b5e336472a10cf641f2)
+---
+ src/providers/ldap/sdap_async.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/providers/ldap/sdap_async.c b/src/providers/ldap/sdap_async.c
+index 4195ba95d911f3956f8cca665310b4b92091e6cd..e9ce2d5fd7c835919fff615e7b553d95f72d65a7 100644
+--- a/src/providers/ldap/sdap_async.c
++++ b/src/providers/ldap/sdap_async.c
+@@ -1254,7 +1254,7 @@ sdap_get_generic_ext_send(TALLOC_CTX *memctx,
+      */
+     if (scope == LDAP_SCOPE_BASE && (flags & SDAP_SRCH_FLG_PAGING)) {
+         /* Disable paging */
+-        flags &= ~SDAP_SRCH_FLG_PAGING;
++        state->flags &= ~SDAP_SRCH_FLG_PAGING;
+         DEBUG(SSSDBG_TRACE_FUNC,
+               "WARNING: Disabling paging because scope is set to base.\n");
+     }
+@@ -1267,7 +1267,7 @@ sdap_get_generic_ext_send(TALLOC_CTX *memctx,
+                                 serverctrls,
+                                 NULL);
+     if (control) {
+-        flags |= SDAP_SRCH_FLG_PAGING;
++        state->flags |= SDAP_SRCH_FLG_PAGING;
+     }
+ 
+     /* ASQ */
+@@ -1275,7 +1275,7 @@ sdap_get_generic_ext_send(TALLOC_CTX *memctx,
+                                 serverctrls,
+                                 NULL);
+     if (control) {
+-        flags |= SDAP_SRCH_FLG_PAGING;
++        state->flags |= SDAP_SRCH_FLG_PAGING;
+     }
+ 
+     for (state->nserverctrls=0;
+-- 
+2.9.3
+

@@ -1,0 +1,111 @@
+From 0db69ed514decc0ccdc0084c44b31102b1314bef Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 21 Sep 2016 10:44:36 +0200
+Subject: [PATCH 75/79] tests: Add a regression test for upstream ticket #3131
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Tests that running two duplicate SRV resolution queries succeeds
+and returns a valid host name.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit a299f900981343904d7c9c5d148e30b8e0b2c460)
+---
+ src/tests/cmocka/test_fo_srv.c | 66 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 66 insertions(+)
+
+diff --git a/src/tests/cmocka/test_fo_srv.c b/src/tests/cmocka/test_fo_srv.c
+index a84ce4348d2e59aaab4fc9ac1bd4cfd853ff491d..197f8de5c2f0b5dffa7949a874ea0ca1330554b9 100644
+--- a/src/tests/cmocka/test_fo_srv.c
++++ b/src/tests/cmocka/test_fo_srv.c
+@@ -203,6 +203,8 @@ struct test_fo_ctx {
+     int ttl;
+ 
+     struct fo_server *srv;
++
++    int num_done;
+ };
+ 
+ int test_fo_srv_data_cmp(void *ud1, void *ud2)
+@@ -691,6 +693,67 @@ static void test_fo_hostlist(void **state)
+     assert_int_equal(ret, ERR_OK);
+ }
+ 
++static void test_fo_srv_dup_done(struct tevent_req *req);
++
++/* Test that running two parallel SRV queries doesn't return an error.
++ * This is a regression test for https://fedorahosted.org/sssd/ticket/3131
++ */
++void test_fo_srv_duplicates(void **state)
++{
++    errno_t ret;
++    struct tevent_req *req;
++    struct test_fo_ctx *test_ctx =
++        talloc_get_type(*state, struct test_fo_ctx);
++
++    test_fo_srv_mock_dns(test_ctx, test_ctx->ttl);
++    test_fo_srv_mock_dns(test_ctx, test_ctx->ttl);
++
++    ret = fo_add_srv_server(test_ctx->fo_svc, "_ldap", "sssd.com",
++                            "sssd.local", "tcp", test_ctx);
++    assert_int_equal(ret, ERR_OK);
++
++    ret = fo_add_server(test_ctx->fo_svc, "ldap1.sssd.com",
++                        389, (void *) discard_const("ldap://ldap1.sssd.com"),
++                        true);
++    assert_int_equal(ret, ERR_OK);
++
++    req = fo_resolve_service_send(test_ctx, test_ctx->ctx->ev,
++                                  test_ctx->resolv, test_ctx->fo_ctx,
++                                  test_ctx->fo_svc);
++    assert_non_null(req);
++    tevent_req_set_callback(req, test_fo_srv_dup_done, test_ctx);
++
++    req = fo_resolve_service_send(test_ctx, test_ctx->ctx->ev,
++                                  test_ctx->resolv, test_ctx->fo_ctx,
++                                  test_ctx->fo_svc);
++    assert_non_null(req);
++    tevent_req_set_callback(req, test_fo_srv_dup_done, test_ctx);
++
++    ret = test_ev_loop(test_ctx->ctx);
++    assert_int_equal(ret, ERR_OK);
++}
++
++static void test_fo_srv_dup_done(struct tevent_req *req)
++{
++    struct test_fo_ctx *test_ctx = \
++        tevent_req_callback_data(req, struct test_fo_ctx);
++    errno_t ret;
++    const char *name;
++
++    ret = fo_resolve_service_recv(req, test_ctx, &test_ctx->srv);
++    talloc_zfree(req);
++    assert_int_equal(ret, EOK);
++
++    name = fo_get_server_name(test_ctx->srv);
++    assert_string_equal(name, "ldap1.sssd.com");
++
++    test_ctx->num_done++;
++    if (test_ctx->num_done == 2) {
++        test_ctx->ctx->error = ERR_OK;
++        test_ctx->ctx->done = true;
++    }
++}
++
+ int main(int argc, const char *argv[])
+ {
+     int rv;
+@@ -715,6 +778,9 @@ int main(int argc, const char *argv[])
+         cmocka_unit_test_setup_teardown(test_fo_srv_ttl_zero,
+                                         test_fo_srv_setup,
+                                         test_fo_srv_teardown),
++        cmocka_unit_test_setup_teardown(test_fo_srv_duplicates,
++                                        test_fo_srv_setup,
++                                        test_fo_srv_teardown),
+     };
+ 
+     /* Set debug level to invalid value so we can deside if -d 0 was used. */
+-- 
+2.9.3
+

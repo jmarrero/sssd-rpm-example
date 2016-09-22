@@ -1,0 +1,202 @@
+From 6f97e6da7389e541f74855c702f8dafa02bbee67 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20=C4=8Cech?= <pcech@redhat.com>
+Date: Wed, 14 Sep 2016 09:00:06 -0400
+Subject: [PATCH 79/79] KRB5: Fixing FQ name of user in krb5_setup()
+
+This patch fixes creation of FQ username if krb5_map_user option
+ise used.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3188
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit b34ffbf33729c557c3d1aebf4707ad0ffe4f1904)
+---
+ src/providers/krb5/krb5_auth.c        |  8 +++++++-
+ src/providers/krb5/krb5_init_shared.c |  1 +
+ src/providers/krb5/krb5_utils.c       | 26 +++++++++++++++++++++++++-
+ src/providers/krb5/krb5_utils.h       |  4 +++-
+ src/tests/krb5_utils-tests.c          | 33 ++++++++++++++++++++-------------
+ 5 files changed, 56 insertions(+), 16 deletions(-)
+
+diff --git a/src/providers/krb5/krb5_auth.c b/src/providers/krb5/krb5_auth.c
+index f0f2280022a3ee951ccfa0040b616c48c3b25706..a5ecb24323d3d413bc08f100b90195d3619172d3 100644
+--- a/src/providers/krb5/krb5_auth.c
++++ b/src/providers/krb5/krb5_auth.c
+@@ -207,7 +207,13 @@ errno_t krb5_setup(TALLOC_CTX *mem_ctx,
+     if (ret == EOK) {
+         DEBUG(SSSDBG_TRACE_FUNC, "Setting mapped name to: %s\n", mapped_name);
+         kr->user = mapped_name;
+-        kr->kuserok_user = mapped_name;
++
++        kr->kuserok_user = sss_output_name(kr, kr->user,
++                                           dom->case_sensitive, 0);
++        if (kr->kuserok_user == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
+     } else if (ret == ENOENT) {
+         DEBUG(SSSDBG_TRACE_ALL, "No mapping for: %s\n", pd->user);
+         kr->user = pd->user;
+diff --git a/src/providers/krb5/krb5_init_shared.c b/src/providers/krb5/krb5_init_shared.c
+index 767291c0b953ea3f227f64a7e21f191262424cf5..c8fd8593a8b6d304fe314254c940351fa5ee12f3 100644
+--- a/src/providers/krb5/krb5_init_shared.c
++++ b/src/providers/krb5/krb5_init_shared.c
+@@ -94,6 +94,7 @@ errno_t krb5_child_init(struct krb5_ctx *krb5_auth_ctx,
+     ret = parse_krb5_map_user(krb5_auth_ctx,
+                               dp_opt_get_cstring(krb5_auth_ctx->opts,
+                                                  KRB5_MAP_USER),
++                              bectx->domain->name,
+                               &krb5_auth_ctx->name_to_primary);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "parse_krb5_map_user failed: %s:[%d]\n",
+diff --git a/src/providers/krb5/krb5_utils.c b/src/providers/krb5/krb5_utils.c
+index 0ac60daee533ea1264bc55d0d65054ed38b3a092..e968dfa5fe50c43c51e624507261ae2c8263b67d 100644
+--- a/src/providers/krb5/krb5_utils.c
++++ b/src/providers/krb5/krb5_utils.c
+@@ -521,7 +521,9 @@ done:
+ }
+ 
+ errno_t
+-parse_krb5_map_user(TALLOC_CTX *mem_ctx, const char *krb5_map_user,
++parse_krb5_map_user(TALLOC_CTX *mem_ctx,
++                    const char *krb5_map_user,
++                    const char *dom_name,
+                     struct map_id_name_to_krb_primary **_name_to_primary)
+ {
+     int size;
+@@ -570,6 +572,28 @@ parse_krb5_map_user(TALLOC_CTX *mem_ctx, const char *krb5_map_user,
+         }
+     }
+ 
++    /* conversion names to fully-qualified names */
++    for (int i = 0; i < size; i++) {
++        name_to_primary[i].id_name = sss_create_internal_fqname(
++                                                     name_to_primary,
++                                                     name_to_primary[i].id_name,
++                                                     dom_name);
++        if (name_to_primary[i].id_name == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, "sss_create_internal_fqname failed\n");
++            ret = ENOMEM;
++            goto done;
++        }
++
++        name_to_primary[i].krb_primary = sss_create_internal_fqname(
++                                                 name_to_primary,
++                                                 name_to_primary[i].krb_primary,
++                                                 dom_name);
++        if (name_to_primary[i].krb_primary == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, "sss_create_internal_fqname failed\n");
++            ret = ENOMEM;
++            goto done;
++        }
++    }
+     ret = EOK;
+ 
+ done:
+diff --git a/src/providers/krb5/krb5_utils.h b/src/providers/krb5/krb5_utils.h
+index 75b93c30ef5be5d16f2ce73f44abef674c6e98ff..3051a99445054638d04fbee34415e9cf3d226588 100644
+--- a/src/providers/krb5/krb5_utils.h
++++ b/src/providers/krb5/krb5_utils.h
+@@ -51,7 +51,9 @@ errno_t get_domain_or_subdomain(struct be_ctx *be_ctx,
+                                 struct sss_domain_info **dom);
+ 
+ errno_t
+-parse_krb5_map_user(TALLOC_CTX *mem_ctx, const char *krb5_map_user,
++parse_krb5_map_user(TALLOC_CTX *mem_ctx,
++                    const char *krb5_map_user,
++                    const char *dom_name,
+                     struct map_id_name_to_krb_primary **_name_to_primary);
+ 
+ #endif /* __KRB5_UTILS_H__ */
+diff --git a/src/tests/krb5_utils-tests.c b/src/tests/krb5_utils-tests.c
+index 515a1941509c13ca4ad8d9953687f9047da29426..36bd0324475e161e627006de0ddcbc775f8a749b 100644
+--- a/src/tests/krb5_utils-tests.c
++++ b/src/tests/krb5_utils-tests.c
+@@ -614,25 +614,25 @@ START_TEST(test_parse_krb5_map_user)
+     /* empty input */
+     {
+         check_leaks_push(mem_ctx);
+-        ret = parse_krb5_map_user(mem_ctx, NULL, &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, NULL, DOMAIN_NAME, &name_to_primary);
+         fail_unless(ret == EOK);
+         fail_unless(name_to_primary[0].id_name == NULL &&
+                     name_to_primary[0].krb_primary == NULL);
+         talloc_free(name_to_primary);
+ 
+-        ret = parse_krb5_map_user(mem_ctx, "", &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, "", DOMAIN_NAME, &name_to_primary);
+         fail_unless(ret == EOK);
+         fail_unless(name_to_primary[0].id_name == NULL &&
+                     name_to_primary[0].krb_primary == NULL);
+         talloc_free(name_to_primary);
+ 
+-        ret = parse_krb5_map_user(mem_ctx, ",", &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, ",", DOMAIN_NAME, &name_to_primary);
+         fail_unless(ret == EOK);
+         fail_unless(name_to_primary[0].id_name == NULL &&
+                     name_to_primary[0].krb_primary == NULL);
+         talloc_free(name_to_primary);
+ 
+-        ret = parse_krb5_map_user(mem_ctx, ",,", &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, ",,", DOMAIN_NAME, &name_to_primary);
+         fail_unless(ret == EOK);
+         fail_unless(name_to_primary[0].id_name == NULL &&
+                     name_to_primary[0].krb_primary == NULL);
+@@ -645,14 +645,16 @@ START_TEST(test_parse_krb5_map_user)
+         check_leaks_push(mem_ctx);
+         const char *p = "pája:preichl,joe:juser,jdoe:ßlack";
+         const char *p2 = " pája  : preichl , joe:\njuser,jdoe\t:   ßlack ";
+-        const char *expected[] = {"pája", "preichl", "joe", "juser", "jdoe", "ßlack"};
+-        ret = parse_krb5_map_user(mem_ctx, p, &name_to_primary);
++        const char *expected[] = { "pája@testdomain", "preichl@" DOMAIN_NAME,
++                                   "joe@testdomain", "juser@testdomain",
++                                   "jdoe@testdomain", "ßlack@testdomain" };
++        ret = parse_krb5_map_user(mem_ctx, p, DOMAIN_NAME, &name_to_primary);
+         fail_unless(ret == EOK);
+         compare_map_id_name_to_krb_primary(name_to_primary, expected,
+                                          sizeof(expected)/sizeof(const char*)/2);
+         talloc_free(name_to_primary);
+ 
+-        ret = parse_krb5_map_user(mem_ctx, p2, &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, p2, DOMAIN_NAME, &name_to_primary);
+         fail_unless(ret == EOK);
+         compare_map_id_name_to_krb_primary(name_to_primary,  expected,
+                                          sizeof(expected)/sizeof(const char*)/2);
+@@ -663,22 +665,27 @@ START_TEST(test_parse_krb5_map_user)
+     {
+         check_leaks_push(mem_ctx);
+ 
+-        ret = parse_krb5_map_user(mem_ctx, ":", &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, ":", DOMAIN_NAME, &name_to_primary);
+         fail_unless(ret == EINVAL);
+ 
+-        ret = parse_krb5_map_user(mem_ctx, "joe:", &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, "joe:", DOMAIN_NAME,
++                                  &name_to_primary);
+         fail_unless(ret == EINVAL);
+ 
+-        ret = parse_krb5_map_user(mem_ctx, ":joe", &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, ":joe", DOMAIN_NAME,
++                                  &name_to_primary);
+         fail_unless(ret == EINVAL);
+ 
+-        ret = parse_krb5_map_user(mem_ctx, "joe:,", &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, "joe:,", DOMAIN_NAME,
++                                  &name_to_primary);
+         fail_unless(ret == EINVAL);
+ 
+-        ret = parse_krb5_map_user(mem_ctx, ",joe", &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, ",joe", DOMAIN_NAME,
++                                  &name_to_primary);
+         fail_unless(ret == EINVAL);
+ 
+-        ret = parse_krb5_map_user(mem_ctx, "joe:j:user", &name_to_primary);
++        ret = parse_krb5_map_user(mem_ctx, "joe:j:user", DOMAIN_NAME,
++                                  &name_to_primary);
+         fail_unless(ret == EINVAL);
+ 
+         fail_unless(check_leaks_pop(mem_ctx));
+-- 
+2.9.3
+

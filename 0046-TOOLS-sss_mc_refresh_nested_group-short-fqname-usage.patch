@@ -1,0 +1,138 @@
+From ce402d01616b2a8ea5c3354085a07910e4903820 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Wed, 7 Sep 2016 14:43:13 +0200
+Subject: [PATCH 46/79] TOOLS: sss_mc_refresh_nested_group short/fqname usage
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We use shortname to refresh memory cache, but in case of nested groups,
+we used internal_fqname to refresh parent groups.
+
+We also wrongly used the shortname for sysdb_search operation.
+Which caused error message to be printed when sss_usermod -a or
+sss_groupmod -a where called.
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit cb54dbad6be907d277ce6aa39524338643e2f5a4)
+---
+ src/tools/tools_mc_util.c | 66 +++++++++++++++++++++++++++++++++--------------
+ 1 file changed, 47 insertions(+), 19 deletions(-)
+
+diff --git a/src/tools/tools_mc_util.c b/src/tools/tools_mc_util.c
+index 2516a1981ddd965d4cae8c469ed79aaef8fa7193..716e3760f67d958f2139adbb49998d9e352d23f4 100644
+--- a/src/tools/tools_mc_util.c
++++ b/src/tools/tools_mc_util.c
+@@ -293,62 +293,90 @@ errno_t sss_mc_refresh_group(const char *groupname)
+     return sss_mc_refresh_ent(groupname, SSS_TOOLS_GROUP);
+ }
+ 
+-errno_t sss_mc_refresh_nested_group(struct tools_ctx *tctx,
+-                                    const char *name)
++static errno_t sss_mc_refresh_nested_group(struct tools_ctx *tctx,
++                                           const char *shortname)
+ {
+     errno_t ret;
+-    struct ldb_message *msg;
++    struct ldb_message *msg = NULL;
+     struct ldb_message_element *el;
+     const char *attrs[] = { SYSDB_MEMBEROF,
+                             SYSDB_NAME,
+                             NULL };
+     size_t i;
+-    char *parent_name;
++    char *parent_internal_name;
++    char *parent_outname;
++    char *internal_name;
++    TALLOC_CTX *tmpctx;
+ 
+-    ret = sss_mc_refresh_group(name);
++    tmpctx = talloc_new(tctx);
++    if (tmpctx == NULL) {
++        return ENOMEM;
++    }
++
++    internal_name = sss_create_internal_fqname(tmpctx, shortname,
++                                               tctx->local->name);
++    if (internal_name == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = sss_mc_refresh_group(shortname);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_MINOR_FAILURE,
+-              "Cannot refresh group %s from memory cache\n", name);
++              "Cannot refresh group %s from memory cache\n", shortname);
+         /* try to carry on */
+     }
+ 
+-    ret = sysdb_search_group_by_name(tctx, tctx->local, name, attrs, &msg);
++    ret = sysdb_search_group_by_name(tmpctx, tctx->local, internal_name, attrs,
++                                     &msg);
+     if (ret) {
+         DEBUG(SSSDBG_OP_FAILURE,
+                "Search failed: %s (%d)\n", strerror(ret), ret);
+-        return ret;
++        goto done;
+     }
+ 
+     el = ldb_msg_find_element(msg, SYSDB_MEMBEROF);
+     if (!el || el->num_values == 0) {
+-        DEBUG(SSSDBG_TRACE_INTERNAL, "Group %s has no parents\n", name);
+-        talloc_free(msg);
+-        return EOK;
++        DEBUG(SSSDBG_TRACE_INTERNAL, "Group %s has no parents\n",
++              internal_name);
++        ret = EOK;
++        goto done;
+     }
+ 
+     /* This group is nested. We need to invalidate all its parents, too */
+     for (i=0; i < el->num_values; i++) {
+-        ret = sysdb_group_dn_name(tctx->sysdb, tctx,
++        ret = sysdb_group_dn_name(tctx->sysdb, tmpctx,
+                                   (const char *) el->values[i].data,
+-                                  &parent_name);
++                                  &parent_internal_name);
+         if (ret != EOK) {
+             DEBUG(SSSDBG_MINOR_FAILURE, "Malformed DN [%s]? Skipping\n",
+                   (const char *) el->values[i].data);
+-            talloc_free(parent_name);
++            talloc_free(parent_internal_name);
+             continue;
+         }
+ 
+-        ret = sss_mc_refresh_group(parent_name);
+-        talloc_free(parent_name);
++        parent_outname = sss_output_name(tmpctx, parent_internal_name,
++                                         tctx->local->case_preserve, 0);
++        if (parent_outname == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++
++        ret = sss_mc_refresh_group(parent_outname);
++        talloc_free(parent_internal_name);
++        talloc_free(parent_outname);
+         if (ret != EOK) {
+             DEBUG(SSSDBG_MINOR_FAILURE,
+-                  "Cannot refresh group %s from memory cache\n", name);
++                  "Cannot refresh group %s from memory cache\n", parent_outname);
+             /* try to carry on */
+         }
+     }
+ 
+-    talloc_free(msg);
+-    return EOK;
++    ret = EOK;
++
++done:
++    talloc_free(tmpctx);
++    return ret;
+ }
+ 
+ errno_t sss_mc_refresh_grouplist(struct tools_ctx *tctx,
+-- 
+2.9.3
+

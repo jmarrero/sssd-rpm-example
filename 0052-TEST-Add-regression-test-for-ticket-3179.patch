@@ -1,0 +1,203 @@
+From b7886a50d6467d9130fade4d0e94a818c2cc6300 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Wed, 7 Sep 2016 18:23:16 +0200
+Subject: [PATCH 52/79] TEST: Add regression test for ticket #3179
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3179
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit 1c72723cde8bea0d390b928c7cd29e48e7a7deab)
+---
+ src/tests/intg/ldap_local_override_test.py | 126 ++++++++++++++++++++++++++---
+ 1 file changed, 114 insertions(+), 12 deletions(-)
+
+diff --git a/src/tests/intg/ldap_local_override_test.py b/src/tests/intg/ldap_local_override_test.py
+index 63de836d4d645b2e2be968bb23ce84f0cb90189a..714268f024d0f7b01309c55a84f56d0d1aec58f9 100644
+--- a/src/tests/intg/ldap_local_override_test.py
++++ b/src/tests/intg/ldap_local_override_test.py
+@@ -205,27 +205,38 @@ def assert_user_default():
+     ent.assert_passwd_by_name('user2@LDAP', user2)
+ 
+ 
+-def assert_user_overriden():
++def assert_user_overriden(override_name=True):
+ 
+-    user1 = dict(name='ov_user1', passwd='*', uid=10010, gid=20010,
++    if override_name:
++        name1 = "ov_user1"
++        name2 = "ov_user2"
++    else:
++        name1 = "user1"
++        name2 = "user2"
++
++    user1 = dict(name=name1, passwd='*', uid=10010, gid=20010,
+                  gecos='Overriden User 1',
+                  dir='/home/ov/user1',
+                  shell='/bin/ov_user1_shell')
+ 
+-    user2 = dict(name='ov_user2', passwd='*', uid=10020, gid=20020,
++    user2 = dict(name=name2, passwd='*', uid=10020, gid=20020,
+                  gecos='Overriden User 2',
+                  dir='/home/ov/user2',
+                  shell='/bin/ov_user2_shell')
+ 
+     ent.assert_passwd_by_name('user1', user1)
+     ent.assert_passwd_by_name('user1@LDAP', user1)
+-    ent.assert_passwd_by_name('ov_user1', user1)
+-    ent.assert_passwd_by_name('ov_user1@LDAP', user1)
++
++    if override_name:
++        ent.assert_passwd_by_name('ov_user1', user1)
++        ent.assert_passwd_by_name('ov_user1@LDAP', user1)
+ 
+     ent.assert_passwd_by_name('user2', user2)
+     ent.assert_passwd_by_name('user2@LDAP', user2)
+-    ent.assert_passwd_by_name('ov_user2', user2)
+-    ent.assert_passwd_by_name('ov_user2@LDAP', user2)
++
++    if override_name:
++        ent.assert_passwd_by_name('ov_user2', user2)
++        ent.assert_passwd_by_name('ov_user2@LDAP', user2)
+ 
+ 
+ #
+@@ -514,6 +525,54 @@ def test_imp_exp_user_override(ldap_conn, env_imp_exp_user_override):
+     assert_user_overriden()
+ 
+ 
++# Regression test for bug 3179
++
++
++def test_imp_exp_user_overrride_noname(ldap_conn,
++                                       env_two_users_and_group):
++
++    # Override
++    subprocess.check_call(["sss_override", "user-add", "user1",
++                           "-u", "10010",
++                           "-g", "20010",
++                           "-c", "Overriden User 1",
++                           "-h", "/home/ov/user1",
++                           "-s", "/bin/ov_user1_shell"])
++
++    subprocess.check_call(["sss_override", "user-add", "user2@LDAP",
++                           "-u", "10020",
++                           "-g", "20020",
++                           "-c", "Overriden User 2",
++                           "-h", "/home/ov/user2",
++                           "-s", "/bin/ov_user2_shell"])
++
++    # Restart SSSD so the override might take effect
++    restart_sssd()
++
++    # Assert entries are overriden
++    assert_user_overriden(override_name=False)
++
++    # Export overrides
++    subprocess.check_call(["sss_override", "user-export", OVERRIDE_FILENAME])
++
++    # Drop all overrides
++    subprocess.check_call(["sss_override", "user-del", "user1"])
++    subprocess.check_call(["sss_override", "user-del", "user2@LDAP"])
++
++    # Avoid hitting memory cache
++    time.sleep(2)
++
++    # Assert entries are not overridden
++    assert_user_default()
++
++    # Import overrides
++    subprocess.check_call(["sss_override", "user-import",
++                           OVERRIDE_FILENAME])
++    restart_sssd()
++
++    assert_user_overriden(override_name=False)
++
++
+ #
+ # Override user-show
+ #
+@@ -581,7 +640,7 @@ def test_find_user_override(ldap_conn, env_find_user_override):
+ # Common group asserts
+ #
+ 
+-def assert_group_overriden():
++def assert_group_overriden(override_name=True):
+ 
+     # Assert entries are overridden
+     empty_group = dict(gid=3002, mem=ent.contains_only())
+@@ -589,13 +648,17 @@ def assert_group_overriden():
+ 
+     ent.assert_group_by_name("group", group)
+     ent.assert_group_by_name("group@LDAP", group)
+-    ent.assert_group_by_name("ov_group", group)
+-    ent.assert_group_by_name("ov_group@LDAP", group)
++
++    if override_name:
++        ent.assert_group_by_name("ov_group", group)
++        ent.assert_group_by_name("ov_group@LDAP", group)
+ 
+     ent.assert_group_by_name("empty_group", empty_group)
+     ent.assert_group_by_name("empty_group@LDAP", empty_group)
+-    ent.assert_group_by_name("ov_empty_group", empty_group)
+-    ent.assert_group_by_name("ov_empty_group@LDAP", empty_group)
++
++    if override_name:
++        ent.assert_group_by_name("ov_empty_group", empty_group)
++        ent.assert_group_by_name("ov_empty_group@LDAP", empty_group)
+ 
+ 
+ def assert_group_default():
+@@ -841,6 +904,45 @@ def test_imp_exp_group_override(ldap_conn, env_imp_exp_group_override):
+     assert_group_overriden()
+ 
+ 
++# Regression test for bug 3179
++
++
++def test_imp_exp_group_override_noname(ldap_conn, env_group_basic):
++
++    # Override - do not use -n here)
++    subprocess.check_call(["sss_override", "group-add", "group",
++                           "-g", "3001"])
++
++    subprocess.check_call(["sss_override", "group-add", "empty_group@LDAP",
++                           "--gid", "3002"])
++
++    # Restart SSSD so the override might take effect
++    restart_sssd()
++
++    # Assert entries are overridden
++    assert_group_overriden(override_name=False)
++
++    # Export overrides
++    subprocess.check_call(["sss_override", "group-export",
++                           OVERRIDE_FILENAME])
++
++    # Drop all overrides
++    subprocess.check_call(["sss_override", "group-del", "group"])
++    subprocess.check_call(["sss_override", "group-del", "empty_group@LDAP"])
++
++    # Avoid hitting memory cache
++    time.sleep(2)
++
++    assert_group_default()
++
++    # Import overrides
++    subprocess.check_call(["sss_override", "group-import",
++                           OVERRIDE_FILENAME])
++    restart_sssd()
++
++    assert_group_overriden(override_name=False)
++
++
+ # Regression test for bug #2802
+ # sss_override segfaults when accidentally adding --help flag to some commands
+ 
+-- 
+2.9.3
+

@@ -1,0 +1,60 @@
+From 5e42bd82ea08e3a45cf8369d51f68587f5bd796e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Mon, 12 Sep 2016 19:22:56 +0200
+Subject: [PATCH 53/79] TOOLS: sss_groupshow fails to show MPG
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The MPG search uses it's own search function
+that used sysdb operation with shortname,
+but it expects internal fqname.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3184
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 812bed08943df8bf3fd1ff9eabcaf5bedc635c92)
+---
+ src/tools/sss_groupshow.c | 12 ++++++++++--
+ 1 file changed, 10 insertions(+), 2 deletions(-)
+
+diff --git a/src/tools/sss_groupshow.c b/src/tools/sss_groupshow.c
+index 5870cc802c70366c47a0d30cb0d9795cf6035bc5..00f6f12939b6bef2dd10085f8cf99304e87f1211 100644
+--- a/src/tools/sss_groupshow.c
++++ b/src/tools/sss_groupshow.c
+@@ -553,13 +553,14 @@ int group_show_recurse(TALLOC_CTX *mem_ctx,
+ 
+ static int group_show_mpg(TALLOC_CTX *mem_ctx,
+                           struct sss_domain_info *domain,
+-                          const char *name,
++                          const char *shortname,
+                           struct group_info **res)
+ {
+     const char *attrs[] = GROUP_SHOW_MPG_ATTRS;
+     struct ldb_message *msg;
+     struct group_info *info;
+     int ret;
++    char *sysdb_fqname;
+ 
+     info = talloc_zero(mem_ctx, struct group_info);
+     if (!info) {
+@@ -567,7 +568,14 @@ static int group_show_mpg(TALLOC_CTX *mem_ctx,
+         goto fail;
+     }
+ 
+-    ret = sysdb_search_user_by_name(info, domain, name, attrs, &msg);
++    sysdb_fqname = sss_create_internal_fqname(mem_ctx,
++                                              shortname,
++                                              domain->name);
++    if (sysdb_fqname == NULL) {
++        return ENOMEM;
++    }
++
++    ret = sysdb_search_user_by_name(info, domain, sysdb_fqname, attrs, &msg);
+     if (ret) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Search failed: %s (%d)\n", strerror(ret), ret);
+-- 
+2.9.3
+

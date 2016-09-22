@@ -26,7 +26,7 @@
 
 Name: sssd
 Version: 1.14.1
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -74,6 +74,46 @@ Patch0036: 0036-DEBUG-Apend-line-feed-to-messages-from-libsemanage.patch
 Patch0037: 0037-MAN-Document-the-ldap_user_primary_group-option.patch
 Patch0038: 0038-sdap_initgr_nested_get_membership_diff-use-fully-qua.patch
 Patch0039: 0039-SYSDB-Removing-of-unused-parameter.patch
+Patch0040: 0040-SYSDB-Suppress-warning-from-clang-static-analyser.patch
+Patch0041: 0041-TOOLS-Fix-a-typo-in-groupadd.patch
+Patch0042: 0042-TOOLS-sss_groupshow-did-not-work.patch
+Patch0043: 0043-TESTS-sss_groupadd-groupshow-regressions.patch
+Patch0044: 0044-TOOLS-use-internal-fqdn-for-DN.patch
+Patch0045: 0045-TESTS-Test-for-sss_user-groupmod-a.patch
+Patch0046: 0046-TOOLS-sss_mc_refresh_nested_group-short-fqname-usage.patch
+Patch0047: 0047-TESTS-Add-FQDN-variants-for-some-tests.patch
+Patch0048: 0048-KRB5-Send-the-output-username-not-internal-fqname-to.patch
+Patch0049: 0049-MONITOR-Remove-disable-netlink-command-line-option.patch
+Patch0050: 0050-MONITOR-Add-disable_netlink-option.patch
+Patch0051: 0051-TOOLS-sss_override-without-name-override.patch
+Patch0052: 0052-TEST-Add-regression-test-for-ticket-3179.patch
+Patch0053: 0053-TOOLS-sss_groupshow-fails-to-show-MPG.patch
+Patch0054: 0054-TESTS-sss_groupshow-with-MPG.patch
+Patch0055: 0055-KRB5-Return-ERR_NETWORK_IO-on-clock-skew.patch
+Patch0056: 0056-SDAP-Fix-settig-paging-attribute-in-sdap_get_generic.patch
+Patch0057: 0057-PROXY-Adding-proxy_max_children-option.patch
+Patch0058: 0058-SECRETS-Search-by-the-right-type-when-checking-conta.patch
+Patch0059: 0059-LDAP-Return-partial-results-from-adminlimit-exceeded.patch
+Patch0060: 0060-MAN-sssd-sudo-manual-update-IPA-native-LDAP-tree-sup.patch
+Patch0061: 0061-p11-only-set-PKCS11_LOGIN_TOKEN_NAME-if-gdm-smartcar.patch
+Patch0062: 0062-p11-return-a-fully-qualified-name.patch
+Patch0063: 0063-pam_sss-check-PKCS11_LOGIN_TOKEN_NAME.patch
+Patch0064: 0064-SECRETS-Don-t-remove-a-container-when-it-has-childre.patch
+Patch0065: 0065-PAM-call-free-only-when-memory-is-expected-to-be-all.patch
+Patch0066: 0066-TESTS-Fixing-of-const-warnings-in-sbus-tests.patch
+Patch0067: 0067-MAKEFILE-Fixing-CFLAGS-in-some-tests.patch
+Patch0068: 0068-TESTS-Add-integration-tests-for-the-sssd-secrets.patch
+Patch0069: 0069-AUTOFS-Fix-offline-resolution-of-autofs-maps.patch
+Patch0070: 0070-NSS-Fix-offline-resolution-of-netgroups.patch
+Patch0071: 0071-TESTS-Test-offline-netgroups-resolution.patch
+Patch0072: 0072-Remove-double-semicolon-at-the-end-of-line.patch
+Patch0073: 0073-TESTS-Add-simple-test-for-double-semicolon.patch
+Patch0074: 0074-failover-proceed-normally-when-no-new-server-is-foun.patch
+Patch0075: 0075-tests-Add-a-regression-test-for-upstream-ticket-3131.patch
+Patch0076: 0076-IFP-expose-user-and-group-unique-IDs-through-DBus.patch
+Patch0077: 0077-SSSDConfig-Do-not-fail-with-nonexisting-domains-serv.patch
+Patch0078: 0078-SPEC-Rename-python-packages-using-macro-python_provi.patch
+Patch0079: 0079-KRB5-Fixing-FQ-name-of-user-in-krb5_setup.patch
 
 ### Dependencies ###
 
@@ -1127,12 +1167,17 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Sep 22 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.1-3
+- Fix regression with krb5_map_user
+- Resolves: rhbz#1375552 - krb5_map_user doesn't seem effective anymore
+- Resolves: rhbz#1349286 - authconfig fails with SSSDConfig.NoDomainError:
+                           default if nonexistent domain is mentioned
+
 * Thu Sep 01 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.1-2
 - Backport important patches from upstream 1.14.2 prerelease
 - Resolves: upstream #3154 - sssd exits if clock is adjusted backwards after
                              boot
 - Resolves: upstream #3163 - resolving IPA nested user group is broken in 1.14
-
 
 * Fri Aug 19 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.1-1
 - New upstream release 1.14.0

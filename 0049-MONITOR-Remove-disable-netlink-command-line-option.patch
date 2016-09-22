@@ -1,0 +1,113 @@
+From 29a4731b129d759870a4706525396948814c8e27 Mon Sep 17 00:00:00 2001
+From: Justin Stephenson <jstephen@redhat.com>
+Date: Fri, 26 Aug 2016 15:15:32 -0400
+Subject: [PATCH 49/79] MONITOR: Remove --disable-netlink command-line option
+
+    Removing monitor command-line option, to be superceded by
+    sssd.conf option
+
+Reviewed-by: Petr Cech <pcech@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 632fc5d8991d167eea20769c823163551c3f1d8c)
+---
+ src/man/sssd.8.xml    | 11 -----------
+ src/monitor/monitor.c | 33 ++++++++++++++++++++-------------
+ 2 files changed, 20 insertions(+), 24 deletions(-)
+
+diff --git a/src/man/sssd.8.xml b/src/man/sssd.8.xml
+index ca8444d31ebca3d65a3baf83e20d458226ed5cd4..923da6824907f0d2d140d9ca83f87338e7664f83 100644
+--- a/src/man/sssd.8.xml
++++ b/src/man/sssd.8.xml
+@@ -114,17 +114,6 @@
+             </varlistentry>
+             <varlistentry>
+                 <term>
+-                    <option>--disable-netlink</option>
+-                </term>
+-                <listitem>
+-                    <para>
+-                        sssd will ignore Netlink changes when making decisions
+-                        about resetting online and offline operational status.
+-                    </para>
+-                </listitem>
+-            </varlistentry>
+-            <varlistentry>
+-                <term>
+                     <option>-c</option>,<option>--config</option>
+                 </term>
+                 <listitem>
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index 1f89c5a79feab8a921ce2f9132763b37ab506596..442bdbc423aaa1224d17b9f357193ec73b045d29 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -2041,8 +2041,7 @@ static void missing_resolv_conf(struct tevent_context *ev,
+ }
+ 
+ static int monitor_process_init(struct mt_ctx *ctx,
+-                                const char *config_file,
+-                                bool opt_netlinkoff)
++                                const char *config_file)
+ {
+     TALLOC_CTX *tmp_ctx;
+     struct tevent_signal *tes;
+@@ -2173,14 +2172,12 @@ static int monitor_process_init(struct mt_ctx *ctx,
+         return ret;
+     }
+ 
+-    if (opt_netlinkoff == false) {
+-        ret = setup_netlink(ctx, ctx->ev, network_status_change_cb,
+-                            ctx, &ctx->nlctx);
+-        if (ret != EOK) {
+-            DEBUG(SSSDBG_OP_FAILURE,
+-                  "Cannot set up listening for network notifications\n");
+-            return ret;
+-        }
++    ret = setup_netlink(ctx, ctx->ev, network_status_change_cb,
++                        ctx, &ctx->nlctx);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Cannot set up listening for network notifications\n");
++        return ret;
+     }
+ 
+     /* start providers */
+@@ -2488,7 +2485,8 @@ int main(int argc, const char *argv[])
+          _("Become a daemon (default)"), NULL }, \
+         {"interactive", 'i', POPT_ARG_NONE, &opt_interactive, 0, \
+          _("Run interactive (not a daemon)"), NULL}, \
+-        {"disable-netlink", '\0', POPT_ARG_NONE, &opt_netlinkoff, 0, \
++        {"disable-netlink", '\0', POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN,
++            &opt_netlinkoff, 0, \
+          _("Disable netlink interface"), NULL}, \
+         {"config", 'c', POPT_ARG_STRING, &opt_config_file, 0, \
+          _("Specify a non-default config file"), NULL}, \
+@@ -2575,6 +2573,15 @@ int main(int argc, const char *argv[])
+         config_file = talloc_strdup(tmp_ctx, SSSD_CONFIG_FILE);
+     }
+ 
++    if (opt_netlinkoff) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "Option --disable-netlink has been removed and "
++              "replaced as a monitor option in sssd.conf\n");
++        sss_log(SSS_LOG_ALERT,
++                "--disable-netlink has been deprecated, tunable option "
++                "disable_netlink available as replacement(man sssd.conf)");
++    }
++
+     if (!config_file) {
+         return 6;
+     }
+@@ -2692,8 +2699,8 @@ int main(int argc, const char *argv[])
+     monitor->ev = main_ctx->event_ctx;
+     talloc_steal(main_ctx, monitor);
+ 
+-    ret = monitor_process_init(monitor, config_file,
+-                               opt_netlinkoff);
++    ret = monitor_process_init(monitor, config_file);
++
+     if (ret != EOK) return 3;
+     talloc_free(tmp_ctx);
+ 
+-- 
+2.9.3
+

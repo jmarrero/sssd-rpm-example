@@ -1,0 +1,37 @@
+From 958e633f0cc364f758f9d417002e9eba60f15642 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 19 Sep 2016 10:53:51 +0200
+Subject: [PATCH 65/79] PAM: call free only when memory is expected to be
+ allocated
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reborted by Coverity
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit a8631161c47cbaefe7fd14b88202238bbdcc3dc8)
+---
+ src/sss_client/pam_sss.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/sss_client/pam_sss.c b/src/sss_client/pam_sss.c
+index 2049d5fb0c6092aaaa914385c79d02d8f44b447e..be697c7fcfb47a57b5b498c61f60fcf4bfbbd57f 100644
+--- a/src/sss_client/pam_sss.c
++++ b/src/sss_client/pam_sss.c
+@@ -1729,10 +1729,11 @@ static int check_login_token_name(pam_handle_t *pamh, struct pam_items *pi,
+         ret = do_pam_conversation(pamh, PAM_PROMPT_ECHO_OFF, prompt,
+                                   NULL, &answer);
+         free(prompt);
+-        free(answer);
+         if (ret != PAM_SUCCESS) {
+             D(("do_pam_conversation failed."));
+             return ret;
++        } else {
++            free(answer);
+         }
+ 
+         pam_status = send_and_receive(pamh, pi, SSS_PAM_PREAUTH, quiet_mode);
+-- 
+2.9.3
+

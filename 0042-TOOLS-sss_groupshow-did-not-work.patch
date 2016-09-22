@@ -1,0 +1,60 @@
+From e69c1ed1452b43fafb31e252589d7a5aa37f9cf7 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Tue, 6 Sep 2016 13:46:53 +0200
+Subject: [PATCH 42/79] TOOLS: sss_groupshow did not work
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+sss_groupshow used shortname to search
+in sysdb database. We have to u e sysdb_fqname
+(aka internal_fqname) format for all sysdb
+oprations.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3175
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 5210c5d3a5a83b5d08396ee23d88f6ba0994097d)
+---
+ src/tools/sss_groupshow.c | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/src/tools/sss_groupshow.c b/src/tools/sss_groupshow.c
+index 41d7475cef1093a4cb214ec4b017db59e6c26fe2..5870cc802c70366c47a0d30cb0d9795cf6035bc5 100644
+--- a/src/tools/sss_groupshow.c
++++ b/src/tools/sss_groupshow.c
+@@ -318,7 +318,7 @@ int group_show(TALLOC_CTX *mem_ctx,
+                struct sysdb_ctx *sysdb,
+                struct sss_domain_info *domain,
+                bool   recursive,
+-               const char *name,
++               const char *shortname,
+                struct group_info **res)
+ {
+     struct group_info *root;
+@@ -326,11 +326,20 @@ int group_show(TALLOC_CTX *mem_ctx,
+     struct ldb_message *msg = NULL;
+     const char **group_members = NULL;
+     int nmembers = 0;
++    char *sysdb_fqname = NULL;
+     int ret;
+     int i;
+ 
++    sysdb_fqname = sss_create_internal_fqname(mem_ctx,
++                                              shortname,
++                                              domain->name);
++    if (sysdb_fqname == NULL) {
++        return ENOMEM;
++    }
++
+     /* First, search for the root group */
+-    ret = sysdb_search_group_by_name(mem_ctx, domain, name, attrs, &msg);
++    ret = sysdb_search_group_by_name(mem_ctx, domain, sysdb_fqname, attrs,
++                                     &msg);
+     if (ret) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Search failed: %s (%d)\n", strerror(ret), ret);
+-- 
+2.9.3
+

@@ -1,0 +1,156 @@
+From 99e3e869ae031ce70f6f7a0d7435bf9969cf3108 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 7 Sep 2016 12:07:36 +0200
+Subject: [PATCH 48/79] KRB5: Send the output username, not internal fqname to
+ krb5_child
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+krb5_child calls krb5_kuserok() during the access phase which checks if
+a particular user is allowed to authenticate as a particular principal.
+We used to pass the internal fqname to krb5_kuserok() which broke the
+functionality and all users were denied access.
+
+This patch changes that to send the 'output' username to krb5_child,
+because that's the username the system receives through getpwnam() or
+getpwuid() anyway. The patch also adds a new structure member fo the
+krb5child_req structure to avoid reusing the pd->user variable but have
+an explicit one that serves as the input for the child process.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3172
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit fedfb7c62b4efa89d18d0d3a7895a2a34ec4ce42)
+---
+ src/providers/krb5/krb5_access.c        | 10 ++++++++--
+ src/providers/krb5/krb5_auth.c          | 18 ++++++++++++++----
+ src/providers/krb5/krb5_auth.h          |  9 ++++++---
+ src/providers/krb5/krb5_child_handler.c |  4 ++--
+ 4 files changed, 30 insertions(+), 11 deletions(-)
+
+diff --git a/src/providers/krb5/krb5_access.c b/src/providers/krb5/krb5_access.c
+index 3afb90150d77ef4ab2c1b5b79abb95d68eb131f6..be9068c0f9180f8de0de259aae368534effaf7fb 100644
+--- a/src/providers/krb5/krb5_access.c
++++ b/src/providers/krb5/krb5_access.c
+@@ -51,6 +51,7 @@ struct tevent_req *krb5_access_send(TALLOC_CTX *mem_ctx,
+     int ret;
+     const char **attrs;
+     struct ldb_result *res;
++    struct sss_domain_info *dom;
+ 
+     req = tevent_req_create(mem_ctx, &state, struct krb5_access_state);
+     if (req == NULL) {
+@@ -64,8 +65,13 @@ struct tevent_req *krb5_access_send(TALLOC_CTX *mem_ctx,
+     state->krb5_ctx = krb5_ctx;
+     state->access_allowed = false;
+ 
+-    ret = krb5_setup(state, pd, krb5_ctx, be_ctx->domain->case_sensitive,
+-                     &state->kr);
++    ret = get_domain_or_subdomain(be_ctx, pd->domain, &dom);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "get_domain_or_subdomain failed.\n");
++        goto done;
++    }
++
++    ret = krb5_setup(state, pd, dom, krb5_ctx, &state->kr);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "krb5_setup failed.\n");
+         goto done;
+diff --git a/src/providers/krb5/krb5_auth.c b/src/providers/krb5/krb5_auth.c
+index dabf55cf24a8afda16fee6697120c7c6f088b796..f0f2280022a3ee951ccfa0040b616c48c3b25706 100644
+--- a/src/providers/krb5/krb5_auth.c
++++ b/src/providers/krb5/krb5_auth.c
+@@ -174,8 +174,10 @@ done:
+     return ret;
+ }
+ 
+-errno_t krb5_setup(TALLOC_CTX *mem_ctx, struct pam_data *pd,
+-                   struct krb5_ctx *krb5_ctx, bool cs,
++errno_t krb5_setup(TALLOC_CTX *mem_ctx,
++                   struct pam_data *pd,
++                   struct sss_domain_info *dom,
++                   struct krb5_ctx *krb5_ctx,
+                    struct krb5child_req **_krb5_req)
+ {
+     struct krb5child_req *kr;
+@@ -201,13 +203,21 @@ errno_t krb5_setup(TALLOC_CTX *mem_ctx, struct pam_data *pd,
+     kr->krb5_ctx = krb5_ctx;
+ 
+     ret = get_krb_primary(krb5_ctx->name_to_primary,
+-                          pd->user, cs, &mapped_name);
++                          pd->user, dom->case_sensitive, &mapped_name);
+     if (ret == EOK) {
+         DEBUG(SSSDBG_TRACE_FUNC, "Setting mapped name to: %s\n", mapped_name);
+         kr->user = mapped_name;
++        kr->kuserok_user = mapped_name;
+     } else if (ret == ENOENT) {
+         DEBUG(SSSDBG_TRACE_ALL, "No mapping for: %s\n", pd->user);
+         kr->user = pd->user;
++
++        kr->kuserok_user = sss_output_name(kr, kr->user,
++                                           dom->case_sensitive, 0);
++        if (kr->kuserok_user == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
+     } else {
+         DEBUG(SSSDBG_CRIT_FAILURE, "get_krb_primary failed - %s:[%d]\n",
+               sss_strerror(ret), ret);
+@@ -534,7 +544,7 @@ struct tevent_req *krb5_auth_send(TALLOC_CTX *mem_ctx,
+     attrs[6] = SYSDB_AUTH_TYPE;
+     attrs[7] = NULL;
+ 
+-    ret = krb5_setup(state, pd, krb5_ctx, state->domain->case_sensitive,
++    ret = krb5_setup(state, pd, state->domain, krb5_ctx,
+                      &state->kr);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "krb5_setup failed.\n");
+diff --git a/src/providers/krb5/krb5_auth.h b/src/providers/krb5/krb5_auth.h
+index dbad061f0203b6383daeeab506bf9950d892ea4b..11bb595833269177b7e2c5fc6372d6a6fb6d93d2 100644
+--- a/src/providers/krb5/krb5_auth.h
++++ b/src/providers/krb5/krb5_auth.h
+@@ -57,11 +57,14 @@ struct krb5child_req {
+     bool send_pac;
+ 
+     const char *user;
++    const char *kuserok_user;
+ };
+ 
+-errno_t krb5_setup(TALLOC_CTX *mem_ctx, struct pam_data *pd,
+-                   struct krb5_ctx *krb5_ctx, bool case_sensitive,
+-                   struct krb5child_req **krb5_req);
++errno_t krb5_setup(TALLOC_CTX *mem_ctx,
++                   struct pam_data *pd,
++                   struct sss_domain_info *dom,
++                   struct krb5_ctx *krb5_ctx,
++                   struct krb5child_req **_krb5_req);
+ 
+ struct tevent_req *
+ krb5_pam_handler_send(TALLOC_CTX *mem_ctx,
+diff --git a/src/providers/krb5/krb5_child_handler.c b/src/providers/krb5/krb5_child_handler.c
+index 09a1e5f59494a5c07d5c9eefb94919ca9389cb27..1eec7261f00976b3725fee9323755edecd5409a5 100644
+--- a/src/providers/krb5/krb5_child_handler.c
++++ b/src/providers/krb5/krb5_child_handler.c
+@@ -161,7 +161,7 @@ static errno_t create_send_buffer(struct krb5child_req *kr,
+     }
+ 
+     if (kr->pd->cmd == SSS_PAM_ACCT_MGMT) {
+-        username_len = strlen(kr->pd->user);
++        username_len = strlen(kr->kuserok_user);
+         buf->size += sizeof(uint32_t) + username_len;
+     }
+ 
+@@ -217,7 +217,7 @@ static errno_t create_send_buffer(struct krb5child_req *kr,
+ 
+     if (kr->pd->cmd == SSS_PAM_ACCT_MGMT) {
+         SAFEALIGN_SET_UINT32(&buf->data[rp], username_len, &rp);
+-        safealign_memcpy(&buf->data[rp], kr->pd->user, username_len, &rp);
++        safealign_memcpy(&buf->data[rp], kr->kuserok_user, username_len, &rp);
+     }
+ 
+     *io_buf = buf;
+-- 
+2.9.3
+

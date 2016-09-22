@@ -1,0 +1,55 @@
+From 702f4c8aed1bc997e99ab28349269c4cc151beda Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Mon, 12 Sep 2016 19:25:13 +0200
+Subject: [PATCH 54/79] TESTS: sss_groupshow with MPG
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Regression test for ticket #3184
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3184
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit bb14556c1df503314644fc424fbbf95759791db9)
+---
+ src/tests/intg/test_local_domain.py | 22 ++++++++++++++++++++++
+ 1 file changed, 22 insertions(+)
+
+diff --git a/src/tests/intg/test_local_domain.py b/src/tests/intg/test_local_domain.py
+index b34e4a3d31cdbc1dc257d8fffcf0f5a07803b20c..8e1d6fb2b69f5e6e033ae06d4bd52cc88e54872b 100644
+--- a/src/tests/intg/test_local_domain.py
++++ b/src/tests/intg/test_local_domain.py
+@@ -118,6 +118,28 @@ def assert_nonexistent_group(name):
+         grp.getgrnam(name)
+ 
+ 
++def test_groupshow_mpg(local_domain_only):
++    """
++    Regression test for ticket
++    https://fedorahosted.org/sssd/ticket/3184
++    """
++    subprocess.check_call(["sss_useradd", "foo", "-M"])
++
++    # The user's mpg has to be found (should return 0)
++    subprocess.check_call(["sss_groupshow", "foo"])
++
++
++def test_groupshow_mpg_fqdn(local_domain_only_fqdn):
++    """
++    Regression test for ticket (fq variant)
++    https://fedorahosted.org/sssd/ticket/3184
++    """
++    subprocess.check_call(["sss_useradd", "foo@LOCAL", "-M"])
++
++    # The user's mpg has to be found (should return 0)
++    subprocess.check_call(["sss_groupshow", "foo@LOCAL"])
++
++
+ def test_wrong_LC_ALL(local_domain_only):
+     """
+     Regression test for ticket
+-- 
+2.9.3
+

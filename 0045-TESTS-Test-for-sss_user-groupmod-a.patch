@@ -1,0 +1,66 @@
+From 1b692a1142ec59e27ebb99666634a6e0464317d1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Wed, 7 Sep 2016 13:08:59 +0200
+Subject: [PATCH 45/79] TESTS: Test for sss_user/groupmod -a
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Regression tests for ticket #3178.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3178
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 7fa4964d84f41bd80a6d971ffaeef87a7c2f19be)
+---
+ src/tests/intg/test_local_domain.py | 36 ++++++++++++++++++++++++++++++++++++
+ 1 file changed, 36 insertions(+)
+
+diff --git a/src/tests/intg/test_local_domain.py b/src/tests/intg/test_local_domain.py
+index 56e3812b113b36301d1ec6049e5a1210d3070442..5e3e3d4d1cdc6db5d68a6e5b9d96d94c2c694b14 100644
+--- a/src/tests/intg/test_local_domain.py
++++ b/src/tests/intg/test_local_domain.py
+@@ -133,3 +133,39 @@ def test_sss_group_add_show_del(local_domain_only):
+ 
+     subprocess.check_call(["sss_groupdel", "foo"])
+     assert_nonexistent_group("foo")
++
++
++def test_add_local_user_to_local_group(local_domain_only):
++    """
++    Regression test for ticket
++    https://fedorahosted.org/sssd/ticket/3178
++    """
++    subprocess.check_call(["sss_groupadd", "-g", "10009", "group10009"])
++    subprocess.check_call(["sss_useradd", "-u", "10009", "-M", "user10009"])
++    subprocess.check_call(["sss_usermod", "-a", "group10009", "user10009"])
++
++    ent.assert_group_by_name(
++        "group10009",
++        dict(name="group10009", passwd="*", gid=10009,
++             mem=ent.contains_only("user10009")))
++
++
++def test_add_local_group_to_local_group(local_domain_only):
++    """
++    Regression test for tickets
++    https://fedorahosted.org/sssd/ticket/3178
++    """
++    subprocess.check_call(["sss_groupadd", "-g", "10009", "group_child"])
++    subprocess.check_call(["sss_useradd", "-u", "10009", "-M", "user_child"])
++    subprocess.check_call(["sss_usermod", "-a", "group_child", "user_child"])
++
++    subprocess.check_call(["sss_groupadd", "-g", "10008", "group_parent"])
++    subprocess.check_call(
++        ["sss_groupmod", "-a", "group_parent", "group_child"])
++
++    # User from child_group is member of parent_group, so child_group's
++    # member must be also parent_group's member
++    ent.assert_group_by_name(
++        "group_parent",
++        dict(name="group_parent", passwd="*", gid=10008,
++             mem=ent.contains_only("user_child")))
+-- 
+2.9.3
+

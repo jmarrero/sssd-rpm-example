@@ -1,0 +1,82 @@
+From b44ec31e6fe2b41e52c3f055d4322c253303471d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20=C4=8Cech?= <pcech@redhat.com>
+Date: Mon, 19 Sep 2016 06:28:57 -0400
+Subject: [PATCH 66/79] TESTS: Fixing of 'const' warnings in sbus tests
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 626d8217a2e578ba641ae3c968752aa15284a210)
+---
+ src/tests/sbus_codegen_tests.c | 13 +++++++------
+ src/tests/sbus_tests.c         |  4 ++--
+ 2 files changed, 9 insertions(+), 8 deletions(-)
+
+diff --git a/src/tests/sbus_codegen_tests.c b/src/tests/sbus_codegen_tests.c
+index 55d4657385cfc697985b570e4310164558e2d647..262bfd49e34be72196e1cf1fe451d96b43b067ae 100644
+--- a/src/tests/sbus_codegen_tests.c
++++ b/src/tests/sbus_codegen_tests.c
+@@ -634,7 +634,7 @@ static int pilot_test_server_init(struct sbus_connection *server, void *unused)
+     int ret;
+ 
+     ret = sbus_conn_register_iface(server, &pilot_iface.vtable, "/test/leela",
+-                                   "Crash into the billboard");
++                                   discard_const("Crash into the billboard"));
+     ck_assert_int_eq(ret, EOK);
+ 
+     return EOK;
+@@ -645,7 +645,8 @@ static int special_test_server_init(struct sbus_connection *server, void *unused
+     int ret;
+ 
+     ret = sbus_conn_register_iface(server, &special_iface.vtable,
+-                                   "/test/special", "Crash into the billboard");
++                                   "/test/special",
++                                   discard_const("Crash into the billboard"));
+     ck_assert_int_eq(ret, EOK);
+ 
+     return EOK;
+@@ -673,8 +674,8 @@ START_TEST(test_marshal_basic_types)
+     dbus_int64_t v_int64[] = { INT64_C(-6666666666666666), INT64_C(7777777777777777) };
+     dbus_uint64_t v_uint64[] = { UINT64_C(7777777777777777), INT64_C(888888888888888888) };
+     double v_double[] = { 1.1, 2.2, 3.3 };
+-    char *v_string[] = { "bears", "bears", "bears" };
+-    char *v_object_path[] = { "/original", "/original" };
++    const char *v_string[] = { "bears", "bears", "bears" };
++    const char *v_object_path[] = { "/original", "/original" };
+ 
+     unsigned char *arr_byte = v_byte;
+     dbus_int16_t *arr_int16 = v_int16;
+@@ -684,8 +685,8 @@ START_TEST(test_marshal_basic_types)
+     dbus_int64_t *arr_int64 = v_int64;
+     dbus_uint64_t *arr_uint64 = v_uint64;
+     double *arr_double = v_double;
+-    char **arr_string = v_string;
+-    char **arr_object_path = v_object_path;
++    char **arr_string = discard_const(v_string);
++    char **arr_object_path = discard_const(v_object_path);
+ 
+     int len_byte = N_ELEMENTS(v_byte);
+     int len_int16 = N_ELEMENTS(v_int16);
+diff --git a/src/tests/sbus_tests.c b/src/tests/sbus_tests.c
+index b472659639e3dce0733dde4ed54a55dcb40c191e..6bf71dc1bbe73b52455c18353531865da1ba6eac 100644
+--- a/src/tests/sbus_tests.c
++++ b/src/tests/sbus_tests.c
+@@ -201,12 +201,12 @@ static int pilot_test_server_init(struct sbus_connection *server, void *unused)
+     int ret;
+ 
+     ret = sbus_conn_register_iface(server, &pilot_impl.vtable, "/test/leela",
+-                                   "Crash into the billboard");
++                                   discard_const("Crash into the billboard"));
+     ck_assert_int_eq(ret, EOK);
+ 
+ 
+     ret = sbus_conn_register_iface(server, &pilot_impl.vtable, "/test/fry",
+-                                   "Don't crash");
++                                   discard_const("Don't crash"));
+     ck_assert_int_eq(ret, EOK);
+ 
+     return EOK;
+-- 
+2.9.3
+

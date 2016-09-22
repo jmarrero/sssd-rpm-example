@@ -1,0 +1,81 @@
+From 3b5dc99956715bb0251c48f18c05b3e0317b661f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 24 Aug 2016 14:21:12 +0200
+Subject: [PATCH 74/79] failover: proceed normally when no new server is found
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Multiple failover requests come in same time, the first one will
+result in collapsing the meta server but multiple resolution of
+SRV records are triggered. The first one finishes normally but the
+others won't find any new server thus ends with an error.
+
+This patch makes failover to proceed normally even in such case.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3131
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 03cb5ac6aa4c60d2c64c6fdc2daae656bf5493f4)
+---
+ src/providers/fail_over.c | 25 +++++++++++++++++++++----
+ 1 file changed, 21 insertions(+), 4 deletions(-)
+
+diff --git a/src/providers/fail_over.c b/src/providers/fail_over.c
+index 8ab39f27f77e19e601855632196006a8dbbdf136..77084098831a312bc8629513ccfc2a91165241ba 100644
+--- a/src/providers/fail_over.c
++++ b/src/providers/fail_over.c
+@@ -1112,7 +1112,9 @@ fo_resolve_service_cont(struct tevent_req *subreq)
+     ret = resolve_srv_recv(subreq, &state->server);
+     talloc_zfree(subreq);
+ 
+-    if (ret) {
++    /* We will proceed normally on ERR_SRV_DUPLICATES and if the server
++     * is already being resolved, we hook to that request. */
++    if (ret != EOK && ret != ERR_SRV_DUPLICATES) {
+         tevent_req_error(req, ret);
+         return;
+     }
+@@ -1398,11 +1400,23 @@ resolve_srv_done(struct tevent_req *subreq)
+         }
+ 
+         if (last_server == state->meta) {
+-            /* SRV lookup returned only those servers
+-             * that are already present. */
++            /* SRV lookup returned only those servers that are already present.
++             * This may happen only when an ongoing SRV resolution already
++             * exist. We will return server, but won't set any state. */
+             DEBUG(SSSDBG_TRACE_FUNC, "SRV lookup did not return "
+                                       "any new server.\n");
+             ret = ERR_SRV_DUPLICATES;
++
++            /* Since no new server is returned, state->meta->next is NULL.
++             * We return last tried server if possible which is server
++             * from previous resolution of SRV record, and first server
++             * otherwise. */
++            if (state->service->last_tried_server != NULL) {
++                state->out = state->service->last_tried_server;
++                goto done;
++            }
++
++            state->out = state->service->server_list;
+             goto done;
+         }
+ 
+@@ -1438,7 +1452,10 @@ resolve_srv_done(struct tevent_req *subreq)
+     }
+ 
+ done:
+-    if (ret != EOK) {
++    if (ret == ERR_SRV_DUPLICATES) {
++        tevent_req_error(req, ret);
++        return;
++    } else if (ret != EOK) {
+         state->out = state->meta;
+         set_srv_data_status(state->meta->srv_data, SRV_RESOLVE_ERROR);
+         tevent_req_error(req, ret);
+-- 
+2.9.3
+

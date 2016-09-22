@@ -1,0 +1,42 @@
+From 2ee5783d8c8bb51f169988a0a45ec711cfd47e41 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 12 Sep 2016 17:36:09 +0200
+Subject: [PATCH 59/79] LDAP: Return partial results from adminlimit exceeded
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves:
+    https://fedorahosted.org/sssd/ticket/3185
+
+Since commit c420ce830ac0b0b288a2a887ec2cfce5c748018c we try to move to
+the next server on any error on the connection, which in case there is
+only one server sends SSSD offline.
+
+It's more graceful to try to process the results, same as we already do
+with sizelimit exceeded.
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 3319d964721396c07daba383ded6aaaf33ed6e3b)
+---
+ src/providers/ldap/sdap_async.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ldap/sdap_async.c b/src/providers/ldap/sdap_async.c
+index e9ce2d5fd7c835919fff615e7b553d95f72d65a7..f374112935a7befa1d059df97f3119c14d8f5da5 100644
+--- a/src/providers/ldap/sdap_async.c
++++ b/src/providers/ldap/sdap_async.c
+@@ -1526,7 +1526,8 @@ static void sdap_get_generic_op_finished(struct sdap_op *op,
+                   sss_ldap_err2string(result), result,
+                   errmsg ? errmsg : "no errmsg set");
+ 
+-        if (result == LDAP_SIZELIMIT_EXCEEDED) {
++        if (result == LDAP_SIZELIMIT_EXCEEDED
++                || result == LDAP_ADMINLIMIT_EXCEEDED) {
+             /* Try to return what we've got */
+ 
+             if ( ! (state->flags & SDAP_SRCH_FLG_SIZELIMIT_SILENT)) {
+-- 
+2.9.3
+

@@ -1,0 +1,117 @@
+From 8f08ebcc6897b8b18f18554adfa5c55ab1313f2a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Wed, 7 Sep 2016 15:00:12 +0200
+Subject: [PATCH 47/79] TESTS: Add FQDN variants for some tests
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adds FQDN variants of some already existing tests.
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit f2d1d90a14267c01155eab7bb95b8eb34128acc9)
+---
+ src/tests/intg/test_local_domain.py | 83 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 83 insertions(+)
+
+diff --git a/src/tests/intg/test_local_domain.py b/src/tests/intg/test_local_domain.py
+index 5e3e3d4d1cdc6db5d68a6e5b9d96d94c2c694b14..b34e4a3d31cdbc1dc257d8fffcf0f5a07803b20c 100644
+--- a/src/tests/intg/test_local_domain.py
++++ b/src/tests/intg/test_local_domain.py
+@@ -87,6 +87,27 @@ def local_domain_only(request):
+     return None
+ 
+ 
++@pytest.fixture
++def local_domain_only_fqdn(request):
++    conf = unindent("""\
++        [sssd]
++        domains = LOCAL
++        services = nss
++
++        [nss]
++        memcache_timeout = 0
++
++        [domain/LOCAL]
++        id_provider = local
++        min_id = 10000
++        max_id = 20000
++        use_fully_qualified_names = True
++    """).format(**locals())
++    create_conf_fixture(request, conf)
++    create_sssd_fixture(request)
++    return None
++
++
+ def assert_nonexistent_user(name):
+     with pytest.raises(KeyError):
+         pwd.getpwnam(name)
+@@ -169,3 +190,65 @@ def test_add_local_group_to_local_group(local_domain_only):
+         "group_parent",
+         dict(name="group_parent", passwd="*", gid=10008,
+              mem=ent.contains_only("user_child")))
++
++
++def test_sss_group_add_show_del_fqdn(local_domain_only_fqdn):
++    """
++    Regression test for tickets
++    https://fedorahosted.org/sssd/ticket/3173
++    https://fedorahosted.org/sssd/ticket/3175
++    """
++
++    subprocess.check_call(["sss_groupadd", "foo@LOCAL", "-g", "10001"])
++
++    "This should not raise KeyError"
++    ent.assert_group_by_name("foo@LOCAL", dict(name="foo@LOCAL", gid=10001))
++
++    "sss_grupshow should return 0 with existing group name"
++    subprocess.check_call(["sss_groupshow", "foo@LOCAL"])
++
++    subprocess.check_call(["sss_groupdel", "foo@LOCAL"])
++    assert_nonexistent_group("foo@LOCAL")
++
++
++def test_add_local_user_to_local_group_fqdn(local_domain_only_fqdn):
++    """
++    Regression test for ticket
++    https://fedorahosted.org/sssd/ticket/3178
++    """
++    subprocess.check_call(
++        ["sss_groupadd", "-g", "10009", "group10009@LOCAL"])
++    subprocess.check_call(
++        ["sss_useradd", "-u", "10009", "-M", "user10009@LOCAL"])
++    subprocess.check_call(
++        ["sss_usermod", "-a", "group10009@LOCAL", "user10009@LOCAL"])
++
++    ent.assert_group_by_name(
++        "group10009@LOCAL",
++        dict(name="group10009@LOCAL", passwd="*", gid=10009,
++             mem=ent.contains_only("user10009@LOCAL")))
++
++
++def test_add_local_group_to_local_group_fqdn(local_domain_only_fqdn):
++    """
++    Regression test for tickets
++    https://fedorahosted.org/sssd/ticket/3178
++    """
++    subprocess.check_call(
++        ["sss_groupadd", "-g", "10009", "group_child@LOCAL"])
++    subprocess.check_call(
++        ["sss_useradd", "-u", "10009", "-M", "user_child@LOCAL"])
++    subprocess.check_call(
++        ["sss_usermod", "-a", "group_child@LOCAL", "user_child@LOCAL"])
++
++    subprocess.check_call(
++        ["sss_groupadd", "-g", "10008", "group_parent@LOCAL"])
++    subprocess.check_call(
++        ["sss_groupmod", "-a", "group_parent@LOCAL", "group_child@LOCAL"])
++
++    # User from child_group is member of parent_group, so child_group's
++    # member must be also parent_group's member
++    ent.assert_group_by_name(
++        "group_parent@LOCAL",
++        dict(name="group_parent@LOCAL", passwd="*", gid=10008,
++             mem=ent.contains_only("user_child@LOCAL")))
+-- 
+2.9.3
+
