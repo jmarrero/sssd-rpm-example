@@ -660,6 +660,10 @@ autoreconf -ivf
 make %{?_smp_mflags} all docs
 
 %check
+# workaround for wrong permissing in test introduced in patch
+# remove after rebase to 1.14.2
+chmod a+x ./src/tests/double_semicolon_test
+
 export CK_TIMEOUT_MULTIPLIER=10
 make %{?_smp_mflags} check VERBOSE=yes
 unset CK_TIMEOUT_MULTIPLIER
