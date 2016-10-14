@@ -17,7 +17,7 @@
 %global enable_systemtap 1
     %global enable_systemtap_opt --enable-systemtap
 
-%global libwbc_alternatives_version 0.12
+%global libwbc_alternatives_version 0.13
 %global libwbc_lib_version %{libwbc_alternatives_version}.0
 %global libwbc_alternatives_suffix %nil
 %if 0%{?__isa_bits} == 64
@@ -26,7 +26,7 @@
 
 Name: sssd
 Version: 1.14.1
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -114,6 +114,7 @@ Patch0076: 0076-IFP-expose-user-and-group-unique-IDs-through-DBus.patch
 Patch0077: 0077-SSSDConfig-Do-not-fail-with-nonexisting-domains-serv.patch
 Patch0078: 0078-SPEC-Rename-python-packages-using-macro-python_provi.patch
 Patch0079: 0079-KRB5-Fixing-FQ-name-of-user-in-krb5_setup.patch
+Patch0080: 0080-libwbclient-sssd-update-interface-to-version-0.13.patch
 
 ### Dependencies ###
 
@@ -1171,6 +1172,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Oct 14 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.1-4
+- libwbclient-sssd: update interface to version 0.13
+
 * Thu Sep 22 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.1-3
 - Fix regression with krb5_map_user
 - Resolves: rhbz#1375552 - krb5_map_user doesn't seem effective anymore
