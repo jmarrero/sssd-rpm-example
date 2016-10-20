@@ -25,8 +25,8 @@
 %endif
 
 Name: sssd
-Version: 1.14.1
-Release: 4%{?dist}
+Version: 1.14.2
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -35,86 +35,6 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-CONFIG-selinux_provider-is-a-valid-provider-type.patch
-Patch0002: 0002-CONFIG-session_provider-does-not-exist-anymore.patch
-Patch0003: 0003-PROXY-Use-the-fqname-when-converting-to-lowercase.patch
-Patch0004: 0004-sssd_netgroup.py-Resolve-nested-netgroups.patch
-Patch0005: 0005-LDAP-Fixing-of-removing-netgroup-from-cache.patch
-Patch0006: 0006-INTG-Adding-support-for-netgroups-to-ldap_ent.patch
-Patch0007: 0007-INTG-Tests-for-ldap-nested-netgroups.patch
-Patch0008: 0008-watchdog-cope-with-time-shift.patch
-Patch0009: 0009-BUILD-Allow-to-read-private-pipes-for-root.patch
-Patch0010: 0010-SYSDB-Rework-sysdb_cache_connect.patch
-Patch0011: 0011-SYSDB-Remove-the-timestamp-cache-for-a-newly-created.patch
-Patch0012: 0012-SECRETS-Return-ENOENT-when_deleting-a-non-existent-s.patch
-Patch0013: 0013-SPEC-Fix-typo-in-Summary.patch
-Patch0014: 0014-IPA-Parse-qualified-names-when-guessing-AD-user-prin.patch
-Patch0015: 0015-PROXY-Remove-lowercase-attribute-from-save_user.patch
-Patch0016: 0016-PROXY-Remove-cache_timeout-attribute-from-save_user.patch
-Patch0017: 0017-PROXY-Remove-cache_timeout-attribute-from-save_group.patch
-Patch0018: 0018-PROXY-Mention-that-save_user-s-parameters-are-alread.patch
-Patch0019: 0019-PROXY-Share-common-code-of-save_-group-user.patch
-Patch0020: 0020-SYSDB-Fix-uninitialized-scalar-variable.patch
-Patch0021: 0021-BUILD-Add-a-few-more-targets-for-intg-tests.patch
-Patch0022: 0022-BUILD-Clean-up-prerelease-targets.patch
-Patch0023: 0023-BUILD-Fix-typo-in-intgcheck-run-rule.patch
-Patch0024: 0024-BUILD-Remove-leftover-after-sysdb-refactoring.patch
-Patch0025: 0025-MONITOR-Remove-the-no-longer-used-diag_cmd-command.patch
-Patch0026: 0026-MONITOR-Remove-the-no-longer-used-kill_service-comma.patch
-Patch0027: 0027-WATCHDOG-define-and-use-_MAX_TICKS-as-3.patch
-Patch0028: 0028-PROXY-Use-right-name-in-ldap-filter.patch
-Patch0029: 0029-SECRETS-Make-internal-function-static.patch
-Patch0030: 0030-SECRETS-Make-reading-the-config-options-more-uniform.patch
-Patch0031: 0031-dyndns-fix-typo-and-unify-ipa-with-ad-debug-message-.patch
-Patch0032: 0032-netlink-Don-t-define-USE_GNU.patch
-Patch0033: 0033-MONITOR-Remove-leftovers-from-diag_cmd.patch
-Patch0034: 0034-MONITOR-Remove-leftovers-from-kill_service.patch
-Patch0035: 0035-SYSDB-Fix-error-handling-in-sysdb_get_user_members_r.patch
-Patch0036: 0036-DEBUG-Apend-line-feed-to-messages-from-libsemanage.patch
-Patch0037: 0037-MAN-Document-the-ldap_user_primary_group-option.patch
-Patch0038: 0038-sdap_initgr_nested_get_membership_diff-use-fully-qua.patch
-Patch0039: 0039-SYSDB-Removing-of-unused-parameter.patch
-Patch0040: 0040-SYSDB-Suppress-warning-from-clang-static-analyser.patch
-Patch0041: 0041-TOOLS-Fix-a-typo-in-groupadd.patch
-Patch0042: 0042-TOOLS-sss_groupshow-did-not-work.patch
-Patch0043: 0043-TESTS-sss_groupadd-groupshow-regressions.patch
-Patch0044: 0044-TOOLS-use-internal-fqdn-for-DN.patch
-Patch0045: 0045-TESTS-Test-for-sss_user-groupmod-a.patch
-Patch0046: 0046-TOOLS-sss_mc_refresh_nested_group-short-fqname-usage.patch
-Patch0047: 0047-TESTS-Add-FQDN-variants-for-some-tests.patch
-Patch0048: 0048-KRB5-Send-the-output-username-not-internal-fqname-to.patch
-Patch0049: 0049-MONITOR-Remove-disable-netlink-command-line-option.patch
-Patch0050: 0050-MONITOR-Add-disable_netlink-option.patch
-Patch0051: 0051-TOOLS-sss_override-without-name-override.patch
-Patch0052: 0052-TEST-Add-regression-test-for-ticket-3179.patch
-Patch0053: 0053-TOOLS-sss_groupshow-fails-to-show-MPG.patch
-Patch0054: 0054-TESTS-sss_groupshow-with-MPG.patch
-Patch0055: 0055-KRB5-Return-ERR_NETWORK_IO-on-clock-skew.patch
-Patch0056: 0056-SDAP-Fix-settig-paging-attribute-in-sdap_get_generic.patch
-Patch0057: 0057-PROXY-Adding-proxy_max_children-option.patch
-Patch0058: 0058-SECRETS-Search-by-the-right-type-when-checking-conta.patch
-Patch0059: 0059-LDAP-Return-partial-results-from-adminlimit-exceeded.patch
-Patch0060: 0060-MAN-sssd-sudo-manual-update-IPA-native-LDAP-tree-sup.patch
-Patch0061: 0061-p11-only-set-PKCS11_LOGIN_TOKEN_NAME-if-gdm-smartcar.patch
-Patch0062: 0062-p11-return-a-fully-qualified-name.patch
-Patch0063: 0063-pam_sss-check-PKCS11_LOGIN_TOKEN_NAME.patch
-Patch0064: 0064-SECRETS-Don-t-remove-a-container-when-it-has-childre.patch
-Patch0065: 0065-PAM-call-free-only-when-memory-is-expected-to-be-all.patch
-Patch0066: 0066-TESTS-Fixing-of-const-warnings-in-sbus-tests.patch
-Patch0067: 0067-MAKEFILE-Fixing-CFLAGS-in-some-tests.patch
-Patch0068: 0068-TESTS-Add-integration-tests-for-the-sssd-secrets.patch
-Patch0069: 0069-AUTOFS-Fix-offline-resolution-of-autofs-maps.patch
-Patch0070: 0070-NSS-Fix-offline-resolution-of-netgroups.patch
-Patch0071: 0071-TESTS-Test-offline-netgroups-resolution.patch
-Patch0072: 0072-Remove-double-semicolon-at-the-end-of-line.patch
-Patch0073: 0073-TESTS-Add-simple-test-for-double-semicolon.patch
-Patch0074: 0074-failover-proceed-normally-when-no-new-server-is-foun.patch
-Patch0075: 0075-tests-Add-a-regression-test-for-upstream-ticket-3131.patch
-Patch0076: 0076-IFP-expose-user-and-group-unique-IDs-through-DBus.patch
-Patch0077: 0077-SSSDConfig-Do-not-fail-with-nonexisting-domains-serv.patch
-Patch0078: 0078-SPEC-Rename-python-packages-using-macro-python_provi.patch
-Patch0079: 0079-KRB5-Fixing-FQ-name-of-user-in-krb5_setup.patch
-Patch0080: 0080-libwbclient-sssd-update-interface-to-version-0.13.patch
 
 ### Dependencies ###
 
@@ -484,7 +404,7 @@ Obsoletes: libipa_hbac-python < 1.13.0
 %{?python_provide:%python_provide python2-libipa_hbac}
 
 %description -n python2-libipa_hbac
-The python-libipa_hbac contains the bindings so that libipa_hbac can be
+The python2-libipa_hbac contains the bindings so that libipa_hbac can be
 used by Python applications.
 
 %package -n python3-libipa_hbac
@@ -661,10 +581,6 @@ autoreconf -ivf
 make %{?_smp_mflags} all docs
 
 %check
-# workaround for wrong permissing in test introduced in patch
-# remove after rebase to 1.14.2
-chmod a+x ./src/tests/double_semicolon_test
-
 export CK_TIMEOUT_MULTIPLIER=10
 make %{?_smp_mflags} check VERBOSE=yes
 unset CK_TIMEOUT_MULTIPLIER
@@ -853,6 +769,7 @@ done
 %{_mandir}/man5/sssd.conf.5*
 %{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man5/sssd-sudo.5*
+%{_mandir}/man5/sssd-secrets.5*
 %{_mandir}/man5/sss_rpcidmapd.5*
 %{_mandir}/man8/sssd.8*
 %{_mandir}/man8/sss_cache.8*
@@ -1141,14 +1058,6 @@ fi
 %postun -n libsss_simpleifp -p /sbin/ldconfig
 
 %posttrans libwbclient
-# Alternatives was removed only if package was uninstalled
-# However in cease of package upgrade and soname bump the
-# the old alternative was not removed.
-# This is a workaround/fix for unused alternative
-%{_sbindir}/update-alternatives \
-    --remove libwbclient.so.0.11%{libwbc_alternatives_suffix} \
-             %{_libdir}/%{name}/modules/libwbclient.so.0.11.0
-
 %{_sbindir}/update-alternatives \
     --install %{_libdir}/libwbclient.so.%{libwbc_alternatives_version} \
               libwbclient.so.%{libwbc_alternatives_version}%{libwbc_alternatives_suffix} \
@@ -1172,6 +1081,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Oct 20 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.2-1
+- New upstream release 1.14.2
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.14.2
+
 * Fri Oct 14 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.1-4
 - libwbclient-sssd: update interface to version 0.13
 
