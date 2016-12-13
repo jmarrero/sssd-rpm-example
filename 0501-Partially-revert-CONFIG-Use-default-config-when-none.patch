@@ -1,0 +1,117 @@
+From 829aa39dffbe35f58b34159b962a2dd8de85fd30 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 12 Dec 2016 18:33:48 +0100
+Subject: [PATCH] Partially revert "CONFIG: Use default config when none
+ provided"
+
+This reverts part of commit 59744cff6edb106ae799b2321cb8731edadf409a.
+
+Removed is copying of default configuration into /etc/sssd/sssd.conf
+Sample configurations is still part of installation.
+---
+ Makefile.am               |  3 ---
+ src/confdb/confdb.h       |  1 -
+ src/confdb/confdb_setup.c | 40 ++++------------------------------------
+ 3 files changed, 4 insertions(+), 40 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index a15e68f682f6d8af301e11df8dcaef6d7f27e8c0..45d44146e737fc8460a2ed9ffc0171a6bb494b2b 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -462,7 +462,6 @@ AM_CPPFLAGS = \
+     -DSSSDDATADIR=\"$(sssddatadir)\" \
+     -DSSSD_LIBEXEC_PATH=\"$(sssdlibexecdir)\" \
+     -DSSSD_CONF_DIR=\"$(sssdconfdir)\" \
+-    -DSSSD_DEFAULT_CONF_DIR=\"$(sssddefaultconfdir)\" \
+     -DSSS_NSS_MCACHE_DIR=\"$(mcpath)\" \
+     -DSSS_NSS_SOCKET_NAME=\"$(pipepath)/nss\" \
+     -DSSS_PAM_SOCKET_NAME=\"$(pipepath)/pam\" \
+@@ -1232,8 +1231,6 @@ sssd_SOURCES = \
+     src/confdb/confdb_setup.c \
+     src/monitor/monitor_iface_generated.c \
+     src/util/nscd.c \
+-    src/tools/files.c \
+-    src/tools/selinux.c \
+     $(NULL)
+ sssd_LDADD = \
+     $(SSSD_LIBS) \
+diff --git a/src/confdb/confdb.h b/src/confdb/confdb.h
+index 12beaabf8c949bd111abbe16cb98a205490fb08f..4813072bdafb5d6c9ec56a9ccaa5db6a1120112d 100644
+--- a/src/confdb/confdb.h
++++ b/src/confdb/confdb.h
+@@ -40,7 +40,6 @@
+ 
+ #define CONFDB_DEFAULT_CFG_FILE_VER 2
+ #define CONFDB_FILE "config.ldb"
+-#define SSSD_DEFAULT_CONFIG_FILE SSSD_DEFAULT_CONF_DIR"/sssd.conf"
+ #define SSSD_CONFIG_FILE SSSD_CONF_DIR"/sssd.conf"
+ #define CONFDB_DEFAULT_CONFIG_DIR SSSD_CONF_DIR"/conf.d"
+ #define SSSD_MIN_ID 1
+diff --git a/src/confdb/confdb_setup.c b/src/confdb/confdb_setup.c
+index d6feab9000d54d2c3761de6d8e990053ade7e85f..a71d9dd1202824b3c9a7e69f1d8fa905ac1b8c02 100644
+--- a/src/confdb/confdb_setup.c
++++ b/src/confdb/confdb_setup.c
+@@ -21,14 +21,12 @@
+ 
+ #include "config.h"
+ #include <sys/stat.h>
+-#include <unistd.h>
+ #include "util/util.h"
+ #include "db/sysdb.h"
+ #include "confdb.h"
+ #include "confdb_private.h"
+ #include "confdb_setup.h"
+ #include "util/sss_ini.h"
+-#include "tools/tools_util.h"
+ 
+ 
+ static int confdb_test(struct confdb_ctx *cdb)
+@@ -161,41 +159,11 @@ static int confdb_init_db(const char *config_file, const char *config_dir,
+         DEBUG(SSSDBG_TRACE_FUNC,
+               "sss_ini_config_file_open failed: %s [%d]\n", strerror(ret),
+                ret);
+-        if (ret != ENOENT) {
+-            /* Anything other than ENOENT is unrecoverable */
+-            goto done;
+-        } else {
+-            /* Copy the default configuration file to the standard location
+-             * and then retry
+-             */
+-             ret = copy_file_secure(SSSD_DEFAULT_CONFIG_FILE,
+-                                    SSSD_CONFIG_FILE,
+-                                    0600,
+-                                    getuid(),
+-                                    getgid(),
+-                                    false);
+-             if (ret != EOK) {
+-                 DEBUG(SSSDBG_FATAL_FAILURE,
+-                       "Could not copy default configuration: %s",
+-                       sss_strerror(ret));
+-                 /* sss specific error denoting missing configuration file */
+-                 ret = ERR_MISSING_CONF;
+-                 goto done;
+-             }
+-
+-             /* Try again */
+-             ret = sss_ini_config_file_open(init_data, config_file);
+-            if (ret != EOK) {
+-                DEBUG(SSSDBG_TRACE_FUNC,
+-                      "sss_ini_config_file_open(default) failed: %s [%d]\n",
+-                      strerror(ret), ret);
+-                if (ret == ENOENT) {
+-                    /* sss specific error denoting missing configuration file */
+-                    ret = ERR_MISSING_CONF;
+-                }
+-                goto done;
+-            }
++        if (ret == ENOENT) {
++            /* sss specific error denoting missing configuration file */
++            ret = ERR_MISSING_CONF;
+         }
++        goto done;
+     }
+ 
+     ret = sss_ini_config_access_check(init_data);
+-- 
+2.11.0
+

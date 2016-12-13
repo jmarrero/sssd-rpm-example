@@ -1,0 +1,32 @@
+From 5a6aeb890bdf18729e45cd08cfa244e3da4ed45b Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 19 Oct 2016 16:46:44 +0200
+Subject: [PATCH 02/39] libcrypto: Check right value of CRYPTO_memcmp
+
+sss_decrypt failed even though should pass because
+we were checking wrong value of CRYPTO_memcmp.
+Nobody noticed that because there was not a unit test :-)
+
+Reviewed-by: Christian Heimes <cheimes@redhat.com>
+(cherry picked from commit 0c2be9700d3b54db33c1a3dd5d230b34bfaceb50)
+(cherry picked from commit f4da46bd77f2eed2d04152b75c78bfc561c79354)
+---
+ src/util/crypto/libcrypto/crypto_nite.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/util/crypto/libcrypto/crypto_nite.c b/src/util/crypto/libcrypto/crypto_nite.c
+index de562f2d2..e863d3fc9 100644
+--- a/src/util/crypto/libcrypto/crypto_nite.c
++++ b/src/util/crypto/libcrypto/crypto_nite.c
+@@ -237,7 +237,7 @@ int sss_decrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+     }
+ 
+     ret = CRYPTO_memcmp(&ciphertext[cipherlen - hmaclen], out, hmaclen);
+-    if (ret != 1) {
++    if (ret != 0) {
+         ret = EFAULT;
+         goto done;
+     }
+-- 
+2.11.0
+

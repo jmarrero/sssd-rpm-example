@@ -1,0 +1,284 @@
+From 8e08e21b64a9ef67a4c40917786536d69d7ec4d3 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 31 Oct 2016 21:39:57 +0100
+Subject: [PATCH 18/39] SYSDB: Augment sysdb_try_to_find_expected_dn to match
+ search base as well
+
+In cases where the domain name in sssd.conf does not match the AD
+domain, our previous matching process wouldn't match. This patch
+augments the matching as follows:
+    - the search base is known to sysdb_try_to_find_expected_dn and is
+      expected to be non-NULL
+    - the existing matching is ran first
+    - during the search base, matching, all the non-DC components are
+      stripped from the search base to 'canonicalize' the search base
+    - if only a single entry that matches with a non-DC DN component
+      (matching with a DC component would mean the DN comes from a
+      different domain) then this entry is a match and is returned
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3199
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit 24d8c85fae253f988165c112af208198cf48eef6)
+(cherry picked from commit 956fdd727f8d7a28f1456146b3b7dfee49f38626)
+---
+ src/db/sysdb.h                             |  1 +
+ src/db/sysdb_subdomains.c                  | 99 ++++++++++++++++++++++++++++++
+ src/providers/ldap/sdap_async_initgroups.c |  8 ++-
+ src/tests/cmocka/test_sysdb_subdomains.c   | 43 +++++++++++--
+ 4 files changed, 144 insertions(+), 7 deletions(-)
+
+diff --git a/src/db/sysdb.h b/src/db/sysdb.h
+index 901268390..5dedd97dd 100644
+--- a/src/db/sysdb.h
++++ b/src/db/sysdb.h
+@@ -1297,6 +1297,7 @@ errno_t sysdb_handle_original_uuid(const char *orig_name,
+ 
+ errno_t sysdb_try_to_find_expected_dn(struct sss_domain_info *dom,
+                                       const char *domain_component_name,
++                                      const char *ldap_search_base,
+                                       struct sysdb_attrs **usr_attrs,
+                                       size_t count,
+                                       struct sysdb_attrs **exp_usr);
+diff --git a/src/db/sysdb_subdomains.c b/src/db/sysdb_subdomains.c
+index b011bad6c..780140484 100644
+--- a/src/db/sysdb_subdomains.c
++++ b/src/db/sysdb_subdomains.c
+@@ -1320,8 +1320,97 @@ static errno_t match_basedn(TALLOC_CTX *tmp_ctx,
+                              _result);
+ }
+ 
++static errno_t match_search_base(TALLOC_CTX *tmp_ctx,
++                                 struct sss_domain_info *dom,
++                                 const char *domain_component_name,
++                                 const char *domain_search_base,
++                                 struct sysdb_attrs **usr_attrs,
++                                 size_t count,
++                                 struct sysdb_attrs **_result)
++{
++    errno_t ret;
++    bool ok;
++    const char *search_base;
++    struct ldb_context *ldb_ctx;
++    struct sysdb_attrs *result = NULL;
++    struct ldb_dn *ldb_search_base;
++    int search_base_comp_num;
++    int non_dc_comp_num;
++    const char *component_name;
++
++    ldb_ctx = sysdb_ctx_get_ldb(dom->sysdb);
++    if (ldb_ctx == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, "Missing ldb context.\n");
++        ret = EINVAL;
++        goto done;
++    }
++
++    ldb_search_base = ldb_dn_new(tmp_ctx, ldb_ctx, domain_search_base);
++    if (ldb_search_base == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, "ldb_dn_new failed.\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    /* strip non-DC components from the search base */
++    search_base_comp_num = ldb_dn_get_comp_num(ldb_search_base);
++    for (non_dc_comp_num = 0;
++         non_dc_comp_num < search_base_comp_num;
++         non_dc_comp_num++) {
++
++        component_name = ldb_dn_get_component_name(ldb_search_base,
++                                                   non_dc_comp_num);
++        if (strcasecmp(domain_component_name, component_name) == 0) {
++            break;
++        }
++    }
++
++    if (non_dc_comp_num == search_base_comp_num) {
++        /* The search base does not have any non-DC components, the search wouldn't
++         * match anyway
++         */
++        ret = EOK;
++        *_result = NULL;
++        goto done;
++    }
++
++    ok = ldb_dn_remove_child_components(ldb_search_base, non_dc_comp_num);
++    if (!ok) {
++        ret = EINVAL;
++        goto done;
++    }
++
++    search_base = ldb_dn_get_linearized(ldb_search_base);
++    if (search_base == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = match_cn_users(tmp_ctx, usr_attrs, count, search_base, &result);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    if (result == NULL) {
++        ret = match_non_dc_comp(tmp_ctx, dom,
++                                usr_attrs, count,
++                                ldb_search_base, search_base,
++                                domain_component_name,
++                                &result);
++        if (ret != EOK) {
++            goto done;
++        }
++    }
++
++    ret = EOK;
++    *_result = result;
++done:
++    return ret;
++}
++
+ errno_t sysdb_try_to_find_expected_dn(struct sss_domain_info *dom,
+                                       const char *domain_component_name,
++                                      const char *domain_search_base,
+                                       struct sysdb_attrs **usr_attrs,
+                                       size_t count,
+                                       struct sysdb_attrs **exp_usr)
+@@ -1332,6 +1421,7 @@ errno_t sysdb_try_to_find_expected_dn(struct sss_domain_info *dom,
+     struct sysdb_attrs *result = NULL;
+ 
+     if (dom == NULL || domain_component_name == NULL
++            || domain_search_base == NULL
+             || usr_attrs == NULL || count == 0) {
+         return EINVAL;
+     }
+@@ -1364,6 +1454,15 @@ errno_t sysdb_try_to_find_expected_dn(struct sss_domain_info *dom,
+     }
+ 
+     if (result == NULL) {
++        ret = match_search_base(tmp_ctx, dom, domain_component_name,
++                                   domain_search_base, usr_attrs, count,
++                                   &result);
++        if (ret != EOK) {
++            goto done;
++        }
++    }
++
++    if (result == NULL) {
+         DEBUG(SSSDBG_OP_FAILURE, "No matching DN found.\n");
+         ret = ENOENT;
+         goto done;
+diff --git a/src/providers/ldap/sdap_async_initgroups.c b/src/providers/ldap/sdap_async_initgroups.c
+index 45fc007e0..9b505e7fa 100644
+--- a/src/providers/ldap/sdap_async_initgroups.c
++++ b/src/providers/ldap/sdap_async_initgroups.c
+@@ -2947,7 +2947,13 @@ static void sdap_get_initgr_user(struct tevent_req *subreq)
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Expected one user entry and got %zu\n", count);
+ 
+-        ret = sysdb_try_to_find_expected_dn(state->dom, "dc", usr_attrs, count,
++        /* When matching against a search base, it's sufficient to pick only
++         * the first search base because all bases in a single domain would
++         * have the same DC= components
++         */
++        ret = sysdb_try_to_find_expected_dn(state->dom, "dc",
++                                            state->sdom->search_bases[0]->basedn,
++                                            usr_attrs, count,
+                                             &state->orig_user);
+         if (ret != EOK) {
+             DEBUG(SSSDBG_OP_FAILURE,
+diff --git a/src/tests/cmocka/test_sysdb_subdomains.c b/src/tests/cmocka/test_sysdb_subdomains.c
+index c9db56841..52056e043 100644
+--- a/src/tests/cmocka/test_sysdb_subdomains.c
++++ b/src/tests/cmocka/test_sysdb_subdomains.c
+@@ -520,7 +520,9 @@ static void test_try_to_find_expected_dn(void **state)
+     int ret;
+     struct sysdb_attrs *result;
+     struct sysdb_attrs *usr_attrs[10] = { NULL };
++    struct sysdb_attrs *dom_usr_attrs[10] = { NULL };
+     struct sss_domain_info *dom;
++    char *dom_basedn;
+     struct subdom_test_ctx *test_ctx =
+         talloc_get_type(*state, struct subdom_test_ctx);
+ 
+@@ -528,6 +530,9 @@ static void test_try_to_find_expected_dn(void **state)
+                               "child2.test_sysdb_subdomains_2", true);
+     assert_non_null(dom);
+ 
++    ret = domain_to_basedn(test_ctx, dom->name, &dom_basedn);
++    assert_int_equal(ret, EOK);
++
+     usr_attrs[0] = sysdb_new_attrs(test_ctx);
+     assert_non_null(usr_attrs[0]);
+ 
+@@ -535,13 +540,13 @@ static void test_try_to_find_expected_dn(void **state)
+                   "uid=user,cn=abc,dc=c2,dc=child2,dc=test_sysdb_subdomains_2");
+     assert_int_equal(ret, EOK);
+ 
+-    ret = sysdb_try_to_find_expected_dn(NULL, NULL, NULL, 0, NULL);
++    ret = sysdb_try_to_find_expected_dn(NULL, NULL, NULL, NULL, 0, NULL);
+     assert_int_equal(ret, EINVAL);
+ 
+-    ret = sysdb_try_to_find_expected_dn(dom, "dc", usr_attrs, 1, &result);
++    ret = sysdb_try_to_find_expected_dn(dom, "dc", dom_basedn, usr_attrs, 1, &result);
+     assert_int_equal(ret, ENOENT);
+ 
+-    ret = sysdb_try_to_find_expected_dn(dom, "xy", usr_attrs, 1, &result);
++    ret = sysdb_try_to_find_expected_dn(dom, "xy", dom_basedn, usr_attrs, 1, &result);
+     assert_int_equal(ret, EOK);
+     assert_ptr_equal(result, usr_attrs[0]);
+ 
+@@ -559,11 +564,11 @@ static void test_try_to_find_expected_dn(void **state)
+                  "uid=user2,cn=abc,dc=c2,dc=child2,dc=test_sysdb_subdomains_2");
+     assert_int_equal(ret, EOK);
+ 
+-    ret = sysdb_try_to_find_expected_dn(dom, "dc", usr_attrs, 3, &result);
++    ret = sysdb_try_to_find_expected_dn(dom, "dc", dom_basedn, usr_attrs, 3, &result);
+     assert_int_equal(ret, EOK);
+     assert_ptr_equal(result, usr_attrs[1]);
+ 
+-    ret = sysdb_try_to_find_expected_dn(dom, "xy", usr_attrs, 3, &result);
++    ret = sysdb_try_to_find_expected_dn(dom, "xy", dom_basedn, usr_attrs, 3, &result);
+     assert_int_equal(ret, EINVAL);
+ 
+     /* Make sure cn=users match is preferred */
+@@ -575,10 +580,36 @@ static void test_try_to_find_expected_dn(void **state)
+                  "uid=user2,cn=abc,cn=users,dc=child2,dc=test_sysdb_subdomains_2");
+     assert_int_equal(ret, EOK);
+ 
+-    ret = sysdb_try_to_find_expected_dn(dom, "dc", usr_attrs, 3, &result);
++    ret = sysdb_try_to_find_expected_dn(dom, "dc", dom_basedn, usr_attrs, 3, &result);
+     assert_int_equal(ret, EOK);
+     assert_ptr_equal(result, usr_attrs[2]);
+ 
++    /* test a case where the domain name does not match the basedn */
++    dom->name = discard_const("default");
++    dom_usr_attrs[0] = usr_attrs[0];
++
++    ret = sysdb_try_to_find_expected_dn(dom, "dc", dom_basedn, dom_usr_attrs, 1, &result);
++    assert_int_equal(ret, ENOENT);
++
++    dom_usr_attrs[1] = usr_attrs[1];
++    dom_usr_attrs[2] = usr_attrs[2];
++
++    /* Make sure cn=users match is preferred */
++    ret = sysdb_try_to_find_expected_dn(dom, "dc", dom_basedn, dom_usr_attrs, 3, &result);
++    assert_int_equal(ret, EOK);
++    assert_ptr_equal(result, dom_usr_attrs[2]);
++
++    talloc_free(usr_attrs[2]);
++    usr_attrs[2] = sysdb_new_attrs(test_ctx);
++    assert_non_null(usr_attrs[2]);
++    ret = sysdb_attrs_add_string(usr_attrs[2], SYSDB_ORIG_DN,
++                 "uid=user2,cn=abc,dc=c2,dc=child2,dc=test_sysdb_subdomains_2");
++    assert_int_equal(ret, EOK);
++
++    dom_usr_attrs[2] = usr_attrs[2];
++    ret = sysdb_try_to_find_expected_dn(dom, "dc", dom_basedn, dom_usr_attrs, 3, &result);
++    assert_int_equal(ret, EOK);
++    assert_ptr_equal(result, usr_attrs[1]);
+ 
+     talloc_free(usr_attrs[0]);
+     talloc_free(usr_attrs[1]);
+-- 
+2.11.0
+

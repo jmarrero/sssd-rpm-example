@@ -1,0 +1,37 @@
+From bf0971190884b664ef38d8fc42199fca8e496e54 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 18 Nov 2016 12:19:02 +0100
+Subject: [PATCH 30/39] BUILD: Fix a typo in inotify.m4
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This typo prevented HAVE_INOTIFY from ever being set and as an effect,
+prevented /etc/resolv.conf inotify detection from working
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 2927dc45b9bc810f4f55bce165bb96405129e693)
+(cherry picked from commit 495289cfa922b00278aa91d433489403e792304e)
+---
+ src/external/inotify.m4 | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/external/inotify.m4 b/src/external/inotify.m4
+index 9572f6d2f..25259a817 100644
+--- a/src/external/inotify.m4
++++ b/src/external/inotify.m4
+@@ -6,8 +6,8 @@ AC_DEFUN([AM_CHECK_INOTIFY],
+     AC_MSG_CHECKING([whether sys/inotify.h actually works])
+     AC_LINK_IFELSE(
+         [AC_LANG_SOURCE([
+-#ifdef HAVE_SYS_INOTITY_H
+-#include <sys/inotify.h>,
++#ifdef HAVE_SYS_INOTIFY_H
++#include <sys/inotify.h>
+ #endif
+ int main () {
+     return (-1 == inotify_init());
+-- 
+2.11.0
+

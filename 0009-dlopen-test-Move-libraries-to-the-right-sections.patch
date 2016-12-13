@@ -1,0 +1,63 @@
+From 87ef46f4bd0745b13ee49f5487bc8a45ea2f3c1d Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 17 Oct 2016 22:17:27 +0200
+Subject: [PATCH 09/39] dlopen-test: Move libraries to the right "sections"
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The library winbind_idmap_sss.so is build only when building
+with samba. The library libdlopen_test_providers.so was moved
+to the group of libraries build for testing purposes.
+
+Reviewed-by: Petr Čech <pcech@redhat.com>
+(cherry picked from commit d708e53d0df0c1ed4cc0097bebfa2a84d7b20fad)
+(cherry picked from commit a52c7df943a7b685609b66c49264c6d1805d31c2)
+---
+ src/tests/dlopen-tests.c | 9 ++++-----
+ 1 file changed, 4 insertions(+), 5 deletions(-)
+
+diff --git a/src/tests/dlopen-tests.c b/src/tests/dlopen-tests.c
+index c980ab9f1..c857dff73 100644
+--- a/src/tests/dlopen-tests.c
++++ b/src/tests/dlopen-tests.c
+@@ -71,9 +71,6 @@ struct so {
+ #ifdef HAVE_CIFS_IDMAP_PLUGIN
+     { "cifs_idmap_sss.so", { LIBPFX"cifs_idmap_sss.so", NULL } },
+ #endif
+-    { "winbind_idmap_sss.so", { LIBPFX"libdlopen_test_winbind_idmap.so",
+-                                LIBPFX"winbind_idmap_sss.so",
+-                                NULL } },
+     { "memberof.so", { LIBPFX"memberof.so", NULL } },
+     { "libsss_child.so", { LIBPFX"libsss_util.so",
+                            LIBPFX"libsss_child.so", NULL } },
+@@ -87,6 +84,8 @@ struct so {
+                         LIBPFX"libsss_ad.so", NULL } },
+     { "libsss_ipa.so", { LIBPFX"libdlopen_test_providers.so",
+                          LIBPFX"libsss_ipa.so", NULL } },
++    { "winbind_idmap_sss.so", { LIBPFX"libdlopen_test_winbind_idmap.so",
++                                LIBPFX"winbind_idmap_sss.so", NULL } },
+ #endif /* BUILD_SAMBA */
+     { "libsss_krb5.so", { LIBPFX"libdlopen_test_providers.so",
+                           LIBPFX"libsss_krb5.so", NULL } },
+@@ -98,8 +97,6 @@ struct so {
+                                  LIBPFX"libsss_ldap_common.so", NULL } },
+     { "libsss_proxy.so", { LIBPFX"libdlopen_test_providers.so",
+                            LIBPFX"libsss_proxy.so", NULL } },
+-    { "libdlopen_test_providers.so", { LIBPFX"libdlopen_test_providers.so",
+-                                       NULL } },
+ #ifdef HAVE_PYTHON2_BINDINGS
+     { "_py2hbac.so", { LIBPFX"_py2hbac.so", NULL } },
+     { "_py2sss.so", { LIBPFX"_py2sss.so", NULL } },
+@@ -119,6 +116,8 @@ struct so {
+     { "sss.so", { LIBPFX"sss.so", NULL } },
+ #endif
+     /* for testing purposes */
++    { "libdlopen_test_providers.so", { LIBPFX"libdlopen_test_providers.so",
++                                       NULL } },
+     { "libsss_nss_idmap_tests.so", { LIBPFX"libsss_nss_idmap_tests.so",
+                                      NULL } },
+ #ifdef BUILD_SAMBA
+-- 
+2.11.0
+

@@ -1,0 +1,48 @@
+From 74fb5008403cc7324138740b327bb282aeb19a08 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20=C4=8Cech?= <pcech@redhat.com>
+Date: Wed, 16 Nov 2016 10:09:18 +0100
+Subject: [PATCH 31/39] SYSDB: Fixing of sudorule without a sudoUser
+
+This patch solved a regression caused by the recent patches
+to lowercase sudoUser -- in case sudoUser is missing completely,
+we abort the processing of this rule and all others.
+
+With this patch, we return ERR_MALFORMED_ENTRY and gracefully
+skip the malformed rule instead.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3241
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 7e23edbaa7a6bbd0b461d5792535896b6a77928b)
+(cherry picked from commit 54f176066dafafdc12f6e0dd112ff6339308aa7c)
+---
+ src/db/sysdb_sudo.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/db/sysdb_sudo.c b/src/db/sysdb_sudo.c
+index 4bd93ffc6..f5160f190 100644
+--- a/src/db/sysdb_sudo.c
++++ b/src/db/sysdb_sudo.c
+@@ -874,6 +874,7 @@ static errno_t sysdb_sudo_add_lowered_users(struct sss_domain_info *domain,
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "Unable to get %s attribute [%d]: %s\n",
+               SYSDB_SUDO_CACHE_AT_USER, ret, strerror(ret));
++        ret = ERR_MALFORMED_ENTRY;
+         goto done;
+     }
+ 
+@@ -977,6 +978,10 @@ sysdb_sudo_store(struct sss_domain_info *domain,
+             /* Multiple CNs are error on server side, we can just ignore this
+              * rule and save the others. Loud debug message is in logs. */
+             continue;
++        } else if (ret == ERR_MALFORMED_ENTRY) {
++            /* Attribute SYSDB_SUDO_CACHE_AT_USER is missing but we can
++             * continue with next sudoRule. */
++            continue;
+         } else if (ret != EOK) {
+             goto done;
+         }
+-- 
+2.11.0
+

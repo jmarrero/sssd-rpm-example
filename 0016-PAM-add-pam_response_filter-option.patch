@@ -1,0 +1,501 @@
+From 51cdde0ce897c62a0e29653e896e3e6d43585228 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 20 Oct 2016 18:40:01 +0200
+Subject: [PATCH 16/39] PAM: add pam_response_filter option
+
+Currently the main use-case for this new option is to not set the
+KRB5CCNAME environment varible for services like 'sudo-i'.
+
+Resolves https://fedorahosted.org/sssd/ticket/2296
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit ce43f710c9638fbbeae077559cd7514370a10c0c)
+(cherry picked from commit 74711db46029415cc9590bb0e3f9cc662dac1d0c)
+---
+ src/confdb/confdb.h                  |   1 +
+ src/config/SSSDConfig/__init__.py.in |   1 +
+ src/config/cfg_rules.ini             |   1 +
+ src/config/etc/sssd.api.conf         |   1 +
+ src/man/sssd.conf.5.xml              |  45 +++++++++++
+ src/responder/pam/pamsrv.h           |   3 +-
+ src/responder/pam/pamsrv_cmd.c       | 111 ++++++++++++++++++++++++--
+ src/tests/cmocka/test_pam_srv.c      | 149 +++++++++++++++++++++++++++++++++--
+ 8 files changed, 297 insertions(+), 15 deletions(-)
+
+diff --git a/src/confdb/confdb.h b/src/confdb/confdb.h
+index 011792fba..2a1e58184 100644
+--- a/src/confdb/confdb.h
++++ b/src/confdb/confdb.h
+@@ -115,6 +115,7 @@
+ #define CONFDB_PAM_FAILED_LOGIN_DELAY "offline_failed_login_delay"
+ #define CONFDB_DEFAULT_PAM_FAILED_LOGIN_DELAY 5
+ #define CONFDB_PAM_VERBOSITY "pam_verbosity"
++#define CONFDB_PAM_RESPONSE_FILTER "pam_response_filter"
+ #define CONFDB_PAM_ID_TIMEOUT "pam_id_timeout"
+ #define CONFDB_PAM_PWD_EXPIRATION_WARNING "pam_pwd_expiration_warning"
+ #define CONFDB_PAM_TRUSTED_USERS "pam_trusted_users"
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index cde196478..381ff9596 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -88,6 +88,7 @@ option_strings = {
+     'offline_failed_login_attempts' : _('How many failed logins attempts are allowed when offline'),
+     'offline_failed_login_delay' : _('How long (minutes) to deny login after offline_failed_login_attempts has been reached'),
+     'pam_verbosity' : _('What kind of messages are displayed to the user during authentication'),
++    'pam_response_filter' : _('Filter PAM responses send the pam_sss'),
+     'pam_id_timeout' : _('How many seconds to keep identity information cached for PAM requests'),
+     'pam_pwd_expiration_warning' : _('How many days before password expiration a warning should be displayed'),
+     'pam_trusted_users' : _('List of trusted uids or user\'s name'),
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index b6316be8c..ec716b558 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -99,6 +99,7 @@ option = offline_credentials_expiration
+ option = offline_failed_login_attempts
+ option = offline_failed_login_delay
+ option = pam_verbosity
++option = pam_response_filter
+ option = pam_id_timeout
+ option = pam_pwd_expiration_warning
+ option = get_domains_timeout
+diff --git a/src/config/etc/sssd.api.conf b/src/config/etc/sssd.api.conf
+index 567d52efe..be24bcea0 100644
+--- a/src/config/etc/sssd.api.conf
++++ b/src/config/etc/sssd.api.conf
+@@ -58,6 +58,7 @@ offline_credentials_expiration = int, None, false
+ offline_failed_login_attempts = int, None, false
+ offline_failed_login_delay = int, None, false
+ pam_verbosity = int, None, false
++pam_response_filter = str, None, false
+ pam_id_timeout = int, None, false
+ pam_pwd_expiration_warning = int, None, false
+ get_domains_timeout = int, None, false
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index 8b862eb0c..71ace5208 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -975,6 +975,51 @@ fallback_homedir = /home/%u
+                         </para>
+                     </listitem>
+                 </varlistentry>
++
++                <varlistentry>
++                    <term>pam_response_filter (integer)</term>
++                    <listitem>
++                        <para>
++                            A comma separated list of strings which allows to
++                            remove (filter) data send by the PAM responder to
++                            pam_sss PAM module. There are different kind of
++                            responses send to pam_sss e.g. messages displayed to
++                            the user or environment variables which should be
++                            set by pam_sss.
++                        </para>
++                        <para>
++                            While messages already can be controlled with the
++                            help of the pam_verbosity option this option allows
++                            to filter out other kind of responses as well.
++                        </para>
++                        <para>
++                            Currently the following filters are supported:
++                            <variablelist>
++                                <varlistentry><term>ENV</term>
++                                    <listitem><para>Do not sent any environment
++                                    variables to any service.</para></listitem>
++                                </varlistentry>
++                                <varlistentry><term>ENV:var_name</term>
++                                    <listitem><para>Do not sent environment
++                                    variable var_name to any
++                                    service.</para></listitem>
++                                </varlistentry>
++                                <varlistentry><term>ENV:var_name:service</term>
++                                    <listitem><para>Do not sent environment
++                                    variable var_name to
++                                    service.</para></listitem>
++                                </varlistentry>
++                            </variablelist>
++                        </para>
++                        <para>
++                            Default: not set
++                        </para>
++                        <para>
++                            Example: ENV:KRB5CCNAME:sudo-i
++                        </para>
++                    </listitem>
++                </varlistentry>
++
+                 <varlistentry>
+                   <term>pam_id_timeout (integer)</term>
+                   <listitem>
+diff --git a/src/responder/pam/pamsrv.h b/src/responder/pam/pamsrv.h
+index 8437d082e..75045d039 100644
+--- a/src/responder/pam/pamsrv.h
++++ b/src/responder/pam/pamsrv.h
+@@ -101,5 +101,6 @@ pam_set_last_online_auth_with_curr_token(struct sss_domain_info *domain,
+                                          uint64_t value);
+ 
+ errno_t filter_responses(struct confdb_ctx *cdb,
+-                         struct response_data *resp_list);
++                         struct response_data *resp_list,
++                         struct pam_data *pd);
+ #endif /* __PAMSRV_H__ */
+diff --git a/src/responder/pam/pamsrv_cmd.c b/src/responder/pam/pamsrv_cmd.c
+index b3690d763..0c2e6941c 100644
+--- a/src/responder/pam/pamsrv_cmd.c
++++ b/src/responder/pam/pamsrv_cmd.c
+@@ -470,14 +470,89 @@ fail:
+     return ret;
+ }
+ 
++static errno_t filter_responses_env(struct response_data *resp,
++                                    struct pam_data *pd,
++                                    char * const *pam_filter_opts)
++{
++    size_t c;
++    const char *var_name;
++    size_t var_name_len;
++    const char *service;
++
++    if (pam_filter_opts == NULL) {
++        return EOK;
++    }
++
++    for (c = 0; pam_filter_opts[c] != NULL; c++) {
++        if (strncmp(pam_filter_opts[c], "ENV", 3) != 0) {
++            continue;
++        }
++
++        var_name = NULL;
++        var_name_len = 0;
++        service = NULL;
++        if (pam_filter_opts[c][3] != '\0') {
++            if (pam_filter_opts[c][3] != ':') {
++                /* Neither plain ENV nor ENV:, ignored */
++                continue;
++            }
++
++            var_name = pam_filter_opts[c] + 4;
++            /* check if there is a second ':' in the option and use the following
++             * data, if any, as service name. */
++            service = strchr(var_name, ':');
++            if (service == NULL) {
++                var_name_len = strlen(var_name);
++            } else {
++                var_name_len = service - var_name;
++
++                service++;
++                /* handle empty service name "ENV:var:" */
++                if (*service == '\0') {
++                    service = NULL;
++                }
++            }
++        }
++        /* handle empty var name "ENV:" or "ENV::service" */
++        if (var_name_len == 0) {
++            var_name = NULL;
++        }
++
++        DEBUG(SSSDBG_TRACE_ALL,
++              "Found PAM ENV filter for variable [%.*s] and service [%s].\n",
++              (int) var_name_len, var_name, service);
++
++        if (service != NULL && pd->service != NULL
++                    && strcmp(service, pd->service) != 0) {
++            /* current service does not match the filter */
++            continue;
++        }
++
++        if (var_name == NULL) {
++            /* All environment variables should be filtered */
++            resp->do_not_send_to_client = true;
++            continue;
++        }
++
++        if (resp->len > var_name_len && resp->data[var_name_len] == '='
++                    && memcmp(resp->data, var_name, var_name_len) == 0) {
++            resp->do_not_send_to_client = true;
++        }
++    }
++
++    return EOK;
++}
++
+ errno_t filter_responses(struct confdb_ctx *cdb,
+-                         struct response_data *resp_list)
++                         struct response_data *resp_list,
++                         struct pam_data *pd)
+ {
+     int ret;
+     struct response_data *resp;
+     uint32_t user_info_type;
+-    int64_t expire_date;
+-    int pam_verbosity;
++    int64_t expire_date = 0;
++    int pam_verbosity = DEFAULT_PAM_VERBOSITY;
++    char **pam_filter_opts = NULL;
+ 
+     ret = confdb_get_int(cdb, CONFDB_PAM_CONF_ENTRY,
+                          CONFDB_PAM_VERBOSITY, DEFAULT_PAM_VERBOSITY,
+@@ -488,12 +563,22 @@ errno_t filter_responses(struct confdb_ctx *cdb,
+         pam_verbosity = DEFAULT_PAM_VERBOSITY;
+     }
+ 
++    ret = confdb_get_string_as_list(cdb, pd, CONFDB_PAM_CONF_ENTRY,
++                                    CONFDB_PAM_RESPONSE_FILTER,
++                                    &pam_filter_opts);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CONF_SETTINGS, "[%s] not available, not fatal.\n",
++                                    CONFDB_PAM_RESPONSE_FILTER);
++        pam_filter_opts = NULL;
++    }
++
+     resp = resp_list;
+     while(resp != NULL) {
+         if (resp->type == SSS_PAM_USER_INFO) {
+             if (resp->len < sizeof(uint32_t)) {
+                 DEBUG(SSSDBG_CRIT_FAILURE, "User info entry is too short.\n");
+-                return EINVAL;
++                ret = EINVAL;
++                goto done;
+             }
+ 
+             if (pam_verbosity == PAM_VERBOSITY_NO_MESSAGES) {
+@@ -511,7 +596,8 @@ errno_t filter_responses(struct confdb_ctx *cdb,
+                         DEBUG(SSSDBG_CRIT_FAILURE,
+                               "User info offline auth entry is "
+                                   "too short.\n");
+-                        return EINVAL;
++                        ret = EINVAL;
++                        goto done;
+                     }
+                     memcpy(&expire_date, resp->data + sizeof(uint32_t),
+                            sizeof(int64_t));
+@@ -528,6 +614,13 @@ errno_t filter_responses(struct confdb_ctx *cdb,
+                           "User info type [%d] not filtered.\n",
+                            user_info_type);
+             }
++        } else if (resp->type == SSS_PAM_ENV_ITEM) {
++            resp->do_not_send_to_client = false;
++            ret = filter_responses_env(resp, pd, pam_filter_opts);
++            if (ret != EOK) {
++                DEBUG(SSSDBG_OP_FAILURE, "filter_responses_env failed.\n");
++                goto done;
++            }
+         } else if (resp->type & SSS_SERVER_INFO) {
+             resp->do_not_send_to_client = true;
+         }
+@@ -535,7 +628,11 @@ errno_t filter_responses(struct confdb_ctx *cdb,
+         resp = resp->next;
+     }
+ 
+-    return EOK;
++    ret = EOK;
++done:
++    talloc_free(pam_filter_opts);
++
++    return ret;
+ }
+ 
+ static void pam_reply_delay(struct tevent_context *ev, struct tevent_timer *te,
+@@ -782,7 +879,7 @@ static void pam_reply(struct pam_auth_req *preq)
+         inform_user(pd, pam_account_locked_message);
+     }
+ 
+-    ret = filter_responses(pctx->rctx->cdb, pd->resp_list);
++    ret = filter_responses(pctx->rctx->cdb, pd->resp_list, pd);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "filter_responses failed, not fatal.\n");
+     }
+diff --git a/src/tests/cmocka/test_pam_srv.c b/src/tests/cmocka/test_pam_srv.c
+index 41d177233..3b8327eb3 100644
+--- a/src/tests/cmocka/test_pam_srv.c
++++ b/src/tests/cmocka/test_pam_srv.c
+@@ -1766,9 +1766,11 @@ void test_filter_response(void **state)
+     struct pam_data *pd;
+     uint8_t offline_auth_data[(sizeof(uint32_t) + sizeof(int64_t))];
+     uint32_t info_type;
++    char *env;
+ 
+     struct sss_test_conf_param pam_params[] = {
+         { CONFDB_PAM_VERBOSITY, "1" },
++        { CONFDB_PAM_RESPONSE_FILTER, NULL },
+         { NULL, NULL },             /* Sentinel */
+     };
+ 
+@@ -1778,6 +1780,15 @@ void test_filter_response(void **state)
+     pd = talloc_zero(pam_test_ctx, struct pam_data);
+     assert_non_null(pd);
+ 
++    pd->service = discard_const("MyService");
++
++    env = talloc_asprintf(pd, "%s=%s", "MyEnv", "abcdef");
++    assert_non_null(env);
++
++    ret = pam_add_response(pd, SSS_PAM_ENV_ITEM,
++                           strlen(env) + 1, (uint8_t *) env);
++    assert_int_equal(ret, EOK);
++
+     info_type = SSS_PAM_USER_INFO_OFFLINE_AUTH;
+     memset(offline_auth_data, 0, sizeof(offline_auth_data));
+     memcpy(offline_auth_data, &info_type, sizeof(uint32_t));
+@@ -1785,27 +1796,151 @@ void test_filter_response(void **state)
+                            sizeof(offline_auth_data), offline_auth_data);
+     assert_int_equal(ret, EOK);
+ 
+-    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list);
++    /* pd->resp_list points to the SSS_PAM_USER_INFO and pd->resp_list->next
++     * to the SSS_PAM_ENV_ITEM message. */
++
++
++    /* Test CONFDB_PAM_VERBOSITY option */
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
+     assert_int_equal(ret, EOK);
+     assert_true(pd->resp_list->do_not_send_to_client);
++    assert_false(pd->resp_list->next->do_not_send_to_client);
++
++    /* SSS_PAM_USER_INFO_OFFLINE_AUTH message will only be shown with
++     * pam_verbosity 2 or above if cache password never expires. */
++    pam_params[0].value = "2";
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_false(pd->resp_list->do_not_send_to_client);
++    assert_false(pd->resp_list->next->do_not_send_to_client);
+ 
+     pam_params[0].value = "0";
+     ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
+     assert_int_equal(ret, EOK);
+ 
+-    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list);
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
+     assert_int_equal(ret, EOK);
+     assert_true(pd->resp_list->do_not_send_to_client);
++    assert_false(pd->resp_list->next->do_not_send_to_client);
+ 
+-    /* SSS_PAM_USER_INFO_OFFLINE_AUTH message will only be shown with
+-     * pam_verbosity 2 or above if cache password never expires. */
+-    pam_params[0].value = "2";
++    /* Test CONFDB_PAM_RESPONSE_FILTER option */
++    pam_params[1].value = "NoSuchOption";
+     ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
+     assert_int_equal(ret, EOK);
+ 
+-    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list);
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
+     assert_int_equal(ret, EOK);
+-    assert_false(pd->resp_list->do_not_send_to_client);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_false(pd->resp_list->next->do_not_send_to_client);
++
++    pam_params[1].value = "ENV"; /* filter all environment variables */
++                                 /* for all services */
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_true(pd->resp_list->next->do_not_send_to_client);
++
++    pam_params[1].value = "ENV:"; /* filter all environment variables */
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_true(pd->resp_list->next->do_not_send_to_client);
++
++    pam_params[1].value = "ENV::"; /* filter all environment variables */
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_true(pd->resp_list->next->do_not_send_to_client);
++
++    pam_params[1].value = "ENV:abc:"; /* variable name does not match */
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_false(pd->resp_list->next->do_not_send_to_client);
++
++    pam_params[1].value = "ENV:abc:MyService"; /* variable name does not match */
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_false(pd->resp_list->next->do_not_send_to_client);
++
++    pam_params[1].value = "ENV::abc"; /* service name does not match */
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_false(pd->resp_list->next->do_not_send_to_client);
++
++    /* service name does not match */
++    pam_params[1].value = "ENV:MyEnv:abc";
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_false(pd->resp_list->next->do_not_send_to_client);
++
++    pam_params[1].value = "ENV:MyEnv"; /* match */
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_true(pd->resp_list->next->do_not_send_to_client);
++
++    pam_params[1].value = "ENV:MyEnv:"; /* match */
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_true(pd->resp_list->next->do_not_send_to_client);
++
++    pam_params[1].value = "ENV:MyEnv:MyService"; /* match */
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_true(pd->resp_list->next->do_not_send_to_client);
++
++    /* multiple rules with a match */
++    pam_params[1].value = "ENV:abc:def, "
++                          "ENV:MyEnv:MyService, "
++                          "ENV:stu:xyz";
++    ret = add_pam_params(pam_params, pam_test_ctx->rctx->cdb);
++    assert_int_equal(ret, EOK);
++
++    ret = filter_responses(pam_test_ctx->rctx->cdb, pd->resp_list, pd);
++    assert_int_equal(ret, EOK);
++    assert_true(pd->resp_list->do_not_send_to_client);
++    assert_true(pd->resp_list->next->do_not_send_to_client);
++
++    talloc_free(pd);
+ }
+ 
+ int main(int argc, const char *argv[])
+-- 
+2.11.0
+

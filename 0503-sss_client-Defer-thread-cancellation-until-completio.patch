@@ -1,0 +1,179 @@
+From d2f93542650c2f9613043acfa8e2f368972a70cd Mon Sep 17 00:00:00 2001
+From: Howard Guo <hguo@suse.com>
+Date: Tue, 11 Oct 2016 10:35:13 +0200
+Subject: [PATCH] sss_client: Defer thread cancellation until completion of
+ nss/pam operations
+
+The client code is not cancellation-safe, an application which
+has cancelled an NSS operation will experience subtle bugs,
+hence thread cancellation is deferred until completion of client
+operations.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3156
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+Reviewed-by: Florian Weimer <fweimer@redhat.com>
+---
+ Makefile.am             |  4 ---
+ configure.ac            |  8 -----
+ src/sss_client/common.c | 80 +++++--------------------------------------------
+ 3 files changed, 7 insertions(+), 85 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index e037930ff..9f1da4d1e 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -792,10 +792,6 @@ endif
+ 
+ CLIENT_LIBS = $(LTLIBINTL)
+ 
+-if HAVE_PTHREAD
+-CLIENT_LIBS += -lpthread
+-endif
+-
+ if WITH_JOURNALD
+ SYSLOG_LIBS = $(JOURNALD_LIBS)
+ endif
+diff --git a/configure.ac b/configure.ac
+index d3ef1e162..230524bf3 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -62,14 +62,6 @@ AC_COMPILE_IFELSE(
+ 
+ AM_CONDITIONAL([HAVE_PTHREAD], [test x"$HAVE_PTHREAD" != "x"])
+ 
+-SAVE_LIBS=$LIBS
+-LIBS="$LIBS -lpthread"
+-AC_CHECK_FUNCS([ pthread_mutexattr_setrobust \
+-                 pthread_mutex_consistent \
+-                 pthread_mutexattr_setrobust_np \
+-                 pthread_mutex_consistent_np ])
+-LIBS=$SAVE_LIBS
+-
+ # Check library for the timer_create function
+ SAVE_LIBS=$LIBS
+ LIBS=
+diff --git a/src/sss_client/common.c b/src/sss_client/common.c
+index 20106b1b6..b7a5ed760 100644
+--- a/src/sss_client/common.c
++++ b/src/sss_client/common.c
+@@ -1070,86 +1070,28 @@ typedef void (*sss_mutex_init)(void);
+ struct sss_mutex {
+     pthread_mutex_t mtx;
+ 
+-    pthread_once_t once;
+-    sss_mutex_init init;
++    int old_cancel_state;
+ };
+ 
+-static void sss_nss_mt_init(void);
+-static void sss_pam_mt_init(void);
+-static void sss_nss_mc_mt_init(void);
++static struct sss_mutex sss_nss_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER };
+ 
+-static struct sss_mutex sss_nss_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER,
+-                                        .once = PTHREAD_ONCE_INIT,
+-                                        .init = sss_nss_mt_init };
++static struct sss_mutex sss_pam_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER };
+ 
+-static struct sss_mutex sss_pam_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER,
+-                                        .once = PTHREAD_ONCE_INIT,
+-                                        .init = sss_pam_mt_init };
+-
+-static struct sss_mutex sss_nss_mc_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER,
+-                                           .once = PTHREAD_ONCE_INIT,
+-                                           .init = sss_nss_mc_mt_init };
+-
+-/* Wrappers for robust mutex support */
+-static int sss_mutexattr_setrobust (pthread_mutexattr_t *attr)
+-{
+-#ifdef HAVE_PTHREAD_MUTEXATTR_SETROBUST
+-    return pthread_mutexattr_setrobust(attr, PTHREAD_MUTEX_ROBUST);
+-#elif defined(HAVE_PTHREAD_MUTEXATTR_SETROBUST_NP)
+-    return pthread_mutexattr_setrobust_np(attr, PTHREAD_MUTEX_ROBUST_NP);
+-#else
+-#warning Robust mutexes are not supported on this platform.
+-    return 0;
+-#endif
+-}
+-
+-static int sss_mutex_consistent(pthread_mutex_t *mtx)
+-{
+-#ifdef HAVE_PTHREAD_MUTEX_CONSISTENT
+-    return pthread_mutex_consistent(mtx);
+-#elif defined(HAVE_PTHREAD_MUTEX_CONSISTENT_NP)
+-    return pthread_mutex_consistent_np(mtx);
+-#else
+-#warning Robust mutexes are not supported on this platform.
+-    return 0;
+-#endif
+-}
+-
+-/* Generic mutex init, lock, unlock functions */
+-static void sss_mt_init(struct sss_mutex *m)
+-{
+-    pthread_mutexattr_t attr;
+-
+-    if (pthread_mutexattr_init(&attr) != 0) {
+-        return;
+-    }
+-    if (sss_mutexattr_setrobust(&attr) != 0) {
+-        return;
+-    }
+-
+-    pthread_mutex_init(&m->mtx, &attr);
+-    pthread_mutexattr_destroy(&attr);
+-}
++static struct sss_mutex sss_nss_mc_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER };
+ 
+ static void sss_mt_lock(struct sss_mutex *m)
+ {
+-    pthread_once(&m->once, m->init);
+-    if (pthread_mutex_lock(&m->mtx) == EOWNERDEAD) {
+-        sss_cli_close_socket();
+-        sss_mutex_consistent(&m->mtx);
+-    }
++    pthread_mutex_lock(&m->mtx);
++    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &m->old_cancel_state);
+ }
+ 
+ static void sss_mt_unlock(struct sss_mutex *m)
+ {
++    pthread_setcancelstate(m->old_cancel_state, NULL);
+     pthread_mutex_unlock(&m->mtx);
+ }
+ 
+ /* NSS mutex wrappers */
+-static void sss_nss_mt_init(void)
+-{
+-    sss_mt_init(&sss_nss_mtx);
+-}
+ void sss_nss_lock(void)
+ {
+     sss_mt_lock(&sss_nss_mtx);
+@@ -1160,10 +1102,6 @@ void sss_nss_unlock(void)
+ }
+ 
+ /* NSS mutex wrappers */
+-static void sss_pam_mt_init(void)
+-{
+-    sss_mt_init(&sss_pam_mtx);
+-}
+ void sss_pam_lock(void)
+ {
+     sss_mt_lock(&sss_pam_mtx);
+@@ -1174,10 +1112,6 @@ void sss_pam_unlock(void)
+ }
+ 
+ /* NSS mutex wrappers */
+-static void sss_nss_mc_mt_init(void)
+-{
+-    sss_mt_init(&sss_nss_mc_mtx);
+-}
+ void sss_nss_mc_lock(void)
+ {
+     sss_mt_lock(&sss_nss_mc_mtx);
+-- 
+2.11.0
+

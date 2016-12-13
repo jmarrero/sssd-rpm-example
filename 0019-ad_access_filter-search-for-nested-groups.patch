@@ -1,0 +1,55 @@
+From 7186923d877605f632fa17053a674f8266fd08bb Mon Sep 17 00:00:00 2001
+From: Mike Ely <github@taupehat.com>
+Date: Wed, 2 Nov 2016 11:26:21 -0700
+Subject: [PATCH 19/39] ad_access_filter search for nested groups
+
+Includes instructions and example for AD nested group access
+
+Related to https://fedorahosted.org/sssd/ticket/3218
+
+Signed-off-by: Mike Ely <github@taupehat.com>
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+(cherry picked from commit cf5357ae83cc9fe2240038b8bdccec2cb98991fc)
+(cherry picked from commit e1c2aead482cd4bf83a7fe5e68630a981389e82b)
+---
+ src/man/sssd-ad.5.xml | 16 ++++++++++++++++
+ 1 file changed, 16 insertions(+)
+
+diff --git a/src/man/sssd-ad.5.xml b/src/man/sssd-ad.5.xml
+index 8a2f4ade9..2618f8324 100644
+--- a/src/man/sssd-ad.5.xml
++++ b/src/man/sssd-ad.5.xml
+@@ -236,6 +236,19 @@ ad_enabled_domains = sales.example.com, eng.example.com
+                             search bases work.
+                         </para>
+                         <para>
++                            Nested group membership must be searched for using
++                            a special OID <quote>:1.2.840.113556.1.4.1941:</quote>
++                            in addition to the full DOM:domain.example.org: syntax
++                            to ensure the parser does not attempt to interpret the
++                            colon characters associated with the OID. If you do not
++                            use this OID then nested group membership will not be
++                            resolved. See usage example below and refer here
++                            for further information about the OID:
++                            <ulink
++                            url="https://msdn.microsoft.com/en-us/library/cc223367.aspx">
++                            [MS-ADTS] section LDAP extensions</ulink>
++                        </para>
++                        <para>
+                             The most specific match is always used. For
+                             example, if the option specified filter
+                             for a domain the user is a member of and a
+@@ -255,6 +268,9 @@ DOM:dom2:(memberOf=cn=admins,ou=groups,dc=dom2,dc=com)
+ 
+ # apply filter on forest called EXAMPLE.COM only:
+ FOREST:EXAMPLE.COM:(memberOf=cn=admins,ou=groups,dc=example,dc=com)
++
++# apply filter for a member of a nested group in dom1:
++DOM:dom1:(memberOf:1.2.840.113556.1.4.1941:=cn=nestedgroup,ou=groups,dc=example,dc=com)
+                         </programlisting>
+                         <para>
+                             Default: Not set
+-- 
+2.11.0
+

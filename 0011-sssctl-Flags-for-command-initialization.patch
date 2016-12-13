@@ -1,0 +1,202 @@
+From 9b31bc45a3d5728af2523725bd5a2b4aff4f4c78 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Wed, 12 Oct 2016 13:09:37 +0200
+Subject: [PATCH 11/39] sssctl: Flags for command initialization
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Allow passing flags for command specific initialization. Currently
+only one flag is available to skip the confdb initialization which is
+required to improve config-check command.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3209
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit cbee11e912bb391ba254b0bac8c1159c1f634533)
+(cherry picked from commit ec1829de7cd529c2c68b4bdb9b6d43ac6bb545d3)
+---
+ src/tools/common/sss_tools.c | 91 +++++++++++++++++++++++++-------------------
+ src/tools/common/sss_tools.h | 14 +++++--
+ src/tools/sssctl/sssctl.c    |  2 +-
+ 3 files changed, 63 insertions(+), 44 deletions(-)
+
+diff --git a/src/tools/common/sss_tools.c b/src/tools/common/sss_tools.c
+index 686b53a07..0f4f46894 100644
+--- a/src/tools/common/sss_tools.c
++++ b/src/tools/common/sss_tools.c
+@@ -182,7 +182,6 @@ errno_t sss_tool_init(TALLOC_CTX *mem_ctx,
+                       struct sss_tool_ctx **_tool_ctx)
+ {
+     struct sss_tool_ctx *tool_ctx;
+-    errno_t ret;
+ 
+     tool_ctx = talloc_zero(mem_ctx, struct sss_tool_ctx);
+     if (tool_ctx == NULL) {
+@@ -192,45 +191,9 @@ errno_t sss_tool_init(TALLOC_CTX *mem_ctx,
+ 
+     sss_tool_common_opts(tool_ctx, argc, argv);
+ 
+-    /* Connect to confdb. */
+-    ret = sss_tool_confdb_init(tool_ctx, &tool_ctx->confdb);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to open confdb [%d]: %s\n",
+-                                   ret, sss_strerror(ret));
+-        goto done;
+-    }
++    *_tool_ctx = tool_ctx;
+ 
+-    /* Setup domains. */
+-    ret = sss_tool_domains_init(tool_ctx, tool_ctx->confdb, &tool_ctx->domains);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to setup domains [%d]: %s\n",
+-                                   ret, sss_strerror(ret));
+-        goto done;
+-    }
+-
+-    ret = confdb_get_string(tool_ctx->confdb, tool_ctx,
+-                            CONFDB_MONITOR_CONF_ENTRY,
+-                            CONFDB_MONITOR_DEFAULT_DOMAIN,
+-                            NULL, &tool_ctx->default_domain);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_OP_FAILURE, "Cannot get the default domain [%d]: %s\n",
+-                                 ret, strerror(ret));
+-        goto done;
+-    }
+-
+-    ret = EOK;
+-
+-done:
+-    switch (ret) {
+-    case EOK:
+-    case ERR_SYSDB_VERSION_TOO_OLD:
+-        *_tool_ctx = tool_ctx;
+-        break;
+-    default:
+-        break;
+-    }
+-
+-    return ret;
++    return EOK;
+ }
+ 
+ static bool sss_tool_is_delimiter(struct sss_route_cmd *command)
+@@ -300,6 +263,47 @@ void sss_tool_usage(const char *tool_name, struct sss_route_cmd *commands)
+     sss_tool_print_common_opts(min_len);
+ }
+ 
++static int tool_cmd_init(struct sss_tool_ctx *tool_ctx,
++                         struct sss_route_cmd *command)
++{
++    int ret;
++
++    if (command->flags & SSS_TOOL_FLAG_SKIP_CMD_INIT) {
++        return EOK;
++    }
++
++    /* Connect to confdb. */
++    ret = sss_tool_confdb_init(tool_ctx, &tool_ctx->confdb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to open confdb [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    /* Setup domains. */
++    ret = sss_tool_domains_init(tool_ctx, tool_ctx->confdb, &tool_ctx->domains);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to setup domains [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = confdb_get_string(tool_ctx->confdb, tool_ctx,
++                            CONFDB_MONITOR_CONF_ENTRY,
++                            CONFDB_MONITOR_DEFAULT_DOMAIN,
++                            NULL, &tool_ctx->default_domain);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "Cannot get the default domain [%d]: %s\n",
++              ret, strerror(ret));
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    return ret;
++}
++
+ errno_t sss_tool_route(int argc, const char **argv,
+                        struct sss_tool_ctx *tool_ctx,
+                        struct sss_route_cmd *commands,
+@@ -308,6 +312,7 @@ errno_t sss_tool_route(int argc, const char **argv,
+     struct sss_cmdline cmdline;
+     const char *cmd;
+     int i;
++    int ret;
+ 
+     if (commands == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Bug: commands can't be NULL!\n");
+@@ -339,6 +344,14 @@ errno_t sss_tool_route(int argc, const char **argv,
+                 return tool_ctx->init_err;
+             }
+ 
++            ret = tool_cmd_init(tool_ctx, &commands[i]);
++            if (ret != EOK) {
++                DEBUG(SSSDBG_FATAL_FAILURE,
++                      "Command initialization failed [%d] %s\n",
++                      ret, sss_strerror(ret));
++                return ret;
++            }
++
+             return commands[i].fn(&cmdline, tool_ctx, pvt);
+         }
+     }
+diff --git a/src/tools/common/sss_tools.h b/src/tools/common/sss_tools.h
+index 6d24642ae..49da7d634 100644
+--- a/src/tools/common/sss_tools.h
++++ b/src/tools/common/sss_tools.h
+@@ -45,16 +45,22 @@ typedef errno_t
+                 struct sss_tool_ctx *tool_ctx,
+                 void *pvt);
+ 
+-#define SSS_TOOL_COMMAND(cmd, msg, err, fn) {cmd, _(msg), err, fn}
+-#define SSS_TOOL_COMMAND_NOMSG(cmd, err, fn) {cmd, NULL, err, fn}
+-#define SSS_TOOL_DELIMITER(message) {"", _(message), 0, NULL}
+-#define SSS_TOOL_LAST {NULL, NULL, 0, NULL}
++#define SSS_TOOL_COMMAND_FLAGS(cmd, msg, err, fn, flags) \
++    {cmd, _(msg), err, fn, flags}
++#define SSS_TOOL_COMMAND(cmd, msg, err, fn) \
++    {cmd, _(msg), err, fn, 0}
++#define SSS_TOOL_COMMAND_NOMSG(cmd, err, fn) {cmd, NULL, err, fn, 0}
++#define SSS_TOOL_DELIMITER(message) {"", _(message), 0, NULL, 0}
++#define SSS_TOOL_LAST {NULL, NULL, 0, NULL, 0}
++
++#define SSS_TOOL_FLAG_SKIP_CMD_INIT 0x01
+ 
+ struct sss_route_cmd {
+     const char *command;
+     const char *description;
+     errno_t handles_init_err;
+     sss_route_fn fn;
++    int flags;
+ };
+ 
+ void sss_tool_usage(const char *tool_name,
+diff --git a/src/tools/sssctl/sssctl.c b/src/tools/sssctl/sssctl.c
+index b0510e6ae..ece1e6df1 100644
+--- a/src/tools/sssctl/sssctl.c
++++ b/src/tools/sssctl/sssctl.c
+@@ -276,7 +276,7 @@ int main(int argc, const char **argv)
+         SSS_TOOL_COMMAND("logs-fetch", "Archive SSSD log files in tarball", 0, sssctl_logs_fetch),
+ #ifdef HAVE_LIBINI_CONFIG_V1_3
+         SSS_TOOL_DELIMITER("Configuration files tools:"),
+-        SSS_TOOL_COMMAND("config-check", "Perform static analysis of SSSD configuration", 0, sssctl_config_check),
++        SSS_TOOL_COMMAND_FLAGS("config-check", "Perform static analysis of SSSD configuration", 0, sssctl_config_check, SSS_TOOL_FLAG_SKIP_CMD_INIT),
+ #endif
+         SSS_TOOL_LAST
+     };
+-- 
+2.11.0
+

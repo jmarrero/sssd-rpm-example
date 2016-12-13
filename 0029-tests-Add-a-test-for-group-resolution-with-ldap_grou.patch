@@ -1,0 +1,56 @@
+From a72d7cf57143ca56834c6bb33b289ba98ed02b91 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 9 Nov 2016 11:59:34 +0100
+Subject: [PATCH 29/39] tests: Add a test for group resolution with
+ ldap_group_nesting_level=0
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 65e791f844b4513ca2c3ee23f8cd2979566b3719)
+(cherry picked from commit a7be684411aff42e03e181dd81de921185e16c34)
+---
+ src/tests/intg/test_ldap.py | 29 +++++++++++++++++++++++++++++
+ 1 file changed, 29 insertions(+)
+
+diff --git a/src/tests/intg/test_ldap.py b/src/tests/intg/test_ldap.py
+index 7f0b8ff18..bf25d9509 100644
+--- a/src/tests/intg/test_ldap.py
++++ b/src/tests/intg/test_ldap.py
+@@ -951,3 +951,32 @@ def test_remove_user_from_nested_group(ldap_conn,
+                              dict(mem=ent.contains_only("user2")))
+     ent.assert_group_by_name("group3",
+                              dict(mem=ent.contains_only()))
++
++
++def zero_nesting_sssd_conf(ldap_conn, schema):
++    """Format an SSSD configuration with group nesting disabled"""
++    return \
++        format_basic_conf(ldap_conn, schema) + \
++        unindent("""
++            [domain/LDAP]
++            ldap_group_nesting_level                = 0
++        """).format(INTERACTIVE_TIMEOUT)
++
++
++@pytest.fixture
++def rfc2307bis_no_nesting(request, ldap_conn):
++    ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
++    ent_list.add_user("user1", 1001, 2001)
++    ent_list.add_group_bis("group1", 20001, member_uids=["user1"])
++    create_ldap_fixture(request, ldap_conn, ent_list)
++    create_conf_fixture(request,
++                        zero_nesting_sssd_conf(
++                            ldap_conn,
++                            SCHEMA_RFC2307_BIS))
++    create_sssd_fixture(request)
++    return None
++
++
++def test_zero_nesting_level(ldap_conn, rfc2307bis_no_nesting):
++    ent.assert_group_by_name("group1",
++                             dict(mem=ent.contains_only("user1")))
+-- 
+2.11.0
+

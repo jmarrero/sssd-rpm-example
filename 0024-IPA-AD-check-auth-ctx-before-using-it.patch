@@ -1,0 +1,93 @@
+From a859747b84125124ea794aa422f5b811bb0dba2d Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 8 Nov 2016 11:51:57 +0100
+Subject: [PATCH 24/39] IPA/AD: check auth ctx before using it
+
+In e6b6b9fa79c67d7d2698bc7e33d2e2f6bb53d483 a feature was introduced to
+set the 'canonicalize' option in the system-wide Kerberos configuration
+according to the settings in SSSD if the AD or IPA provider were used.
+Unfortunately the patch implied that the auth provider is the same as
+the id provider which might not always be the case. A different auth
+provider caused a crash in the backend which is fixed by this patch.
+
+Resolves https://fedorahosted.org/sssd/ticket/3234
+
+Reviewed-by: Petr Cech <pcech@redhat.com>
+(cherry picked from commit ea11ed3ea6291488dd762033246edc4ce3951aeb)
+(cherry picked from commit 37e070c8c2ea79d8d84bae3da3a34c81212744ab)
+---
+ src/providers/ad/ad_subdomains.c   | 13 +++++++++++--
+ src/providers/ipa/ipa_subdomains.c | 20 +++++++++++++++++---
+ 2 files changed, 28 insertions(+), 5 deletions(-)
+
+diff --git a/src/providers/ad/ad_subdomains.c b/src/providers/ad/ad_subdomains.c
+index 52bf5361f..5e57d218c 100644
+--- a/src/providers/ad/ad_subdomains.c
++++ b/src/providers/ad/ad_subdomains.c
+@@ -618,14 +618,23 @@ static errno_t ad_subdom_reinit(struct ad_subdomains_ctx *subdoms_ctx)
+ {
+     const char *path;
+     errno_t ret;
+-    bool canonicalize;
++    bool canonicalize = false;
+ 
+     path = dp_opt_get_string(subdoms_ctx->ad_id_ctx->ad_options->basic,
+                              AD_KRB5_CONFD_PATH);
+ 
+-    canonicalize = dp_opt_get_bool(
++    if (subdoms_ctx->ad_id_ctx->ad_options->auth_ctx != NULL
++            && subdoms_ctx->ad_id_ctx->ad_options->auth_ctx->opts != NULL) {
++        canonicalize = dp_opt_get_bool(
+                              subdoms_ctx->ad_id_ctx->ad_options->auth_ctx->opts,
+                              KRB5_CANONICALIZE);
++    } else {
++        DEBUG(SSSDBG_CONF_SETTINGS, "Auth provider data is not available, "
++                                    "most probably because the auth provider "
++                                    "is not 'ad'. Kerberos configuration "
++                                    "snippet to set the 'canonicalize' option "
++                                    "will not be created.\n");
++    }
+ 
+     ret = sss_write_krb5_conf_snippet(path, canonicalize);
+     if (ret != EOK) {
+diff --git a/src/providers/ipa/ipa_subdomains.c b/src/providers/ipa/ipa_subdomains.c
+index 8653e3f46..b2e96b204 100644
+--- a/src/providers/ipa/ipa_subdomains.c
++++ b/src/providers/ipa/ipa_subdomains.c
+@@ -73,16 +73,30 @@ static errno_t
+ ipa_subdom_reinit(struct ipa_subdomains_ctx *ctx)
+ {
+     errno_t ret;
++    bool canonicalize = false;
+ 
+     DEBUG(SSSDBG_TRACE_INTERNAL,
+           "Re-initializing domain %s\n", ctx->be_ctx->domain->name);
+ 
++    if (ctx->ipa_id_ctx->ipa_options->auth_ctx != NULL
++          && ctx->ipa_id_ctx->ipa_options->auth_ctx->krb5_auth_ctx != NULL
++          && ctx->ipa_id_ctx->ipa_options->auth_ctx->krb5_auth_ctx->opts != NULL
++       ) {
++        canonicalize = dp_opt_get_bool(
++                    ctx->ipa_id_ctx->ipa_options->auth_ctx->krb5_auth_ctx->opts,
++                    KRB5_CANONICALIZE);
++    } else {
++        DEBUG(SSSDBG_CONF_SETTINGS, "Auth provider data is not available, "
++                                    "most probably because the auth provider "
++                                    "is not 'ipa'. Kerberos configuration "
++                                    "snippet to set the 'canonicalize' option "
++                                    "will not be created.\n");
++    }
++
+     ret = sss_write_krb5_conf_snippet(
+                           dp_opt_get_string(ctx->ipa_id_ctx->ipa_options->basic,
+                                             IPA_KRB5_CONFD_PATH),
+-                          dp_opt_get_bool(
+-                    ctx->ipa_id_ctx->ipa_options->auth_ctx->krb5_auth_ctx->opts,
+-                    KRB5_CANONICALIZE));
++                          canonicalize);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_MINOR_FAILURE, "sss_write_krb5_conf_snippet failed.\n");
+         /* Just continue */
+-- 
+2.11.0
+

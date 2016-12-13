@@ -1,0 +1,49 @@
+From 6a3c115022b54bce155c04a1c090561cf626006a Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lukas.slebodnik@intrak.sk>
+Date: Fri, 18 Nov 2016 17:49:35 +0100
+Subject: [PATCH 34/39] UTIL: Fix compilation of sss_utf8 with libunistring
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The internal header file "util/util.h" was removed from sss_utf8.h
+as part of commit de5fa34860886ad68fba5e739987e16c342e8f14.
+It was neccessary to ensure libipa_hbac can be build with C90
+compatible compiler.
+
+This header file includes many system header file and after
+this change caused missing declaration of the function free()
+
+src/util/sss_utf8.c: In function ‘sss_utf8_free’:
+src/util/sss_utf8.c:40:12: error: implicit declaration of function ‘free’
+  [-Werror=implicit-function-declaration]
+     return free(ptr);
+            ^~~~
+src/util/sss_utf8.c:40:12: warning: incompatible implicit declaration
+                                    of built-in function ‘free’
+src/util/sss_utf8.c:40:12: note: include ‘<stdlib.h>’ or provide
+                                 a declaration of ‘free’
+cc1: some warnings being treated as errors
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit c101cb130df0705a9227dadce22554307eee54db)
+(cherry picked from commit 76e2df701559d8723ea632722c94c8dfb820fc93)
+---
+ src/util/sss_utf8.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/util/sss_utf8.c b/src/util/sss_utf8.c
+index 722f28d08..e62e9c6c9 100644
+--- a/src/util/sss_utf8.c
++++ b/src/util/sss_utf8.c
+@@ -26,6 +26,7 @@
+ #include <errno.h>
+ 
+ #ifdef HAVE_LIBUNISTRING
++#include <stdlib.h>
+ #include <unistr.h>
+ #include <unicase.h>
+ #elif defined(HAVE_GLIB2)
+-- 
+2.11.0
+

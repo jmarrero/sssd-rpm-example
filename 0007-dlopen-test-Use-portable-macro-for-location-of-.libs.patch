@@ -1,0 +1,41 @@
+From 00efc45a2f2784b8f7bbd823dd7de6b9201d69b1 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 17 Oct 2016 21:39:57 +0200
+Subject: [PATCH 07/39] dlopen-test: Use portable macro for location of .libs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Petr Čech <pcech@redhat.com>
+(cherry picked from commit bacc66dc6f446d47be18b61d569721481d70386b)
+(cherry picked from commit a64409a528257ee0706cc12a1b974a159edac041)
+---
+ src/tests/dlopen-tests.c | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/src/tests/dlopen-tests.c b/src/tests/dlopen-tests.c
+index 96cc4db9b..6e37dbed1 100644
+--- a/src/tests/dlopen-tests.c
++++ b/src/tests/dlopen-tests.c
+@@ -22,7 +22,8 @@
+     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define _GNU_SOURCE
++#include "config.h"
++
+ #include <stdbool.h>
+ #include <dlfcn.h>
+ #include <stdio.h>
+@@ -31,7 +32,7 @@
+ #include <check.h>
+ #include "tests/common.h"
+ 
+-#define LIBPFX ABS_BUILD_DIR"/.libs/"
++#define LIBPFX ABS_BUILD_DIR "/" LT_OBJDIR
+ 
+ struct so {
+     const char *name;
+-- 
+2.11.0
+

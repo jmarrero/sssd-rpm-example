@@ -1,0 +1,53 @@
+From f60c6cec2a432222308d5b6b05ee7e2f93c16bb0 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 17 Oct 2016 21:59:18 +0200
+Subject: [PATCH 08/39] dlopen-test: Add missing libraries to the check list
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+nfsidmap plugin(sss.so) and libsss_cert.so were not checked.
+Few libraries which are build for testing purposes were added to the list
+otherwise we would not be able to detect unchecked libraries.
+
+Reviewed-by: Petr Čech <pcech@redhat.com>
+(cherry picked from commit 558b8f3cd2439c01e139cf5f812aea9409fe776a)
+(cherry picked from commit 9b972260cb805e3537ab9464ef5347348792d7cf)
+---
+ src/tests/dlopen-tests.c | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+diff --git a/src/tests/dlopen-tests.c b/src/tests/dlopen-tests.c
+index 6e37dbed1..c980ab9f1 100644
+--- a/src/tests/dlopen-tests.c
++++ b/src/tests/dlopen-tests.c
+@@ -78,6 +78,7 @@ struct so {
+     { "libsss_child.so", { LIBPFX"libsss_util.so",
+                            LIBPFX"libsss_child.so", NULL } },
+     { "libsss_crypt.so", { LIBPFX"libsss_crypt.so", NULL } },
++    { "libsss_cert.so", { LIBPFX"libsss_cert.so", NULL } },
+     { "libsss_util.so", { LIBPFX"libsss_util.so", NULL } },
+     { "libsss_simple.so", { LIBPFX"libdlopen_test_providers.so",
+                             LIBPFX"libsss_simple.so", NULL } },
+@@ -114,6 +115,18 @@ struct so {
+ #ifdef HAVE_CONFIG_LIB
+     { "libsss_config.so", { LIBPFX"libsss_config.so", NULL } },
+ #endif
++#ifdef BUILD_NFS_IDMAP
++    { "sss.so", { LIBPFX"sss.so", NULL } },
++#endif
++    /* for testing purposes */
++    { "libsss_nss_idmap_tests.so", { LIBPFX"libsss_nss_idmap_tests.so",
++                                     NULL } },
++#ifdef BUILD_SAMBA
++    { "libdlopen_test_winbind_idmap.so",
++      { LIBPFX"libdlopen_test_winbind_idmap.so", NULL } },
++    { "libsss_ad_tests.so", { LIBPFX"libdlopen_test_providers.so",
++                              LIBPFX"libsss_ad_tests.so", NULL } },
++#endif
+     { NULL }
+ };
+ 
+-- 
+2.11.0
+

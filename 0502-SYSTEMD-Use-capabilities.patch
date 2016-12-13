@@ -1,0 +1,25 @@
+From cf3b1babdbd2221b46816d4c6d5cd90d9de069ec Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 12 Dec 2016 21:56:16 +0100
+Subject: [PATCH] SYSTEMD: Use capabilities
+
+copied from selinux policy
+---
+ src/sysv/systemd/sssd.service.in | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/sysv/systemd/sssd.service.in b/src/sysv/systemd/sssd.service.in
+index a4f9125b58e72429cc3ac1e679271367ada27f3c..8c49c0415597b21ddcd85e0675580edc4d171a5f 100644
+--- a/src/sysv/systemd/sssd.service.in
++++ b/src/sysv/systemd/sssd.service.in
+@@ -11,6 +11,7 @@ ExecStart=@sbindir@/sssd -D -f
+ # consult systemd.service(5) for more details
+ Type=forking
+ PIDFile=@localstatedir@/run/sssd.pid
++CapabilityBoundingSet=CAP_IPC_LOCK CAP_CHOWN CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_KILL CAP_NET_ADMIN CAP_SYS_NICE CAP_FOWNER CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_BLOCK_SUSPEND
+ 
+ [Install]
+ WantedBy=multi-user.target
+-- 
+2.11.0
+

@@ -1,0 +1,72 @@
+From d2f8e3876810cf99228827432ea4f4a59877448d Mon Sep 17 00:00:00 2001
+From: Carl Henrik Lunde <chlunde@ifi.uio.no>
+Date: Thu, 1 Dec 2016 00:09:00 +0100
+Subject: [PATCH 37/39] Prevent use after free in fd_input_available
+
+When both TEVENT_FD_WRITE and TEVENT_FD_READ are set, and an error/EOF
+occurs when reading from the socket, we will get a use after free
+in the second call ares_process_fd.  The first call will free the watch
+structure via a callback.
+
+Prevent this by calling ares_process_fd only once.
+
+Invalid read of size 4
+   at fd_input_available (async_resolv.c:147)
+   by epoll_event_loop (tevent_epoll.c:728)
+   by epoll_event_loop_once (tevent_epoll.c:926)
+   by std_event_loop_once (tevent_standard.c:114)
+   by _tevent_loop_once (tevent.c:533)
+   by tevent_common_loop_wait (tevent.c:637)
+   by std_event_loop_wait (tevent_standard.c:140)
+   by server_loop (server.c:702)
+   by main (data_provider_be.c:587)
+ Address ... is 112 bytes inside a block of size 136 free'd
+   at free (vg_replace_malloc.c:530)
+   by _talloc_free_internal (talloc.c:1116)
+   by _talloc_free (talloc.c:1647)
+   by ares__close_sockets (ares__close_sockets.c:50)
+   by handle_error (ares_process.c:679)
+   by read_tcp_data (ares_process.c:391)
+   by processfds (ares_process.c:138)
+   by fd_input_available (async_resolv.c:144)
+   by epoll_event_loop (tevent_epoll.c:728)
+   by epoll_event_loop_once (tevent_epoll.c:926)
+   by std_event_loop_once (tevent_standard.c:114)
+   by _tevent_loop_once (tevent.c:533)
+   by tevent_common_loop_wait (tevent.c:637)
+   by std_event_loop_wait (tevent_standard.c:140)
+   by server_loop (server.c:702)
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3250
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 9676b464dd428557ff5a648e1351a3972440396f)
+(cherry picked from commit fefdd70237cbe82af7d8845131e45401e73b3b07)
+---
+ src/resolv/async_resolv.c | 9 +++------
+ 1 file changed, 3 insertions(+), 6 deletions(-)
+
+diff --git a/src/resolv/async_resolv.c b/src/resolv/async_resolv.c
+index e85955677..47b4db7ec 100644
+--- a/src/resolv/async_resolv.c
++++ b/src/resolv/async_resolv.c
+@@ -140,12 +140,9 @@ fd_input_available(struct tevent_context *ev, struct tevent_fd *fde,
+         return;
+     }
+ 
+-    if (flags & TEVENT_FD_READ) {
+-        ares_process_fd(watch->ctx->channel, watch->fd, ARES_SOCKET_BAD);
+-    }
+-    if (flags & TEVENT_FD_WRITE) {
+-        ares_process_fd(watch->ctx->channel, ARES_SOCKET_BAD, watch->fd);
+-    }
++    ares_process_fd(watch->ctx->channel,
++                    flags & TEVENT_FD_READ ? watch->fd : ARES_SOCKET_BAD,
++                    flags & TEVENT_FD_WRITE ? watch->fd : ARES_SOCKET_BAD);
+ }
+ 
+ static void
+-- 
+2.11.0
+

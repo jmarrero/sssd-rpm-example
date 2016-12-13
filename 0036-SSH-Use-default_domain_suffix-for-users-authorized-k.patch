@@ -1,0 +1,80 @@
+From e1a01adb021f7d2b3674c4d8151797e265608c20 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Thu, 24 Nov 2016 18:07:56 +0100
+Subject: [PATCH 36/39] SSH: Use default_domain_suffix for users' authorized
+ keys
+
+In commit eeecc48d22a28bb69da56f6ffd8824163fc9bf00 we disabled
+default_domain_suffix for the SSH responder, but in a wrong way -- we
+disabled the functionality completely, also for users, not only for
+computers. This might have been correct at the time, since SSH keys in ID
+overrides are a relatively new feature, but it's definitely not correct
+in general.
+
+Instead, this patch restores the use of default_domain_suffix, but only
+for looking up public keys of users, not of computers.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3259
+
+Reviewed-by: Petr Cech <pcech@redhat.com>
+(cherry picked from commit ed71fba97dfcf5b3f0f1834c06660c481b9ab3ce)
+(cherry picked from commit 2949fe58ac344c44d756ca309d4b2b7f3590cee3)
+---
+ src/responder/ssh/sshsrv_cmd.c | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/src/responder/ssh/sshsrv_cmd.c b/src/responder/ssh/sshsrv_cmd.c
+index ab721d66e..2e64893df 100644
+--- a/src/responder/ssh/sshsrv_cmd.c
++++ b/src/responder/ssh/sshsrv_cmd.c
+@@ -36,7 +36,8 @@
+ #include "responder/ssh/sshsrv_private.h"
+ 
+ static errno_t
+-ssh_cmd_parse_request(struct ssh_cmd_ctx *cmd_ctx);
++ssh_cmd_parse_request(struct ssh_cmd_ctx *cmd_ctx,
++                      char *default_domain);
+ 
+ static errno_t
+ ssh_user_pubkeys_search(struct ssh_cmd_ctx *cmd_ctx);
+@@ -57,7 +58,7 @@ sss_ssh_cmd_get_user_pubkeys(struct cli_ctx *cctx)
+     cmd_ctx->cctx = cctx;
+     cmd_ctx->is_user = true;
+ 
+-    ret = ssh_cmd_parse_request(cmd_ctx);
++    ret = ssh_cmd_parse_request(cmd_ctx, cctx->rctx->default_domain);
+     if (ret != EOK) {
+         goto done;
+     }
+@@ -107,7 +108,7 @@ sss_ssh_cmd_get_host_pubkeys(struct cli_ctx *cctx)
+     cmd_ctx->cctx = cctx;
+     cmd_ctx->is_user = false;
+ 
+-    ret = ssh_cmd_parse_request(cmd_ctx);
++    ret = ssh_cmd_parse_request(cmd_ctx, NULL);
+     if (ret != EOK) {
+         goto done;
+     }
+@@ -681,7 +682,8 @@ done:
+ }
+ 
+ static errno_t
+-ssh_cmd_parse_request(struct ssh_cmd_ctx *cmd_ctx)
++ssh_cmd_parse_request(struct ssh_cmd_ctx *cmd_ctx,
++                      char *default_domain)
+ {
+     struct cli_protocol *pctx;
+     struct ssh_ctx *ssh_ctx;
+@@ -754,6 +756,8 @@ ssh_cmd_parse_request(struct ssh_cmd_ctx *cmd_ctx)
+                 return EINVAL;
+             }
+             c += domain_len;
++        } else {
++            domain = default_domain;
+         }
+ 
+         DEBUG(SSSDBG_TRACE_FUNC,
+-- 
+2.11.0
+

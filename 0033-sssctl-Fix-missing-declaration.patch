@@ -1,0 +1,46 @@
+From 99b48ffa1a525c0736f67b89c81bfc867977a99c Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lukas.slebodnik@intrak.sk>
+Date: Fri, 18 Nov 2016 17:58:28 +0100
+Subject: [PATCH 33/39] sssctl: Fix missing declaration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The WEXITSTATUS is defined in stdlib.h on linux.
+There is a nice comment in stdlib.h:
+  /* Define the macros <sys/wait.h> also would define this way.  */
+
+It's better to not rely on this and use more platfom friendly
+way with including "sys/wait.h". For example the libc on FreeBSD
+does not provide WEXITSTATUS in stdlib.h.
+
+I found this macro mentioned only in the manual page for wait(2)
+and there is mentioned just the "sys/wait.h" and not "stdlib.h"
+
+src/tools/sssctl/sssctl.c: In function 'sssctl_run_command':
+src/tools/sssctl/sssctl.c:110: error: implicit declaration of function
+'WEXITSTATUS'
+gmake[2]: *** [Makefile:22383: src/tools/sssctl/sssctl-sssctl.o] Error 1
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 73c9330fa3de6912e45c1ab686d5290f143b8352)
+(cherry picked from commit 161ddc1f24082c735801775802a483e96909152c)
+---
+ src/tools/sssctl/sssctl.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/tools/sssctl/sssctl.c b/src/tools/sssctl/sssctl.c
+index ece1e6df1..e1cf46382 100644
+--- a/src/tools/sssctl/sssctl.c
++++ b/src/tools/sssctl/sssctl.c
+@@ -20,6 +20,7 @@
+ 
+ #include <stdlib.h>
+ #include <stdio.h>
++#include <sys/wait.h>
+ 
+ #include "util/util.h"
+ #include "tools/sssctl/sssctl.h"
+-- 
+2.11.0
+

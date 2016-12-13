@@ -1,0 +1,50 @@
+From f2fe644510afd2d3bc989a4fea2ce2b2a1a69e9c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Mon, 5 Dec 2016 14:37:41 +0100
+Subject: [PATCH 39/39] sudo: do not store usn if no rules are found
+
+When ldap doesn't contain any sudorule during the initial full refresh,
+usn is set to 1 instead of remaining unset and we are trying to
+search modifyTimestamp>=1 during smart refresh which doesn't return any result
+on openldap servers.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3257
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 46703740e83a66909974a5ee8d47df6a6e5076e7)
+(cherry picked from commit 76e97affaa05ce45709efd59d120595c5992aa21)
+---
+ src/providers/ldap/sdap_sudo_shared.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ldap/sdap_sudo_shared.c b/src/providers/ldap/sdap_sudo_shared.c
+index 807226020..66b788702 100644
+--- a/src/providers/ldap/sdap_sudo_shared.c
++++ b/src/providers/ldap/sdap_sudo_shared.c
+@@ -129,7 +129,7 @@ sdap_sudo_new_usn(TALLOC_CTX *mem_ctx,
+     char *newusn;
+ 
+     /* We increment USN number so that we can later use simplify filter
+-     * (just usn >= last+1 instaed of usn >= last && usn != last).
++     * (just usn >= last+1 instead of usn >= last && usn != last).
+      */
+     usn++;
+ 
+@@ -174,6 +174,13 @@ sdap_sudo_set_usn(struct sdap_server_opts *srv_opts,
+         return;
+     }
+ 
++    if (usn_number == 0) {
++        /* Zero means that there were no rules on the server, so we have
++         * nothing to store. */
++        DEBUG(SSSDBG_TRACE_FUNC, "SUDO USN value is empty.\n");
++        return;
++    }
++
+     newusn = sdap_sudo_new_usn(srv_opts, usn_number, endptr);
+     if (newusn == NULL) {
+         return;
+-- 
+2.11.0
+

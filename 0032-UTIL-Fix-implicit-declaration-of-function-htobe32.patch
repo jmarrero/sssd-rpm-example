@@ -1,0 +1,58 @@
+From 2d6fe5942218ee8f24eb6ccd8ffec5fab65c170b Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lukas.slebodnik@intrak.sk>
+Date: Fri, 18 Nov 2016 17:29:44 +0100
+Subject: [PATCH 32/39] UTIL: Fix implicit declaration of function 'htobe32'
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Include internal wrapper header file for endian related functions.
+The "util/sss_endian.h" include available header file on different
+platform or it provides compatible macros in the worst case.
+
+Breakage noticed when building SSSD on FreeBSD
+
+  CC       src/util/cert/nss/libsss_cert_la-cert.lo
+src/util/cert/nss/cert.c: In function 'cert_to_ssh_key':
+src/util/cert/nss/cert.c:358: error: implicit declaration of function 'htobe32'
+gmake[2]: *** [Makefile:12421: src/util/cert/nss/libsss_cert_la-cert.lo] Error 1
+gmake[2]: Leaving directory '/root/sssd_from_git'
+gmake[1]: *** [Makefile:20050: all-recursive] Error 1
+gmake[1]: Leaving directory '/root/sssd_from_git'
+gmake: *** [Makefile:7116: all] Error 2
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 58aa8d645fa95641431a2828e985f80c7fc36465)
+(cherry picked from commit a70351fddb9c26763b2bf658f56ff043a7b3db6f)
+---
+ src/util/cert/libcrypto/cert.c | 1 +
+ src/util/cert/nss/cert.c       | 1 +
+ 2 files changed, 2 insertions(+)
+
+diff --git a/src/util/cert/libcrypto/cert.c b/src/util/cert/libcrypto/cert.c
+index aba598d7c..c54db86bb 100644
+--- a/src/util/cert/libcrypto/cert.c
++++ b/src/util/cert/libcrypto/cert.c
+@@ -22,6 +22,7 @@
+ #include <openssl/pem.h>
+ 
+ #include "util/util.h"
++#include "util/sss_endian.h"
+ 
+ errno_t sss_cert_der_to_pem(TALLOC_CTX *mem_ctx, const uint8_t *der_blob,
+                             size_t der_size, char **pem, size_t *pem_size)
+diff --git a/src/util/cert/nss/cert.c b/src/util/cert/nss/cert.c
+index b5e0ff961..9d31cfe9b 100644
+--- a/src/util/cert/nss/cert.c
++++ b/src/util/cert/nss/cert.c
+@@ -31,6 +31,7 @@
+ #include "util/crypto/sss_crypto.h"
+ #include "util/crypto/nss/nss_util.h"
+ #include "util/cert.h"
++#include "util/sss_endian.h"
+ 
+ #define NS_CERT_HEADER "-----BEGIN CERTIFICATE-----"
+ #define NS_CERT_TRAILER "-----END CERTIFICATE-----"
+-- 
+2.11.0
+

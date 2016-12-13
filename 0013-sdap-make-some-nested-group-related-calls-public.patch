@@ -1,0 +1,81 @@
+From 79044fc1de2dad656b2c664722b4f8568bf4f8d6 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 18 Oct 2016 18:16:30 +0200
+Subject: [PATCH 13/39] sdap: make some nested group related calls public
+
+sdap_nested_groups_store() and rfc2307bis_nested_groups_send/recv() will
+be reused for domain local group lookups.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 49d3f0a487d55571b2bdc9d3f8280b304b964b9d)
+(cherry picked from commit f38c62ffe05ab845165f1b597083579d4fe3632f)
+---
+ src/providers/ldap/sdap_async_initgroups.c | 12 ++----------
+ src/providers/ldap/sdap_async_private.h    | 16 ++++++++++++++++
+ 2 files changed, 18 insertions(+), 10 deletions(-)
+
+diff --git a/src/providers/ldap/sdap_async_initgroups.c b/src/providers/ldap/sdap_async_initgroups.c
+index 7a2eef43d..0f56b8740 100644
+--- a/src/providers/ldap/sdap_async_initgroups.c
++++ b/src/providers/ldap/sdap_async_initgroups.c
+@@ -622,7 +622,7 @@ static int sdap_initgr_rfc2307_recv(struct tevent_req *req)
+ }
+ 
+ /* ==Common code for pure RFC2307bis and IPA/AD========================= */
+-static errno_t
++errno_t
+ sdap_nested_groups_store(struct sysdb_ctx *sysdb,
+                          struct sss_domain_info *domain,
+                          struct sdap_options *opts,
+@@ -1558,14 +1558,6 @@ static void sdap_initgr_rfc2307bis_process(struct tevent_req *subreq);
+ static void sdap_initgr_rfc2307bis_done(struct tevent_req *subreq);
+ errno_t save_rfc2307bis_user_memberships(
+         struct sdap_initgr_rfc2307bis_state *state);
+-struct tevent_req *rfc2307bis_nested_groups_send(
+-        TALLOC_CTX *mem_ctx, struct tevent_context *ev,
+-        struct sdap_options *opts, struct sysdb_ctx *sysdb,
+-        struct sss_domain_info *dom, struct sdap_handle *sh,
+-        struct sdap_search_base **search_bases,
+-        struct sysdb_attrs **groups, size_t num_groups,
+-        hash_table_t *group_hash, size_t nesting);
+-static errno_t rfc2307bis_nested_groups_recv(struct tevent_req *req);
+ 
+ static struct tevent_req *sdap_initgr_rfc2307bis_send(
+         TALLOC_CTX *memctx,
+@@ -2616,7 +2608,7 @@ static void rfc2307bis_nested_groups_process(struct tevent_req *subreq)
+     tevent_req_set_callback(subreq, rfc2307bis_nested_groups_done, req);
+ }
+ 
+-static errno_t rfc2307bis_nested_groups_recv(struct tevent_req *req)
++errno_t rfc2307bis_nested_groups_recv(struct tevent_req *req)
+ {
+     TEVENT_REQ_RETURN_ON_ERROR(req);
+     return EOK;
+diff --git a/src/providers/ldap/sdap_async_private.h b/src/providers/ldap/sdap_async_private.h
+index f09ddb71f..4af4f7144 100644
+--- a/src/providers/ldap/sdap_async_private.h
++++ b/src/providers/ldap/sdap_async_private.h
+@@ -157,4 +157,20 @@ errno_t sdap_check_ad_group_type(struct sss_domain_info *dom,
+                                  struct sysdb_attrs *group_attrs,
+                                  const char *group_name,
+                                  bool *_need_filter);
++
++struct tevent_req *rfc2307bis_nested_groups_send(
++        TALLOC_CTX *mem_ctx, struct tevent_context *ev,
++        struct sdap_options *opts, struct sysdb_ctx *sysdb,
++        struct sss_domain_info *dom, struct sdap_handle *sh,
++        struct sdap_search_base **search_bases,
++        struct sysdb_attrs **groups, size_t num_groups,
++        hash_table_t *group_hash, size_t nesting);
++errno_t rfc2307bis_nested_groups_recv(struct tevent_req *req);
++
++errno_t sdap_nested_groups_store(struct sysdb_ctx *sysdb,
++                                 struct sss_domain_info *domain,
++                                 struct sdap_options *opts,
++                                 struct sysdb_attrs **groups,
++                                 unsigned long count);
++
+ #endif /* _SDAP_ASYNC_PRIVATE_H_ */
+-- 
+2.11.0
+

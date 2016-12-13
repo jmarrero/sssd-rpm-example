@@ -1,0 +1,44 @@
+From bb53631c770d287dfc9b130754ce3f9320c8b3d4 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 19 Oct 2016 16:55:37 +0200
+Subject: [PATCH 04/39] crypto-tests: Rename encrypt decrypt test case
+
+libsss_crypto provide 2 pairs of encrypt + decrypt functions.
+sss_password_encrypt + sss_password_decrypt and more generic
+sss_encrypt + sss_decrypt.
+
+The name of one test case was a little bit confusing.
+It evokes that different pair of functions were tested.
+
+Reviewed-by: Christian Heimes <cheimes@redhat.com>
+(cherry picked from commit 96d239e83e671b82525cec760cf0bcaa5ee1c249)
+(cherry picked from commit 579daa9099acf848e1062a48a7cd3a5e923da349)
+---
+ src/tests/crypto-tests.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/tests/crypto-tests.c b/src/tests/crypto-tests.c
+index a4074e474..c7f0edbb3 100644
+--- a/src/tests/crypto-tests.c
++++ b/src/tests/crypto-tests.c
+@@ -48,7 +48,7 @@ START_TEST(test_nss_init)
+ END_TEST
+ #endif
+ 
+-START_TEST(test_encrypt_decrypt)
++START_TEST(test_sss_password_encrypt_decrypt)
+ {
+     const char *password[] = { "test123",             /* general */
+                                "12345678901234567",   /* just above blocksize */
+@@ -211,7 +211,7 @@ Suite *crypto_suite(void)
+ #ifdef HAVE_NSS
+     tcase_add_test(tc, test_nss_init);
+ #endif
+-    tcase_add_test(tc, test_encrypt_decrypt);
++    tcase_add_test(tc, test_sss_password_encrypt_decrypt);
+     tcase_add_test(tc, test_hmac_sha1);
+     tcase_add_test(tc, test_base64_encode);
+     tcase_add_test(tc, test_base64_decode);
+-- 
+2.11.0
+

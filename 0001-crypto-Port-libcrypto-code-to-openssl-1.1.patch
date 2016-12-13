@@ -1,0 +1,728 @@
+From 805494c6ffec6831753891c507a773f3e43b30e5 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 17 Oct 2016 15:44:20 +0200
+Subject: [PATCH 01/39] crypto: Port libcrypto code to openssl-1.1
+
+EVP_MD_CTX and EVP_CIPHER_CTX are opaque in openssl-1.1
+
+Reviewed-by: Tomas Mraz <tmraz@redhat.com>
+(cherry picked from commit 8f1316a0c677f211eaaa1346e21a03446b8c4fb1)
+(cherry picked from commit 81ebd058ab8f6ab08b05a7e35e04881812404d43)
+---
+ Makefile.am                                    |  1 +
+ src/util/cert/libcrypto/cert.c                 | 23 ++++++--
+ src/util/crypto/libcrypto/crypto_hmac_sha1.c   | 33 ++++++-----
+ src/util/crypto/libcrypto/crypto_nite.c        | 76 +++++++++++++++----------
+ src/util/crypto/libcrypto/crypto_obfuscate.c   | 32 +++++++----
+ src/util/crypto/libcrypto/crypto_sha512crypt.c | 77 +++++++++++++++-----------
+ src/util/crypto/libcrypto/sss_openssl.h        | 39 +++++++++++++
+ 7 files changed, 190 insertions(+), 91 deletions(-)
+ create mode 100644 src/util/crypto/libcrypto/sss_openssl.h
+
+diff --git a/Makefile.am b/Makefile.am
+index b5f300a37..3d3500918 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -565,6 +565,7 @@ endif
+ dist_noinst_HEADERS = \
+     src/monitor/monitor.h \
+     src/util/crypto/sss_crypto.h \
++    src/util/crypto/libcrypto/sss_openssl.h \
+     src/util/cert.h \
+     src/util/dlinklist.h \
+     src/util/debug.h \
+diff --git a/src/util/cert/libcrypto/cert.c b/src/util/cert/libcrypto/cert.c
+index a7752d7c1..aba598d7c 100644
+--- a/src/util/cert/libcrypto/cert.c
++++ b/src/util/cert/libcrypto/cert.c
+@@ -182,6 +182,8 @@ errno_t cert_to_ssh_key(TALLOC_CTX *mem_ctx, const char *ca_db,
+     size_t c;
+     X509 *cert = NULL;
+     EVP_PKEY *cert_pub_key = NULL;
++    const BIGNUM *n;
++    const BIGNUM *e;
+     int modulus_len;
+     unsigned char modulus[OPENSSL_RSA_MAX_MODULUS_BITS/8];
+     int exponent_len;
+@@ -208,16 +210,29 @@ errno_t cert_to_ssh_key(TALLOC_CTX *mem_ctx, const char *ca_db,
+         goto done;
+     }
+ 
+-    if (cert_pub_key->type != EVP_PKEY_RSA) {
++    if (EVP_PKEY_base_id(cert_pub_key) != EVP_PKEY_RSA) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "Expected RSA public key, found unsupported [%d].\n",
+-              cert_pub_key->type);
++              EVP_PKEY_base_id(cert_pub_key));
+         ret = EINVAL;
+         goto done;
+     }
+ 
+-    modulus_len = BN_bn2bin(cert_pub_key->pkey.rsa->n, modulus);
+-    exponent_len = BN_bn2bin(cert_pub_key->pkey.rsa->e, exponent);
++#if OPENSSL_VERSION_NUMBER >= 0x10100000L
++    RSA *rsa_pub_key = NULL;
++    rsa_pub_key = EVP_PKEY_get0_RSA(cert_pub_key);
++    if (rsa_pub_key == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    RSA_get0_key(rsa_pub_key, &n, &e, NULL);
++#else
++    n = cert_pub_key->pkey.rsa->n;
++    e = cert_pub_key->pkey.rsa->e;
++#endif
++    modulus_len = BN_bn2bin(n, modulus);
++    exponent_len = BN_bn2bin(e, exponent);
+ 
+     size = SSH_RSA_HEADER_LEN + 3 * sizeof(uint32_t)
+                 + modulus_len
+diff --git a/src/util/crypto/libcrypto/crypto_hmac_sha1.c b/src/util/crypto/libcrypto/crypto_hmac_sha1.c
+index 37d25794e..5a4ce356e 100644
+--- a/src/util/crypto/libcrypto/crypto_hmac_sha1.c
++++ b/src/util/crypto/libcrypto/crypto_hmac_sha1.c
+@@ -24,6 +24,8 @@
+ 
+ #include <openssl/evp.h>
+ 
++#include "sss_openssl.h"
++
+ #define HMAC_SHA1_BLOCKSIZE 64
+ 
+ int sss_hmac_sha1(const unsigned char *key,
+@@ -33,23 +35,26 @@ int sss_hmac_sha1(const unsigned char *key,
+                   unsigned char *out)
+ {
+     int ret;
+-    EVP_MD_CTX ctx;
++    EVP_MD_CTX *ctx;
+     unsigned char ikey[HMAC_SHA1_BLOCKSIZE], okey[HMAC_SHA1_BLOCKSIZE];
+     size_t i;
+     unsigned char hash[SSS_SHA1_LENGTH];
+     unsigned int res_len;
+ 
+-    EVP_MD_CTX_init(&ctx);
++    ctx = EVP_MD_CTX_new();
++    if (ctx == NULL) {
++        return ENOMEM;
++    }
+ 
+     if (key_len > HMAC_SHA1_BLOCKSIZE) {
+         /* keys longer than blocksize are shortened */
+-        if (!EVP_DigestInit_ex(&ctx, EVP_sha1(), NULL)) {
++        if (!EVP_DigestInit_ex(ctx, EVP_sha1(), NULL)) {
+             ret = EIO;
+             goto done;
+         }
+ 
+-        EVP_DigestUpdate(&ctx, (const unsigned char *)key, key_len);
+-        EVP_DigestFinal_ex(&ctx, ikey, &res_len);
++        EVP_DigestUpdate(ctx, (const unsigned char *)key, key_len);
++        EVP_DigestFinal_ex(ctx, ikey, &res_len);
+         memset(ikey + SSS_SHA1_LENGTH, 0, HMAC_SHA1_BLOCKSIZE - SSS_SHA1_LENGTH);
+     } else {
+         /* keys shorter than blocksize are zero-padded */
+@@ -63,25 +68,25 @@ int sss_hmac_sha1(const unsigned char *key,
+         ikey[i] ^= 0x36;
+     }
+ 
+-    if (!EVP_DigestInit_ex(&ctx, EVP_sha1(), NULL)) {
++    if (!EVP_DigestInit_ex(ctx, EVP_sha1(), NULL)) {
+         ret = EIO;
+         goto done;
+     }
+ 
+-    EVP_DigestUpdate(&ctx, (const unsigned char *)ikey, HMAC_SHA1_BLOCKSIZE);
+-    EVP_DigestUpdate(&ctx, (const unsigned char *)in, in_len);
+-    EVP_DigestFinal_ex(&ctx, hash, &res_len);
++    EVP_DigestUpdate(ctx, (const unsigned char *)ikey, HMAC_SHA1_BLOCKSIZE);
++    EVP_DigestUpdate(ctx, (const unsigned char *)in, in_len);
++    EVP_DigestFinal_ex(ctx, hash, &res_len);
+ 
+-    if (!EVP_DigestInit_ex(&ctx, EVP_sha1(), NULL)) {
++    if (!EVP_DigestInit_ex(ctx, EVP_sha1(), NULL)) {
+         ret = EIO;
+         goto done;
+     }
+ 
+-    EVP_DigestUpdate(&ctx, (const unsigned char *)okey, HMAC_SHA1_BLOCKSIZE);
+-    EVP_DigestUpdate(&ctx, (const unsigned char *)hash, SSS_SHA1_LENGTH);
+-    EVP_DigestFinal_ex(&ctx, out, &res_len);
++    EVP_DigestUpdate(ctx, (const unsigned char *)okey, HMAC_SHA1_BLOCKSIZE);
++    EVP_DigestUpdate(ctx, (const unsigned char *)hash, SSS_SHA1_LENGTH);
++    EVP_DigestFinal_ex(ctx, out, &res_len);
+     ret = EOK;
+ done:
+-    EVP_MD_CTX_cleanup(&ctx);
++    EVP_MD_CTX_free(ctx);
+     return ret;
+ }
+diff --git a/src/util/crypto/libcrypto/crypto_nite.c b/src/util/crypto/libcrypto/crypto_nite.c
+index fa267fbcc..de562f2d2 100644
+--- a/src/util/crypto/libcrypto/crypto_nite.c
++++ b/src/util/crypto/libcrypto/crypto_nite.c
+@@ -33,6 +33,8 @@
+ #include <openssl/rand.h>
+ #include <openssl/crypto.h>
+ 
++#include "sss_openssl.h"
++
+ struct cipher_mech {
+     const EVP_CIPHER * (*cipher)(void);
+     const EVP_MD * (*digest)(void);
+@@ -47,9 +49,9 @@ int sss_encrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+ {
+     const EVP_CIPHER *cipher;
+     const EVP_MD *digest;
+-    EVP_PKEY *hmackey;
+-    EVP_CIPHER_CTX ctx;
+-    EVP_MD_CTX mdctx;
++    EVP_PKEY *hmackey = NULL;
++    EVP_CIPHER_CTX *ctx;
++    EVP_MD_CTX *mdctx = NULL;
+     uint8_t *out = NULL;
+     int evpkeylen;
+     int evpivlen;
+@@ -86,8 +88,13 @@ int sss_encrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+         RAND_bytes(out, evpivlen);
+     }
+ 
+-    EVP_CIPHER_CTX_init(&ctx);
+-    ret = EVP_EncryptInit_ex(&ctx, cipher, 0, key, evpivlen ? out : NULL);
++    ctx = EVP_CIPHER_CTX_new();
++    if (ctx == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = EVP_EncryptInit_ex(ctx, cipher, 0, key, evpivlen ? out : NULL);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+@@ -95,7 +102,7 @@ int sss_encrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+ 
+     outlen = evpivlen;
+     tmplen = 0;
+-    ret = EVP_EncryptUpdate(&ctx, out + outlen, &tmplen, plaintext, plainlen);
++    ret = EVP_EncryptUpdate(ctx, out + outlen, &tmplen, plaintext, plainlen);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+@@ -103,7 +110,7 @@ int sss_encrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+ 
+     outlen += tmplen;
+ 
+-    ret = EVP_EncryptFinal_ex(&ctx, out + outlen, &tmplen);
++    ret = EVP_EncryptFinal_ex(ctx, out + outlen, &tmplen);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+@@ -113,28 +120,32 @@ int sss_encrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+ 
+     /* Then HMAC */
+ 
+-    EVP_MD_CTX_init(&mdctx);
++    mdctx = EVP_MD_CTX_new();
++    if (mdctx == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
+ 
+-    ret = EVP_DigestInit_ex(&mdctx, digest, NULL);
++    ret = EVP_DigestInit_ex(mdctx, digest, NULL);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+     }
+ 
+-    ret = EVP_DigestSignInit(&mdctx, NULL, digest, NULL, hmackey);
++    ret = EVP_DigestSignInit(mdctx, NULL, digest, NULL, hmackey);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+     }
+ 
+-    ret = EVP_DigestSignUpdate(&mdctx, out, outlen);
++    ret = EVP_DigestSignUpdate(mdctx, out, outlen);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+     }
+ 
+     slen = hmaclen;
+-    ret = EVP_DigestSignFinal(&mdctx, &out[outlen], &slen);
++    ret = EVP_DigestSignFinal(mdctx, &out[outlen], &slen);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+@@ -147,8 +158,8 @@ int sss_encrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+     ret = EOK;
+ 
+ done:
+-    EVP_MD_CTX_cleanup(&mdctx);
+-    EVP_CIPHER_CTX_cleanup(&ctx);
++    EVP_MD_CTX_free(mdctx);
++    EVP_CIPHER_CTX_free(ctx);
+     EVP_PKEY_free(hmackey);
+     return ret;
+ }
+@@ -160,9 +171,9 @@ int sss_decrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+ {
+     const EVP_CIPHER *cipher;
+     const EVP_MD *digest;
+-    EVP_PKEY *hmackey;
+-    EVP_CIPHER_CTX ctx;
+-    EVP_MD_CTX mdctx;
++    EVP_PKEY *hmackey = NULL;
++    EVP_CIPHER_CTX *ctx = NULL;
++    EVP_MD_CTX *mdctx;
+     const uint8_t *iv = NULL;
+     uint8_t *out;
+     int evpkeylen;
+@@ -194,28 +205,32 @@ int sss_decrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+ 
+     /* First check HMAC */
+ 
+-    EVP_MD_CTX_init(&mdctx);
++    mdctx = EVP_MD_CTX_new();
++    if (mdctx == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
+ 
+-    ret = EVP_DigestInit_ex(&mdctx, digest, NULL);
++    ret = EVP_DigestInit_ex(mdctx, digest, NULL);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+     }
+ 
+-    ret = EVP_DigestSignInit(&mdctx, NULL, digest, NULL, hmackey);
++    ret = EVP_DigestSignInit(mdctx, NULL, digest, NULL, hmackey);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+     }
+ 
+-    ret = EVP_DigestSignUpdate(&mdctx, ciphertext, cipherlen - hmaclen);
++    ret = EVP_DigestSignUpdate(mdctx, ciphertext, cipherlen - hmaclen);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+     }
+ 
+     slen = hmaclen;
+-    ret = EVP_DigestSignFinal(&mdctx, out, &slen);
++    ret = EVP_DigestSignFinal(mdctx, out, &slen);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+@@ -233,14 +248,19 @@ int sss_decrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+         iv = ciphertext;
+     }
+ 
+-    EVP_CIPHER_CTX_init(&ctx);
+-    ret = EVP_DecryptInit_ex(&ctx, cipher, 0, key, iv);
++    ctx = EVP_CIPHER_CTX_new();
++    if (ctx == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = EVP_DecryptInit_ex(ctx, cipher, 0, key, iv);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+     }
+ 
+-    ret = EVP_DecryptUpdate(&ctx, out, &outlen,
++    ret = EVP_DecryptUpdate(ctx, out, &outlen,
+                             ciphertext + evpivlen,
+                             cipherlen - evpivlen - hmaclen);
+     if (ret != 1) {
+@@ -248,7 +268,7 @@ int sss_decrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+         goto done;
+     }
+ 
+-    ret = EVP_DecryptFinal_ex(&ctx, out + outlen, &tmplen);
++    ret = EVP_DecryptFinal_ex(ctx, out + outlen, &tmplen);
+     if (ret != 1) {
+         ret = EFAULT;
+         goto done;
+@@ -261,8 +281,8 @@ int sss_decrypt(TALLOC_CTX *mem_ctx, enum encmethod enctype,
+     ret = EOK;
+ 
+ done:
+-    EVP_MD_CTX_cleanup(&mdctx);
+-    EVP_CIPHER_CTX_cleanup(&ctx);
++    EVP_MD_CTX_free(mdctx);
++    EVP_CIPHER_CTX_free(ctx);
+     EVP_PKEY_free(hmackey);
+     return ret;
+ }
+diff --git a/src/util/crypto/libcrypto/crypto_obfuscate.c b/src/util/crypto/libcrypto/crypto_obfuscate.c
+index 85de333ec..69b622e1d 100644
+--- a/src/util/crypto/libcrypto/crypto_obfuscate.c
++++ b/src/util/crypto/libcrypto/crypto_obfuscate.c
+@@ -70,7 +70,7 @@ int sss_password_encrypt(TALLOC_CTX *mem_ctx, const char *password, int plen,
+                          enum obfmethod meth, char **obfpwd)
+ {
+     int ret;
+-    EVP_CIPHER_CTX ctx;
++    EVP_CIPHER_CTX *ctx;
+     struct crypto_mech_data *mech_props;
+     TALLOC_CTX *tmp_ctx = NULL;
+     unsigned char *keybuf;
+@@ -90,7 +90,11 @@ int sss_password_encrypt(TALLOC_CTX *mem_ctx, const char *password, int plen,
+         return ENOMEM;
+     }
+ 
+-    EVP_CIPHER_CTX_init(&ctx);
++    ctx = EVP_CIPHER_CTX_new();
++    if (ctx == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
+ 
+     mech_props = get_crypto_mech_data(meth);
+     if (mech_props == NULL) {
+@@ -121,20 +125,20 @@ int sss_password_encrypt(TALLOC_CTX *mem_ctx, const char *password, int plen,
+         goto done;
+     }
+ 
+-    if (!EVP_EncryptInit_ex(&ctx, mech_props->cipher(), 0, keybuf, ivbuf)) {
++    if (!EVP_EncryptInit_ex(ctx, mech_props->cipher(), 0, keybuf, ivbuf)) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Failure to initialize cipher contex\n");
+         ret = EIO;
+         goto done;
+     }
+ 
+     /* sample data we'll encrypt and decrypt */
+-    if (!EVP_EncryptUpdate(&ctx, cryptotext, &ctlen, (const unsigned char*)password, plen)) {
++    if (!EVP_EncryptUpdate(ctx, cryptotext, &ctlen, (const unsigned char *)password, plen)) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot execute the encryption operation\n");
+         ret = EIO;
+         goto done;
+     }
+ 
+-    if(!EVP_EncryptFinal_ex(&ctx, cryptotext+ctlen, &digestlen)) {
++    if (!EVP_EncryptFinal_ex(ctx, cryptotext + ctlen, &digestlen)) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot finialize the encryption operation\n");
+         ret = EIO;
+         goto done;
+@@ -185,7 +189,7 @@ int sss_password_encrypt(TALLOC_CTX *mem_ctx, const char *password, int plen,
+ 
+ done:
+     talloc_free(tmp_ctx);
+-    EVP_CIPHER_CTX_cleanup(&ctx);
++    EVP_CIPHER_CTX_free(ctx);
+     return ret;
+ }
+ 
+@@ -193,7 +197,7 @@ int sss_password_decrypt(TALLOC_CTX *mem_ctx, char *b64encoded,
+                          char **password)
+ {
+     int ret;
+-    EVP_CIPHER_CTX ctx;
++    EVP_CIPHER_CTX *ctx;
+     TALLOC_CTX *tmp_ctx = NULL;
+     struct crypto_mech_data *mech_props;
+ 
+@@ -217,7 +221,11 @@ int sss_password_decrypt(TALLOC_CTX *mem_ctx, char *b64encoded,
+         return ENOMEM;
+     }
+ 
+-    EVP_CIPHER_CTX_init(&ctx);
++    ctx = EVP_CIPHER_CTX_new();
++    if (ctx == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
+ 
+     /* Base64 decode the incoming buffer */
+     obfbuf = sss_base64_decode(tmp_ctx, b64encoded, &obflen);
+@@ -276,18 +284,18 @@ int sss_password_decrypt(TALLOC_CTX *mem_ctx, char *b64encoded,
+         goto done;
+     }
+ 
+-    if (!EVP_DecryptInit_ex(&ctx, mech_props->cipher(), 0, keybuf, ivbuf)) {
++    if (!EVP_DecryptInit_ex(ctx, mech_props->cipher(), 0, keybuf, ivbuf)) {
+         ret = EIO;
+         goto done;
+     }
+ 
+     /* sample data we'll encrypt and decrypt */
+-    if (!EVP_DecryptUpdate(&ctx, (unsigned char*)pwdbuf, &plainlen, cryptotext, ctsize)) {
++    if (!EVP_DecryptUpdate(ctx, (unsigned char *)pwdbuf, &plainlen, cryptotext, ctsize)) {
+         ret = EIO;
+         goto done;
+     }
+ 
+-    if(!EVP_DecryptFinal_ex(&ctx, (unsigned char*)pwdbuf+plainlen, &digestlen)) {
++    if (!EVP_DecryptFinal_ex(ctx, (unsigned char *)pwdbuf + plainlen, &digestlen)) {
+         ret = EIO;
+         goto done;
+     }
+@@ -296,6 +304,6 @@ int sss_password_decrypt(TALLOC_CTX *mem_ctx, char *b64encoded,
+     ret = EOK;
+ done:
+     talloc_free(tmp_ctx);
+-    EVP_CIPHER_CTX_cleanup(&ctx);
++    EVP_CIPHER_CTX_free(ctx);
+     return ret;
+ }
+diff --git a/src/util/crypto/libcrypto/crypto_sha512crypt.c b/src/util/crypto/libcrypto/crypto_sha512crypt.c
+index 34547d08a..102356662 100644
+--- a/src/util/crypto/libcrypto/crypto_sha512crypt.c
++++ b/src/util/crypto/libcrypto/crypto_sha512crypt.c
+@@ -28,6 +28,9 @@
+ #include <openssl/evp.h>
+ #include <openssl/rand.h>
+ 
++#include "sss_openssl.h"
++
++
+ /* Define our magic string to mark salt for SHA512 "encryption" replacement. */
+ const char sha512_salt_prefix[] = "$6$";
+ #define SALT_PREF_SIZE (sizeof(sha512_salt_prefix) - 1)
+@@ -75,8 +78,8 @@ static int sha512_crypt_r(const char *key,
+     unsigned char alt_result[64] __attribute__((__aligned__(ALIGN64)));
+     size_t rounds = ROUNDS_DEFAULT;
+     bool rounds_custom = false;
+-    EVP_MD_CTX alt_ctx;
+-    EVP_MD_CTX ctx;
++    EVP_MD_CTX *alt_ctx = NULL;
++    EVP_MD_CTX *ctx;
+     size_t salt_len;
+     size_t key_len;
+     size_t cnt;
+@@ -125,75 +128,83 @@ static int sha512_crypt_r(const char *key,
+         salt = copied_salt = memcpy(tmp + ALIGN64 - PTR_2_INT(tmp) % ALIGN64, salt, salt_len);
+     }
+ 
+-    EVP_MD_CTX_init(&ctx);
++    ctx = EVP_MD_CTX_new();
++    if (ctx == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
+ 
+-    EVP_MD_CTX_init(&alt_ctx);
++    alt_ctx = EVP_MD_CTX_new();
++    if (alt_ctx == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
+ 
+     /* Prepare for the real work.  */
+-    if (!EVP_DigestInit_ex(&ctx, EVP_sha512(), NULL)) {
++    if (!EVP_DigestInit_ex(ctx, EVP_sha512(), NULL)) {
+         ret = EIO;
+         goto done;
+     }
+ 
+     /* Add the key string.  */
+-    EVP_DigestUpdate(&ctx, (const unsigned char *)key, key_len);
++    EVP_DigestUpdate(ctx, (const unsigned char *)key, key_len);
+ 
+     /* The last part is the salt string. This must be at most 16
+      * characters and it ends at the first `$' character (for
+      * compatibility with existing implementations). */
+-    EVP_DigestUpdate(&ctx, (const unsigned char *)salt, salt_len);
++    EVP_DigestUpdate(ctx, (const unsigned char *)salt, salt_len);
+ 
+     /* Compute alternate SHA512 sum with input KEY, SALT, and KEY.
+      * The final result will be added to the first context. */
+-    if (!EVP_DigestInit_ex(&alt_ctx, EVP_sha512(), NULL)) {
++    if (!EVP_DigestInit_ex(alt_ctx, EVP_sha512(), NULL)) {
+         ret = EIO;
+         goto done;
+     }
+ 
+     /* Add key. */
+-    EVP_DigestUpdate(&alt_ctx, (const unsigned char *)key, key_len);
++    EVP_DigestUpdate(alt_ctx, (const unsigned char *)key, key_len);
+ 
+     /* Add salt. */
+-    EVP_DigestUpdate(&alt_ctx, (const unsigned char *)salt, salt_len);
++    EVP_DigestUpdate(alt_ctx, (const unsigned char *)salt, salt_len);
+ 
+     /* Add key again. */
+-    EVP_DigestUpdate(&alt_ctx, (const unsigned char *)key, key_len);
++    EVP_DigestUpdate(alt_ctx, (const unsigned char *)key, key_len);
+ 
+     /* Now get result of this (64 bytes) and add it to the other context. */
+-    EVP_DigestFinal_ex(&alt_ctx, alt_result, &part);
++    EVP_DigestFinal_ex(alt_ctx, alt_result, &part);
+ 
+     /* Add for any character in the key one byte of the alternate sum. */
+     for (cnt = key_len; cnt > 64; cnt -= 64) {
+-        EVP_DigestUpdate(&ctx, alt_result, 64);
++        EVP_DigestUpdate(ctx, alt_result, 64);
+     }
+-    EVP_DigestUpdate(&ctx, alt_result, cnt);
++    EVP_DigestUpdate(ctx, alt_result, cnt);
+ 
+     /* Take the binary representation of the length of the key and for every
+      * 1 add the alternate sum, for every 0 the key. */
+     for (cnt = key_len; cnt > 0; cnt >>= 1) {
+         if ((cnt & 1) != 0) {
+-            EVP_DigestUpdate(&ctx, alt_result, 64);
++            EVP_DigestUpdate(ctx, alt_result, 64);
+         } else {
+-            EVP_DigestUpdate(&ctx, (const unsigned char *)key, key_len);
++            EVP_DigestUpdate(ctx, (const unsigned char *)key, key_len);
+         }
+     }
+ 
+     /* Create intermediate result. */
+-    EVP_DigestFinal_ex(&ctx, alt_result, &part);
++    EVP_DigestFinal_ex(ctx, alt_result, &part);
+ 
+     /* Start computation of P byte sequence. */
+-    if (!EVP_DigestInit_ex(&alt_ctx, EVP_sha512(), NULL)) {
++    if (!EVP_DigestInit_ex(alt_ctx, EVP_sha512(), NULL)) {
+         ret = EIO;
+         goto done;
+     }
+ 
+     /* For every character in the password add the entire password. */
+     for (cnt = 0; cnt < key_len; cnt++) {
+-        EVP_DigestUpdate(&alt_ctx, (const unsigned char *)key, key_len);
++        EVP_DigestUpdate(alt_ctx, (const unsigned char *)key, key_len);
+     }
+ 
+     /* Finish the digest. */
+-    EVP_DigestFinal_ex(&alt_ctx, temp_result, &part);
++    EVP_DigestFinal_ex(alt_ctx, temp_result, &part);
+ 
+     /* Create byte sequence P. */
+     cp = p_bytes = alloca(key_len);
+@@ -203,18 +214,18 @@ static int sha512_crypt_r(const char *key,
+     memcpy(cp, temp_result, cnt);
+ 
+     /* Start computation of S byte sequence. */
+-    if (!EVP_DigestInit_ex(&alt_ctx, EVP_sha512(), NULL)) {
++    if (!EVP_DigestInit_ex(alt_ctx, EVP_sha512(), NULL)) {
+         ret = EIO;
+         goto done;
+     }
+ 
+     /* For every character in the password add the entire salt. */
+     for (cnt = 0; cnt < 16 + alt_result[0]; cnt++) {
+-        EVP_DigestUpdate(&alt_ctx, (const unsigned char *)salt, salt_len);
++        EVP_DigestUpdate(alt_ctx, (const unsigned char *)salt, salt_len);
+     }
+ 
+     /* Finish the digest. */
+-    EVP_DigestFinal_ex(&alt_ctx, temp_result, &part);
++    EVP_DigestFinal_ex(alt_ctx, temp_result, &part);
+ 
+     /* Create byte sequence S.  */
+     cp = s_bytes = alloca(salt_len);
+@@ -226,37 +237,37 @@ static int sha512_crypt_r(const char *key,
+     /* Repeatedly run the collected hash value through SHA512 to burn CPU cycles. */
+     for (cnt = 0; cnt < rounds; cnt++) {
+ 
+-        if (!EVP_DigestInit_ex(&ctx, EVP_sha512(), NULL)) {
++        if (!EVP_DigestInit_ex(ctx, EVP_sha512(), NULL)) {
+             ret = EIO;
+             goto done;
+         }
+ 
+         /* Add key or last result. */
+         if ((cnt & 1) != 0) {
+-            EVP_DigestUpdate(&ctx, (const unsigned char *)p_bytes, key_len);
++            EVP_DigestUpdate(ctx, (const unsigned char *)p_bytes, key_len);
+         } else {
+-            EVP_DigestUpdate(&ctx, alt_result, 64);
++            EVP_DigestUpdate(ctx, alt_result, 64);
+         }
+ 
+         /* Add salt for numbers not divisible by 3. */
+         if (cnt % 3 != 0) {
+-            EVP_DigestUpdate(&ctx, (const unsigned char *)s_bytes, salt_len);
++            EVP_DigestUpdate(ctx, (const unsigned char *)s_bytes, salt_len);
+         }
+ 
+         /* Add key for numbers not divisible by 7. */
+         if (cnt % 7 != 0) {
+-            EVP_DigestUpdate(&ctx, (const unsigned char *)p_bytes, key_len);
++            EVP_DigestUpdate(ctx, (const unsigned char *)p_bytes, key_len);
+         }
+ 
+         /* Add key or last result. */
+         if ((cnt & 1) != 0) {
+-            EVP_DigestUpdate(&ctx, alt_result, 64);
++            EVP_DigestUpdate(ctx, alt_result, 64);
+         } else {
+-            EVP_DigestUpdate(&ctx, (const unsigned char *)p_bytes, key_len);
++            EVP_DigestUpdate(ctx, (const unsigned char *)p_bytes, key_len);
+         }
+ 
+         /* Create intermediate result. */
+-        EVP_DigestFinal_ex(&ctx, alt_result, &part);
++        EVP_DigestFinal_ex(ctx, alt_result, &part);
+     }
+ 
+     /* Now we can construct the result string.
+@@ -318,8 +329,8 @@ done:
+      * to processes or reading core dumps cannot get any information. We do it
+      * in this way to clear correct_words[] inside the SHA512 implementation
+      * as well.  */
+-    EVP_MD_CTX_cleanup(&ctx);
+-    EVP_MD_CTX_cleanup(&alt_ctx);
++    EVP_MD_CTX_free(ctx);
++    EVP_MD_CTX_free(alt_ctx);
+     if (p_bytes) memset(p_bytes, '\0', key_len);
+     if (s_bytes) memset(s_bytes, '\0', salt_len);
+     if (copied_key) memset(copied_key, '\0', key_len);
+diff --git a/src/util/crypto/libcrypto/sss_openssl.h b/src/util/crypto/libcrypto/sss_openssl.h
+new file mode 100644
+index 000000000..a2e2d8523
+--- /dev/null
++++ b/src/util/crypto/libcrypto/sss_openssl.h
+@@ -0,0 +1,39 @@
++/*
++    Authors:
++        Lukas Slebodnik <lslebodn@redhat.com>
++
++    Copyright (C) 2016 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef _SSS_LIBCRYTPO_SSS_OPENSSL_H_
++#define _SSS_LIBCRYTPO_SSS_OPENSSL_H_
++
++#include <openssl/evp.h>
++
++#if OPENSSL_VERSION_NUMBER < 0x10100000L
++
++/* EVP_MD_CTX_create and EVP_MD_CTX_destroy are deprecated macros
++ * in openssl-1.1 but openssl-1.0 does not know anything about
++ * newly added functions EVP_MD_CTX_new, EVP_MD_CTX_free in 1.1
++ */
++
++# define EVP_MD_CTX_new() EVP_MD_CTX_create()
++# define EVP_MD_CTX_free(ctx) EVP_MD_CTX_destroy((ctx))
++
++#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
++
++
++#endif /* _SSS_LIBCRYTPO_SSS_OPENSSL_H_ */
+-- 
+2.11.0
+

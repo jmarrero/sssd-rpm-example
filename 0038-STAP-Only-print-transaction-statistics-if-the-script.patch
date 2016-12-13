@@ -1,0 +1,39 @@
+From 39fe2093254db5d4cd223e7d9c228689ba6382ca Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 28 Nov 2016 08:44:04 +0100
+Subject: [PATCH 38/39] STAP: Only print transaction statistics if the script
+ caught some transactions
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If the script measured an 'id' run from the cache, there would be no
+transactions and dereferencing the aggrefate would throw an error.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 150a0cc8fe1936002af136e5552ef6cdd210956f)
+(cherry picked from commit e6c74de2cbc9b0b713ed6dadbfef80c7c1b5cd51)
+---
+ contrib/systemtap/id_perf.stp | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/contrib/systemtap/id_perf.stp b/contrib/systemtap/id_perf.stp
+index 0ad619506..a7789750f 100644
+--- a/contrib/systemtap/id_perf.stp
++++ b/contrib/systemtap/id_perf.stp
+@@ -64,8 +64,10 @@ function print_report()
+         }
+     }
+ 
+-    printf("The most expensive transaction breakdown, per transaction:\n")
+-    print(@hist_linear(bts[max_trans_time_bt], 0, 500, 50))
++    if (max_trans_time > 0) {
++            printf("The most expensive transaction breakdown, per transaction:\n")
++            print(@hist_linear(bts[max_trans_time_bt], 0, 500, 50))
++    }
+ }
+ 
+ probe process("/usr/bin/id").begin
+-- 
+2.11.0
+

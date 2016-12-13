@@ -1,0 +1,61 @@
+From 712f064ed197063016fee16a3438fb22f08759bf Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 9 Nov 2016 11:59:10 +0100
+Subject: [PATCH 28/39] Qualify ghost user attribute in case
+ ldap_group_nesting_level is set to 0
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When the sssd is set to not resolve nested groups with RFC2307bis, then
+the LDAP provider takes a different path. We didn't qualify the ghost
+users in this case.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3236
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+(cherry picked from commit 538a7f1dd8339b90e0cfc64e7919a34d1d5c10d3)
+(cherry picked from commit e0b544e6f664c2ce5ddd8df866d996607ce488cc)
+---
+ src/providers/ldap/sdap_async_groups.c | 15 +++++++++++----
+ 1 file changed, 11 insertions(+), 4 deletions(-)
+
+diff --git a/src/providers/ldap/sdap_async_groups.c b/src/providers/ldap/sdap_async_groups.c
+index 08dfa01b1..81503798c 100644
+--- a/src/providers/ldap/sdap_async_groups.c
++++ b/src/providers/ldap/sdap_async_groups.c
+@@ -1668,7 +1668,7 @@ static void sdap_process_group_members(struct tevent_req *subreq)
+     struct sdap_process_group_state *state =
+                         tevent_req_data(req, struct sdap_process_group_state);
+     struct ldb_message_element *el;
+-    uint8_t* name_string;
++    char *name_string;
+ 
+     state->check_count--;
+     DEBUG(SSSDBG_TRACE_ALL, "Members remaining: %zu\n", state->check_count);
+@@ -1694,11 +1694,18 @@ static void sdap_process_group_members(struct tevent_req *subreq)
+         goto next;
+     }
+ 
+-    name_string = el[0].values[0].data;
++    name_string = sss_create_internal_fqname(state,
++                                            (const char *) el[0].values[0].data,
++                                            state->dom->name);
++    if (name_string == NULL) {
++        ret = ENOMEM;
++        goto next;
++    }
++
+     state->ghost_dns->values[state->ghost_dns->num_values].data =
+-            talloc_steal(state->ghost_dns->values, name_string);
++            talloc_steal(state->ghost_dns->values, (uint8_t *) name_string);
+     state->ghost_dns->values[state->ghost_dns->num_values].length =
+-            strlen((char *)name_string);
++            strlen(name_string);
+     state->ghost_dns->num_values++;
+ 
+ next:
+-- 
+2.11.0
+

@@ -1,0 +1,62 @@
+From 9ccd49a3bcabd8eb32a559af2cacf2b0fdcfad96 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Thu, 10 Nov 2016 15:04:57 +0100
+Subject: [PATCH 27/39] ipa: Nested netgroups do not work
+
+We lowercase the keys to the hash table used to store netgroups
+but do not lowercase it when reading the table. This results
+in nested netgroups not being found when they should and
+the processing fails.
+
+The lowercasing does not seem to be necessary anymore (not
+sure if it ever was) so we can skip it.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3159
+
+Reviewed-by: Petr Cech <pcech@redhat.com>
+(cherry picked from commit ff565da1011aa4312847e28e7af66e57fccf8b90)
+(cherry picked from commit 7de33877c7e39f9a5cae6baf815dc18ae5a18597)
+---
+ src/providers/ipa/ipa_netgroups.c | 15 +++------------
+ 1 file changed, 3 insertions(+), 12 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_netgroups.c b/src/providers/ipa/ipa_netgroups.c
+index a19e5e03d..17b11af5d 100644
+--- a/src/providers/ipa/ipa_netgroups.c
++++ b/src/providers/ipa/ipa_netgroups.c
+@@ -563,7 +563,6 @@ static void ipa_netgr_members_process(struct tevent_req *subreq)
+     size_t count;
+     int ret, i;
+     const char *orig_dn;
+-    char *orig_dn_lower;
+     hash_table_t *table;
+     hash_key_t key;
+     hash_value_t value;
+@@ -638,20 +637,12 @@ static void ipa_netgr_members_process(struct tevent_req *subreq)
+             goto fail;
+         }
+ 
+-        orig_dn_lower = talloc_strdup(table, orig_dn);
+-        if (orig_dn_lower == NULL) {
++        key.str = talloc_strdup(table, orig_dn);
++        if (key.str == NULL) {
+             ret = ENOMEM;
+             goto fail;
+         }
+-        /* Transform the DN to lower case.
+-         * this is important, as the member/memberof attributes
+-         * have the value also in lower-case
+-         */
+-        key.str = orig_dn_lower;
+-        while (*orig_dn_lower != '\0') {
+-            *orig_dn_lower = tolower(*orig_dn_lower);
+-            orig_dn_lower++;
+-        }
++
+         value.ptr = entities[i];
+         ret = hash_enter(table, &key, &value);
+         if (ret !=  HASH_SUCCESS) {
+-- 
+2.11.0
+
