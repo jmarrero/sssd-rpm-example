@@ -26,7 +26,7 @@
 
 Name: sssd
 Version: 1.14.2
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1123,6 +1123,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Dec 19 2016 Miro Hrončok <mhroncok@redhat.com> - 1.14.2-3
+- Rebuild for Python 3.6
+
 * Tue Dec 13 2016 Lukas Slebodnik <lslebodn@redhat.com> - 1.14.2-2
 - Resolves: rhbz#1369130 - nss_sss should not link against libpthread
 - Resolves: rhbz#1392916 - sssd failes to start after update
