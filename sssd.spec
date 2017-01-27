@@ -25,8 +25,8 @@
 %endif
 
 Name: sssd
-Version: 1.14.2
-Release: 3%{?dist}
+Version: 1.15.0
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -35,48 +35,8 @@ Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001:  0001-crypto-Port-libcrypto-code-to-openssl-1.1.patch
-Patch0002:  0002-libcrypto-Check-right-value-of-CRYPTO_memcmp.patch
-Patch0003:  0003-crypto-tests-Add-unit-test-for-sss_encrypt-sss_decry.patch
-Patch0004:  0004-crypto-tests-Rename-encrypt-decrypt-test-case.patch
-Patch0005:  0005-BUILD-Fix-installation-without-samba.patch
-Patch0006:  0006-BUILD-Accept-krb5-1.15-for-building-the-PAC-plugin.patch
-Patch0007:  0007-dlopen-test-Use-portable-macro-for-location-of-.libs.patch
-Patch0008:  0008-dlopen-test-Add-missing-libraries-to-the-check-list.patch
-Patch0009:  0009-dlopen-test-Move-libraries-to-the-right-sections.patch
-Patch0010:  0010-dlopen-test-Add-check-for-untested-libraries.patch
-Patch0011:  0011-sssctl-Flags-for-command-initialization.patch
-Patch0012:  0012-sysdb-add-parent_dom-to-sysdb_get_direct_parents.patch
-Patch0013:  0013-sdap-make-some-nested-group-related-calls-public.patch
-Patch0014:  0014-LDAP-AD-resolve-domain-local-groups-for-remote-users.patch
-Patch0015:  0015-PAM-add-a-test-for-filter_responses.patch
-Patch0016:  0016-PAM-add-pam_response_filter-option.patch
-Patch0017:  0017-SYSDB-Split-sysdb_try_to_find_expected_dn-into-small.patch
-Patch0018:  0018-SYSDB-Augment-sysdb_try_to_find_expected_dn-to-match.patch
-Patch0019:  0019-ad_access_filter-search-for-nested-groups.patch
-Patch0020:  0020-BUILD-Fix-linking-with-librt.patch
-Patch0021:  0021-MONITOR-Do-not-set-up-watchdog-for-monitor.patch
-Patch0022:  0022-SYSDB-Adding-lowercase-sudoUser-form.patch
-Patch0023:  0023-TESTS-Extending-sysdb-sudo-store-tests.patch
-Patch0024:  0024-IPA-AD-check-auth-ctx-before-using-it.patch
-Patch0025:  0025-SECRETS-Fix-secrets-rule-in-the-allowed-sections.patch
-Patch0026:  0026-SECRETS-Add-allowed_sec_users_options.patch
-Patch0027:  0027-ipa-Nested-netgroups-do-not-work.patch
-Patch0028:  0028-Qualify-ghost-user-attribute-in-case-ldap_group_nest.patch
-Patch0029:  0029-tests-Add-a-test-for-group-resolution-with-ldap_grou.patch
-Patch0030:  0030-BUILD-Fix-a-typo-in-inotify.m4.patch
-Patch0031:  0031-SYSDB-Fixing-of-sudorule-without-a-sudoUser.patch
-Patch0032:  0032-UTIL-Fix-implicit-declaration-of-function-htobe32.patch
-Patch0033:  0033-sssctl-Fix-missing-declaration.patch
-Patch0034:  0034-UTIL-Fix-compilation-of-sss_utf8-with-libunistring.patch
-Patch0035:  0035-SIFP-Fix-warning-format-security.patch
-Patch0036:  0036-SSH-Use-default_domain_suffix-for-users-authorized-k.patch
-Patch0037:  0037-Prevent-use-after-free-in-fd_input_available.patch
-Patch0038:  0038-STAP-Only-print-transaction-statistics-if-the-script.patch
-Patch0039:  0039-sudo-do-not-store-usn-if-no-rules-are-found.patch
 Patch0501:  0501-Partially-revert-CONFIG-Use-default-config-when-none.patch
 Patch0502:  0502-SYSTEMD-Use-capabilities.patch
-Patch0503:  0503-sss_client-Defer-thread-cancellation-until-completio.patch
 
 ### Dependencies ###
 
@@ -507,7 +467,6 @@ be used by Python applications.
 Summary: The D-Bus responder of the SSSD
 Group: Applications/System
 License: GPLv3+
-BuildRequires: augeas-devel
 Requires: sssd-common = %{version}-%{release}
 
 %description dbus
@@ -745,6 +704,20 @@ done
 %doc src/examples/sssd-example.conf
 %{_sbindir}/sssd
 %{_unitdir}/sssd.service
+%{_unitdir}/sssd-autofs.socket
+%{_unitdir}/sssd-autofs.service
+%{_unitdir}/sssd-ifp.service
+%{_unitdir}/sssd-nss.socket
+%{_unitdir}/sssd-nss.service
+%{_unitdir}/sssd-pac.socket
+%{_unitdir}/sssd-pac.service
+%{_unitdir}/sssd-pam.socket
+%{_unitdir}/sssd-pam-priv.socket
+%{_unitdir}/sssd-pam.service
+%{_unitdir}/sssd-ssh.socket
+%{_unitdir}/sssd-ssh.service
+%{_unitdir}/sssd-sudo.socket
+%{_unitdir}/sssd-sudo.service
 %{_unitdir}/sssd-secrets.socket
 %{_unitdir}/sssd-secrets.service
 
@@ -877,7 +850,6 @@ done
 # InfoPipe DBus plumbing
 %{_sysconfdir}/dbus-1/system.d/org.freedesktop.sssd.infopipe.conf
 %{_datadir}/dbus-1/system-services/org.freedesktop.sssd.infopipe.service
-%{_libdir}/%{name}/libsss_config.so
 
 %files -n libsss_simpleifp
 %defattr(-,root,root,-)
@@ -1053,16 +1025,43 @@ done
 
 %post common
 %systemd_post sssd.service
+%systemd_post sssd-autofs.socket
+%systemd_post sssd-nss.socket
+%systemd_post sssd-pac.socket
+%systemd_post sssd-pam.socket
+%systemd_post sssd-pam-priv.socket
 %systemd_post sssd-secrets.socket
+%systemd_post sssd-ssh.socket
+%systemd_post sssd-sudo.socket
 
 %preun common
 %systemd_preun sssd.service
+%systemd_preun sssd-autofs.socket
+%systemd_preun sssd-nss.socket
+%systemd_preun sssd-pac.socket
+%systemd_preun sssd-pam.socket
+%systemd_preun sssd-pam-priv.socket
 %systemd_preun sssd-secrets.socket
+%systemd_preun sssd-ssh.socket
+%systemd_preun sssd-sudo.socket
 
 %postun common
 %systemd_postun_with_restart sssd.service
+%systemd_postun_with_restart sssd-autofs.socket
+%systemd_postun_with_restart sssd-autofs.service
+%systemd_postun_with_restart sssd-nss.socket
+%systemd_postun_with_restart sssd-nss.service
+%systemd_postun_with_restart sssd-pac.socket
+%systemd_postun_with_restart sssd-pac.service
+%systemd_postun_with_restart sssd-pam.socket
+%systemd_postun_with_restart sssd-pam-priv.socket
+%systemd_postun_with_restart sssd-pam.service
 %systemd_postun_with_restart sssd-secrets.socket
 %systemd_postun_with_restart sssd-secrets.service
+%systemd_postun_with_restart sssd-ssh.socket
+%systemd_postun_with_restart sssd-ssh.service
+%systemd_postun_with_restart sssd-sudo.socket
+%systemd_postun_with_restart sssd-sudo.service
 
 %if (0%{?with_cifs_utils_plugin} == 1)
 %post client
@@ -1123,6 +1122,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Jan 27 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.0-1
+- New upstream release 1.15.0
+- https://fedorahosted.org/sssd/wiki/Releases/Notes-1.15.0
+
 * Mon Dec 19 2016 Miro Hrončok <mhroncok@redhat.com> - 1.14.2-3
 - Rebuild for Python 3.6
 
