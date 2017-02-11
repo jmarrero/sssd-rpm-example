@@ -26,7 +26,7 @@
 
 Name: sssd
 Version: 1.15.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1122,6 +1122,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Sat Feb 11 2017 Fedora Release Engineering <releng@fedoraproject.org> - 1.15.0-2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_26_Mass_Rebuild
+
 * Fri Jan 27 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.0-1
 - New upstream release 1.15.0
 - https://fedorahosted.org/sssd/wiki/Releases/Notes-1.15.0
