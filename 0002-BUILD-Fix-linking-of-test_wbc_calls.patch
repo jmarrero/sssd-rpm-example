@@ -1,0 +1,40 @@
+From c369b062182c746849196e495db467198039edf4 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 25 Jan 2017 16:12:02 +0100
+Subject: [PATCH 02/79] BUILD: Fix linking of test_wbc_calls
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Client code does not anymore depend on libpthread in master.
+This is a reason why we didn't notice any linking failure
+in master. But the test should be linked with CLIENT_LIBS.
+
+  CCLD     test_wbc_calls
+/usr/bin/ld: src/sss_client/test_wbc_calls-common.o: undefined reference
+    to symbol 'pthread_mutexattr_setrobust@@GLIBC_2.12'
+//lib/x86_64-linux-gnu/libpthread.so.0: error adding symbols: DSO missing
+    from command line
+collect2: error: ld returned 1 exit status
+Makefile:12460: recipe for target 'test_wbc_calls' failed
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ Makefile.am | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index 661e9447d56146cb756a23af3a1b0aa0fbf98fa4..674d328f52929cc2b20d1212af830c3777312bf1 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -2703,6 +2703,7 @@ test_wbc_calls_LDFLAGS = \
+     -Wl,-wrap,sss_nss_getnamebysid \
+     $(NULL)
+ test_wbc_calls_LDADD = \
++    $(CLIENT_LIBS) \
+     $(CMOCKA_LIBS) \
+     $(POPT_LIBS) \
+     $(TALLOC_LIBS) \
+-- 
+2.9.3
+

@@ -1,0 +1,45 @@
+From 6b760226c0ed984b6b1a02f459e9cb1fc3d45ff9 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 28 Feb 2017 15:54:06 +0100
+Subject: [PATCH] authtok: fix tests on big-endian
+
+Related to https://pagure.io/SSSD/sssd/issue/3270
+---
+ src/tests/cmocka/test_authtok.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/src/tests/cmocka/test_authtok.c b/src/tests/cmocka/test_authtok.c
+index b2ef08a1c75625253706910e0cc80f4d5d28be5d..4464230b34b1816ddeb98ec85abc1b59f1524e54 100644
+--- a/src/tests/cmocka/test_authtok.c
++++ b/src/tests/cmocka/test_authtok.c
+@@ -604,8 +604,13 @@ void test_sss_authtok_sc_pin(void **state)
+                      SSS_AUTHTOK_TYPE_SC_PIN);
+     size = sss_authtok_get_size(ts->authtoken);
+     assert_int_equal(size, 28);
++#if __BYTE_ORDER == __LITTLE_ENDIAN
+     assert_memory_equal(sss_authtok_get_data(ts->authtoken), "\11\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0" "12345678\0\0\0\0",
+                                              size);
++#else
++    assert_memory_equal(sss_authtok_get_data(ts->authtoken), "\0\0\0\11\0\0\0\1\0\0\0\1\0\0\0\1" "12345678\0\0\0\0",
++                                             size);
++#endif
+ 
+     ret = sss_authtok_set_sc_pin(ts->authtoken, "12345678", 5);
+     assert_int_equal(ret, EOK);
+@@ -613,8 +618,13 @@ void test_sss_authtok_sc_pin(void **state)
+                      SSS_AUTHTOK_TYPE_SC_PIN);
+     size = sss_authtok_get_size(ts->authtoken);
+     assert_int_equal(size, 25);
++#if __BYTE_ORDER == __LITTLE_ENDIAN
+     assert_memory_equal(sss_authtok_get_data(ts->authtoken), "\6\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0" "12345\0\0\0\0",
+                                              size);
++#else
++    assert_memory_equal(sss_authtok_get_data(ts->authtoken), "\0\0\0\6\0\0\0\1\0\0\0\1\0\0\0\1" "12345\0\0\0\0",
++                                             size);
++#endif
+ 
+     ret = sss_authtok_get_sc_pin(ts->authtoken, &pin, &len);
+     assert_int_equal(ret, EOK);
+-- 
+2.9.3
+

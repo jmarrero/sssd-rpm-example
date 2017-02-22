@@ -1,0 +1,76 @@
+From e947a871f7d3cfc4389e981a147fe10bedca0569 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 7 Feb 2017 11:05:47 +0100
+Subject: [PATCH 31/79] AD: Use ad_domain to match forest root domain, not the
+ configured domain from sssd.conf
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If the sssd.conf domain name was different from the joined domain name,
+but sssd was joined to the forest root, the AD subdomains code considered
+sssd joined to a non-root domain and tried to discover the forest root.
+
+This could be reproduced by joining sssd to a domain, for example
+win.trust.test but calling the sssd.conf domain otherwise, for example:
+[domain/addomain]
+ad_domain = win.trust.test
+
+This is/was a frequent use-case in the RHEL world, where authconfig
+often names the sssd.conf domain 'default'.
+
+Without the patch, the trusted domains were not detected.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/providers/ad/ad_subdomains.c | 13 +++++++++++--
+ 1 file changed, 11 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ad/ad_subdomains.c b/src/providers/ad/ad_subdomains.c
+index 5e57d218c072a2627f165ae072cb761e1a146048..ad075c19a5824b98092ddf534004680784577c0f 100644
+--- a/src/providers/ad/ad_subdomains.c
++++ b/src/providers/ad/ad_subdomains.c
+@@ -948,6 +948,7 @@ static void ad_get_root_domain_done(struct tevent_req *subreq);
+ static struct tevent_req *
+ ad_get_root_domain_send(TALLOC_CTX *mem_ctx,
+                         struct tevent_context *ev,
++                        const char *domain,
+                         const char *forest,
+                         struct sdap_handle *sh,
+                         struct ad_subdomains_ctx *sd_ctx)
+@@ -968,7 +969,7 @@ ad_get_root_domain_send(TALLOC_CTX *mem_ctx,
+         return NULL;
+     }
+ 
+-    if (forest != NULL && strcasecmp(sd_ctx->be_ctx->domain->name, forest) == 0) {
++    if (forest != NULL && strcasecmp(domain, forest) == 0) {
+         state->root_id_ctx = sd_ctx->ad_id_ctx;
+         state->root_domain_attrs = NULL;
+         ret = EOK;
+@@ -1230,6 +1231,7 @@ static void ad_subdomains_refresh_master_done(struct tevent_req *subreq)
+     struct ad_subdomains_refresh_state *state;
+     struct tevent_req *req;
+     const char *realm;
++    const char *ad_domain;
+     char *master_sid;
+     char *flat_name;
+     char *forest;
+@@ -1277,7 +1279,14 @@ static void ad_subdomains_refresh_master_done(struct tevent_req *subreq)
+         }
+     }
+ 
+-    subreq = ad_get_root_domain_send(state, state->ev, forest,
++    ad_domain = dp_opt_get_cstring(state->ad_options->basic, AD_DOMAIN);
++    if (ad_domain == NULL) {
++        DEBUG(SSSDBG_CONF_SETTINGS,
++             "Missing AD domain name, falling back to sssd domain name\n");
++        ad_domain = state->sd_ctx->be_ctx->domain->name;
++    }
++
++    subreq = ad_get_root_domain_send(state, state->ev, ad_domain, forest,
+                                      sdap_id_op_handle(state->sdap_op),
+                                      state->sd_ctx);
+     if (subreq == NULL) {
+-- 
+2.9.3
+

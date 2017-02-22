@@ -1,0 +1,255 @@
+From a3b2bc38263191f23eba2ad98470d8ecd016a60b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 24 Jan 2017 13:14:47 +0100
+Subject: [PATCH 08/79] SBUS: use sss_ptr_hash for opath table
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This patch reuses sss_ptr_hash module introduced in NSS patches in sbus code.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/sbus/sssd_dbus_connection.c |  4 +-
+ src/sbus/sssd_dbus_interface.c  | 94 +++++++++++------------------------------
+ src/sbus/sssd_dbus_private.h    |  5 +--
+ 3 files changed, 28 insertions(+), 75 deletions(-)
+
+diff --git a/src/sbus/sssd_dbus_connection.c b/src/sbus/sssd_dbus_connection.c
+index 9def7084e5d496a5e6aa40ec0eafd2471a64659f..6ca039e8e2a919141bf951ed0203dc2c48b3eb55 100644
+--- a/src/sbus/sssd_dbus_connection.c
++++ b/src/sbus/sssd_dbus_connection.c
+@@ -163,8 +163,8 @@ int sbus_init_connection(TALLOC_CTX *ctx,
+     conn->last_request_time = last_request_time;
+     conn->client_destructor_data = client_destructor_data;
+ 
+-    ret = sbus_opath_hash_init(conn, conn, &conn->managed_paths);
+-    if (ret != EOK) {
++    conn->managed_paths = sbus_opath_hash_init(conn, conn);
++    if (conn->managed_paths == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot create object paths hash table\n");
+         talloc_free(conn);
+         return EIO;
+diff --git a/src/sbus/sssd_dbus_interface.c b/src/sbus/sssd_dbus_interface.c
+index 32e5b27e1f701898d96f5537b2bc72d491903b54..e8c8851231fab68024065a13c5f1e2642ba829e9 100644
+--- a/src/sbus/sssd_dbus_interface.c
++++ b/src/sbus/sssd_dbus_interface.c
+@@ -23,6 +23,7 @@
+ #include <dhash.h>
+ 
+ #include "util/util.h"
++#include "util/sss_ptr_hash.h"
+ #include "sbus/sssd_dbus.h"
+ #include "sbus/sssd_dbus_meta.h"
+ #include "sbus/sssd_dbus_private.h"
+@@ -492,13 +493,11 @@ sbus_opath_hash_delete_cb(hash_entry_t *item,
+     dbus_connection_unregister_object_path(conn->dbus.conn, path);
+ }
+ 
+-errno_t
++hash_table_t *
+ sbus_opath_hash_init(TALLOC_CTX *mem_ctx,
+-                     struct sbus_connection *conn,
+-                     hash_table_t **_table)
++                     struct sbus_connection *conn)
+ {
+-    return sss_hash_create_ex(mem_ctx, 10, _table, 0, 0, 0, 0,
+-                              sbus_opath_hash_delete_cb, conn);
++    return sss_ptr_hash_create(mem_ctx, sbus_opath_hash_delete_cb, conn);
+ }
+ 
+ static errno_t
+@@ -511,11 +510,8 @@ sbus_opath_hash_add_iface(hash_table_t *table,
+     struct sbus_interface_list *list = NULL;
+     struct sbus_interface_list *item = NULL;
+     const char *iface_name = iface->vtable->meta->name;
+-    hash_key_t key;
+-    hash_value_t value;
+     bool path_known;
+     errno_t ret;
+-    int hret;
+ 
+     tmp_ctx = talloc_new(NULL);
+     if (tmp_ctx == NULL) {
+@@ -536,22 +532,14 @@ sbus_opath_hash_add_iface(hash_table_t *table,
+ 
+     /* first lookup existing list in hash table */
+ 
+-    key.type = HASH_KEY_STRING;
+-    key.str = talloc_strdup(tmp_ctx, object_path);
+-    if (key.str == NULL) {
+-        ret = ENOMEM;
+-        goto done;
+-    }
+-
+-    hret = hash_lookup(table, &key, &value);
+-    if (hret == HASH_SUCCESS) {
++    list = sss_ptr_hash_lookup(table, object_path, struct sbus_interface_list);
++    if (list != NULL) {
+         /* This object path has already some interface registered. We will
+          * check for existence of the interface currently being added and
+          * add it if missing. */
+ 
+         path_known = true;
+ 
+-        list = talloc_get_type(value.ptr, struct sbus_interface_list);
+         if (sbus_iface_list_lookup(list, iface_name) != NULL) {
+             DEBUG(SSSDBG_MINOR_FAILURE, "Trying to register the same interface"
+                   " twice: iface=%s, opath=%s\n", iface_name, object_path);
+@@ -562,9 +550,6 @@ sbus_opath_hash_add_iface(hash_table_t *table,
+         DLIST_ADD_END(list, item, struct sbus_interface_list *);
+         ret = EOK;
+         goto done;
+-    } else if (hret != HASH_ERROR_KEY_NOT_FOUND) {
+-        ret = EIO;
+-        goto done;
+     }
+ 
+     /* otherwise create new hash entry and new list */
+@@ -572,17 +557,8 @@ sbus_opath_hash_add_iface(hash_table_t *table,
+     path_known = false;
+     list = item;
+ 
+-    value.type = HASH_VALUE_PTR;
+-    value.ptr = list;
+-
+-    hret = hash_enter(table, &key, &value);
+-    if (hret != HASH_SUCCESS) {
+-        ret = EIO;
+-        goto done;
+-    }
+-
+-    talloc_steal(table, key.str);
+-    ret = EOK;
++    ret = sss_ptr_hash_add(table, object_path, list,
++                           struct sbus_interface_list);
+ 
+ done:
+     if (ret == EOK) {
+@@ -599,12 +575,7 @@ static bool
+ sbus_opath_hash_has_path(hash_table_t *table,
+                          const char *object_path)
+ {
+-    hash_key_t key;
+-
+-    key.type = HASH_KEY_STRING;
+-    key.str = discard_const(object_path);
+-
+-    return hash_has_key(table, &key);
++    return sss_ptr_hash_has_key(table, object_path);
+ }
+ 
+ /**
+@@ -621,9 +592,6 @@ sbus_opath_hash_lookup_iface(hash_table_t *table,
+     struct sbus_interface_list *list = NULL;
+     struct sbus_interface *iface = NULL;
+     char *lookup_path = NULL;
+-    hash_key_t key;
+-    hash_value_t value;
+-    int hret;
+ 
+     tmp_ctx = talloc_new(NULL);
+     if (tmp_ctx == NULL) {
+@@ -636,21 +604,13 @@ sbus_opath_hash_lookup_iface(hash_table_t *table,
+     }
+ 
+     while (lookup_path != NULL) {
+-        key.type = HASH_KEY_STRING;
+-        key.str = lookup_path;
+-
+-        hret = hash_lookup(table, &key, &value);
+-        if (hret == HASH_SUCCESS) {
+-            list = talloc_get_type(value.ptr, struct sbus_interface_list);
++        list = sss_ptr_hash_lookup(table, lookup_path,
++                                   struct sbus_interface_list);
++        if (list != NULL) {
+             iface = sbus_iface_list_lookup(list, iface_name);
+             if (iface != NULL) {
+                 goto done;
+             }
+-        } else if (hret != HASH_ERROR_KEY_NOT_FOUND) {
+-            DEBUG(SSSDBG_OP_FAILURE,
+-                  "Unable to search hash table: hret=%d\n", hret);
+-            iface = NULL;
+-            goto done;
+         }
+ 
+         /* we will not free lookup path since it is freed with tmp_ctx
+@@ -674,13 +634,11 @@ sbus_opath_hash_lookup_supported(TALLOC_CTX *mem_ctx,
+ {
+     TALLOC_CTX *tmp_ctx = NULL;
+     TALLOC_CTX *list_ctx = NULL;
+-    struct sbus_interface_list *copy = NULL;
+-    struct sbus_interface_list *list = NULL;
++    struct sbus_interface_list *copy;
++    struct sbus_interface_list *output_list;
++    struct sbus_interface_list *table_list;
+     char *lookup_path = NULL;
+-    hash_key_t key;
+-    hash_value_t value;
+     errno_t ret;
+-    int hret;
+ 
+     tmp_ctx = talloc_new(NULL);
+     if (tmp_ctx == NULL) {
+@@ -699,23 +657,19 @@ sbus_opath_hash_lookup_supported(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    while (lookup_path != NULL) {
+-        key.type = HASH_KEY_STRING;
+-        key.str = lookup_path;
++    /* Initialize output_list. */
++    output_list = NULL;
+ 
+-        hret = hash_lookup(table, &key, &value);
+-        if (hret == HASH_SUCCESS) {
+-            ret = sbus_iface_list_copy(list_ctx, value.ptr, &copy);
++    while (lookup_path != NULL) {
++        table_list = sss_ptr_hash_lookup(table, lookup_path,
++                                         struct sbus_interface_list);
++        if (table_list != NULL) {
++            ret = sbus_iface_list_copy(list_ctx, table_list, &copy);
+             if (ret != EOK) {
+                 goto done;
+             }
+ 
+-            DLIST_CONCATENATE(list, copy, struct sbus_interface_list *);
+-        } else if (hret != HASH_ERROR_KEY_NOT_FOUND) {
+-            DEBUG(SSSDBG_OP_FAILURE,
+-                  "Unable to search hash table: hret=%d\n", hret);
+-            ret = EIO;
+-            goto done;
++            DLIST_CONCATENATE(output_list, copy, struct sbus_interface_list *);
+         }
+ 
+         /* we will not free lookup path since it is freed with tmp_ctx
+@@ -724,7 +678,7 @@ sbus_opath_hash_lookup_supported(TALLOC_CTX *mem_ctx,
+     }
+ 
+     talloc_steal(mem_ctx, list_ctx);
+-    *_list = list;
++    *_list = output_list;
+     ret = EOK;
+ 
+ done:
+diff --git a/src/sbus/sssd_dbus_private.h b/src/sbus/sssd_dbus_private.h
+index 8abca66b087d9ce1081889feda2ca1e1372514ad..c8913d0f0c522147aacf3214000ef9d4855fdb0c 100644
+--- a/src/sbus/sssd_dbus_private.h
++++ b/src/sbus/sssd_dbus_private.h
+@@ -121,10 +121,9 @@ struct sbus_interface_list {
+     struct sbus_interface *interface;
+ };
+ 
+-errno_t
++hash_table_t *
+ sbus_opath_hash_init(TALLOC_CTX *mem_ctx,
+-                     struct sbus_connection *conn,
+-                     hash_table_t **_table);
++                     struct sbus_connection *conn);
+ 
+ struct sbus_interface *
+ sbus_opath_hash_lookup_iface(hash_table_t *table,
+-- 
+2.9.3
+

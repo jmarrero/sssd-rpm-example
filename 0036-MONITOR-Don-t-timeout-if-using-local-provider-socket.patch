@@ -1,0 +1,51 @@
+From 00c0b7bc6969d31deab9e8e7541b4a6483b78b3e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Sun, 5 Feb 2017 01:55:56 +0100
+Subject: [PATCH 36/79] MONITOR: Don't timeout if using local provider +
+ socket-activated responders
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When using only the local provider with socket-activated services SSSD
+ends up never notifying systemd its startup has been done, as notifying
+systemd is done *only* when a service (provider or responder) is started
+up, leading SSSD's startup to fail due to a timeout.
+
+So, in order to avoid this situation, let's just notify the startup
+earlier in case we have *only* socket-activated services and the *only*
+provider set up is the LOCAL one.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3299
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/monitor/monitor.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index f55a89edc38900c3eaaf2a294fb26125e571cf82..1fa3d4baf579f15b9f93355a4b0c8b9d706bbacf 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -2403,6 +2403,15 @@ static int monitor_process_init(struct mt_ctx *ctx,
+         }
+     }
+ 
++    /* When the only provider set up is the local one (num_providers == 0) and
++     * there's no responder explicitly set up it means that we should notify
++     * systemd that SSSD is ready right now as any other provider/responder
++     * would be able to do so and the SSSD would end up hitting a systemd
++     * timeout! */
++    if (num_providers == 0 && ctx->services == NULL) {
++        ret = notify_startup();
++    }
++
+     return EOK;
+ }
+ 
+-- 
+2.9.3
+

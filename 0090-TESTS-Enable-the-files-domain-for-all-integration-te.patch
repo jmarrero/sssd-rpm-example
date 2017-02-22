@@ -1,0 +1,62 @@
+From 76b6d7fb9f31f7836158d248161aec3558098659 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 21 Feb 2017 21:05:25 +0100
+Subject: [PATCH 90/95] TESTS: Enable the files domain for all integration
+ tests
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is done to make sure that enabling the files domain doesn't break
+existing functionality as well as making it possible to even that the
+implicit domain, since all integration tests use the same configuration.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                        |  1 +
+ src/tests/intg/test_enumeration.py | 10 +++++++++-
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index e676e18415c9d20ffd5ba2ce825dddd62d50c909..30ee5e5904a06609a03343bb3dc5b78ef169d4b4 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -3239,6 +3239,7 @@ intgcheck-prepare:
+ 	    --with-ldb-lib-dir="$$prefix"/lib/ldb \
+ 	    --enable-intgcheck-reqs \
+ 	    --without-semanage \
++	    --enable-files-domain \
+ 	    $(INTGCHECK_CONFIGURE_FLAGS); \
+ 	$(MAKE) $(AM_MAKEFLAGS); \
+ 	: Force single-thread install to workaround concurrency issues; \
+diff --git a/src/tests/intg/test_enumeration.py b/src/tests/intg/test_enumeration.py
+index 5cb6c3e07435fea802f3f925e370605a0eb36d2c..47772dea288434c5b213eeba9b4eac904423d707 100644
+--- a/src/tests/intg/test_enumeration.py
++++ b/src/tests/intg/test_enumeration.py
+@@ -98,7 +98,12 @@ SCHEMA_RFC2307_BIS = "rfc2307bis"
+ 
+ 
+ def format_basic_conf(ldap_conn, schema):
+-    """Format a basic SSSD configuration"""
++    """
++    Format a basic SSSD configuration
++
++    The files domain is defined but not enabled in order to avoid enumerating
++    users from the files domain that would otherwise by implicitly enabled
++    """
+     schema_conf = "ldap_schema         = " + schema + "\n"
+     if schema == SCHEMA_RFC2307_BIS:
+         schema_conf += "ldap_group_object_class = groupOfNames\n"
+@@ -115,6 +120,9 @@ def format_basic_conf(ldap_conn, schema):
+         [pam]
+         debug_level         = 0xffff
+ 
++        [domain/files]
++        id_provider         = files
++
+         [domain/LDAP]
+         ldap_auth_disable_tls_never_use_in_production = true
+         debug_level         = 0xffff
+-- 
+2.9.3
+

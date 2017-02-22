@@ -1,0 +1,44 @@
+From e5d8b0e10238490c5d199063c0a258ba53c2ac65 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 8 Feb 2017 17:58:41 +0100
+Subject: [PATCH 32/79] BUILD: Fix linking of test_sdap_initgr
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There was a linking fialure on debian:
+/usr/bin/ld: src/tests/cmocka/test_sdap_initgr-test_sdap_initgr.o:
+   undefined reference to symbol 'hash_iterate@@DHASH_0.4.3'
+//usr/lib64/libdhash.so.1: error adding symbols: DSO missing from command line
+collect2: error: ld returned 1 exit status
+
+This patch adds some missing libraries and remove unnecessary libraries.
+Bug was intoduced in commit 0b7ded15e53b3f31f1570c366f04bc41e5761929
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+---
+ Makefile.am | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 713a83ce0b5c2b8d71495ff05b52e52e413b5c95..2304b39c7eb75225f7cd8cbc30d23592506c146e 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -2879,11 +2879,12 @@ test_sdap_initgr_CFLAGS = \
+ test_sdap_initgr_LDADD = \
+     $(CMOCKA_LIBS) \
+     $(POPT_LIBS) \
++    $(DHASH_LIBS) \
+     $(TALLOC_LIBS) \
++    $(TEVENT_LIBS) \
++    $(LDB_LIBS) \
+     $(SSSD_INTERNAL_LTLIBS) \
+     libsss_ldap_common.la \
+-    libsss_ad_tests.la \
+-    libsss_idmap.la \
+     libsss_test_common.la \
+     libdlopen_test_providers.la \
+     $(NULL)
+-- 
+2.9.3
+

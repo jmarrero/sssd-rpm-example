@@ -1,0 +1,397 @@
+From 78bb3676fe8326e0fe2b60daad8bf524e4625d4e Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 21 Feb 2017 16:34:45 +0100
+Subject: [PATCH 89/95] MONITOR: Enable an implicit files domain if one is not
+ configured
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If SSSD is compiled with --enable-files-domain, the loading of the
+domains changes such that:
+    * if no domain with id_provider=files exists in the config file, an
+      implicit SSSD files domain is added
+    * this domain is always first in the list
+
+The administrator is free to create a files domain in the config file
+himself and either place it at the end of the list or not enable it at
+all.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3112
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/conf_macros.m4                   |  13 +++
+ src/confdb/confdb.c                  | 182 +++++++++++++++++++++++++++++++++++
+ src/confdb/confdb.h                  |   4 +
+ src/config/SSSDConfig/__init__.py.in |   1 +
+ src/config/SSSDConfigTest.py         |   3 +-
+ src/config/cfg_rules.ini             |   1 +
+ src/config/etc/sssd.api.conf         |   1 +
+ src/man/Makefile.am                  |   7 +-
+ src/man/sssd.conf.5.xml              |  17 ++++
+ src/monitor/monitor.c                |  11 +++
+ 10 files changed, 238 insertions(+), 2 deletions(-)
+
+diff --git a/src/conf_macros.m4 b/src/conf_macros.m4
+index 427b0e08d400d6e5628537b28bb93bc2fc6239a4..749e7694f4dd7086468e461194ef274be2094236 100644
+--- a/src/conf_macros.m4
++++ b/src/conf_macros.m4
+@@ -903,3 +903,16 @@ AC_DEFUN([WITH_SECRETS_DB_PATH],
+     AC_SUBST(secdbpath)
+     AC_DEFINE_UNQUOTED(SECRETS_DB_PATH, "$config_secdbpath", [Path to the SSSD Secrets databases])
+   ])
++
++AC_ARG_ENABLE([files-domain],
++              [AS_HELP_STRING([--enable-files-domain],
++                              [If this feature is enabled, then SSSD always enables
++                               a domain with id_provider=files even if the domain
++                               is not specified in the config file
++                              [default=no]])],
++              [enable_files_domain=$enableval],
++              [enable_files_domain=no])
++AS_IF([test x$enable_files_domain = xyes],
++      AC_DEFINE_UNQUOTED([ADD_FILES_DOMAIN], [1],
++          [whether to build unconditionally enable files domain]))
++AM_CONDITIONAL([ADD_FILES_DOMAIN], [test x$enable_files_domain = xyes])
+diff --git a/src/confdb/confdb.c b/src/confdb/confdb.c
+index c7afd683d7f21b513bb491adbf7f7bbe79786212..d82fd98ee02928b3c20df014528bd869ec946f92 100644
+--- a/src/confdb/confdb.c
++++ b/src/confdb/confdb.c
+@@ -1643,3 +1643,185 @@ done:
+     talloc_free(tmp_ctx);
+     return ret;
+ }
++
++#ifdef ADD_FILES_DOMAIN
++static int confdb_has_files_domain(struct confdb_ctx *cdb)
++{
++    TALLOC_CTX *tmp_ctx = NULL;
++    struct ldb_dn *dn = NULL;
++    struct ldb_result *res = NULL;
++    static const char *attrs[] = { CONFDB_DOMAIN_ID_PROVIDER, NULL };
++    const char *id_provider = NULL;
++    int ret;
++    unsigned int i;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    dn = ldb_dn_new(tmp_ctx, cdb->ldb, CONFDB_DOMAIN_BASEDN);
++    if (dn == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = ldb_search(cdb->ldb, tmp_ctx, &res, dn, LDB_SCOPE_ONELEVEL,
++                     attrs, NULL);
++    if (ret != LDB_SUCCESS) {
++        ret = EIO;
++        goto done;
++    }
++
++    for (i = 0; i < res->count; i++) {
++        id_provider = ldb_msg_find_attr_as_string(res->msgs[i],
++                                                  CONFDB_DOMAIN_ID_PROVIDER,
++                                                  NULL);
++        if (id_provider == NULL) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "The object [%s] doesn't have a id_provider\n",
++                  ldb_dn_get_linearized(res->msgs[i]->dn));
++            ret = EINVAL;
++            goto done;
++        }
++
++        if (strcasecmp(id_provider, "files") == 0) {
++            break;
++        }
++    }
++
++    ret = i < res->count ? EOK : ENOENT;
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static int create_files_domain(struct confdb_ctx *cdb,
++                               const char *name)
++{
++    TALLOC_CTX *tmp_ctx = NULL;
++    errno_t ret;
++    char *cdb_path = NULL;
++    const char *val[2] = { NULL, NULL };
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_new() failed\n");
++        return ENOMEM;
++    }
++
++    cdb_path = talloc_asprintf(tmp_ctx, CONFDB_DOMAIN_PATH_TMPL, name);
++    if (cdb_path == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    val[0] = "files";
++    ret = confdb_add_param(cdb, true, cdb_path, "id_provider", val);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to add id_provider [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = EOK;
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static int activate_files_domain(struct confdb_ctx *cdb,
++                                 const char *name)
++{
++    errno_t ret;
++    TALLOC_CTX *tmp_ctx;
++    char *monitor_domlist;
++    const char *domlist[2] = { NULL, NULL };
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    ret = confdb_get_string(cdb, tmp_ctx,
++                            CONFDB_MONITOR_CONF_ENTRY,
++                            CONFDB_MONITOR_ACTIVE_DOMAINS,
++                            NULL,
++                            &monitor_domlist);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_FATAL_FAILURE, "Fatal error retrieving domains list!\n");
++        goto done;
++    }
++
++    if (monitor_domlist != NULL) {
++        domlist[0] = talloc_asprintf(tmp_ctx, "%s,%s", name, monitor_domlist);
++        if (domlist[0] == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++    } else {
++        domlist[0] = name;
++    }
++
++    ret = confdb_add_param(cdb, true,
++                           CONFDB_MONITOR_CONF_ENTRY,
++                           CONFDB_MONITOR_ACTIVE_DOMAINS,
++                           domlist);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Cannot extend the domain list [%d]: %s\n",
++              ret, sss_strerror(ret));
++        return ret;
++    }
++
++    ret = EOK;
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++#endif /* ADD_FILES_DOMAIN */
++
++int confdb_ensure_files_domain(struct confdb_ctx *cdb,
++                               const char *implicit_files_dom_name)
++{
++#ifndef ADD_FILES_DOMAIN
++    return EOK;
++#else
++    errno_t ret;
++    bool enable_files;
++
++    ret = confdb_get_bool(cdb,
++                          CONFDB_MONITOR_CONF_ENTRY,
++                          CONFDB_MONITOR_ENABLE_FILES_DOM,
++                          true, &enable_files);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "Cannot get the value of %s assuming true\n",
++              CONFDB_MONITOR_ENABLE_FILES_DOM);
++        return ret;
++    }
++
++    if (enable_files == false) {
++        DEBUG(SSSDBG_CONF_SETTINGS, "The implicit files domain is disabled\n");
++        return EOK;
++    }
++
++    ret = confdb_has_files_domain(cdb);
++    if (ret == EOK) {
++        DEBUG(SSSDBG_CONF_SETTINGS, "The files domain is already enabled\n");
++        return EOK;
++    } else if (ret != ENOENT) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Error looking up the files domain\n");
++        return ret;
++    }
++
++    /* ENOENT, so let's add a files domain */
++    ret = create_files_domain(cdb, implicit_files_dom_name);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot add an implicit files domain\n");
++        return ret;
++    }
++
++    return activate_files_domain(cdb, implicit_files_dom_name);
++#endif /* ADD_FILES_DOMAIN */
++}
+diff --git a/src/confdb/confdb.h b/src/confdb/confdb.h
+index 353dfd0a9afbcaba49fcfdc7930026bb2eebfc9e..89b89bf0d54af03cb2f28f421991231f0c7b755f 100644
+--- a/src/confdb/confdb.h
++++ b/src/confdb/confdb.h
+@@ -73,6 +73,7 @@
+ #define CONFDB_MONITOR_USER_RUNAS "user"
+ #define CONFDB_MONITOR_CERT_VERIFICATION "certificate_verification"
+ #define CONFDB_MONITOR_DISABLE_NETLINK "disable_netlink"
++#define CONFDB_MONITOR_ENABLE_FILES_DOM "enable_files_domain"
+ 
+ /* Both monitor and domains */
+ #define CONFDB_NAME_REGEX   "re_expression"
+@@ -373,6 +374,9 @@ int confdb_get_domain(struct confdb_ctx *cdb,
+ int confdb_get_domains(struct confdb_ctx *cdb,
+                        struct sss_domain_info **domains);
+ 
++int confdb_ensure_files_domain(struct confdb_ctx *cdb,
++                               const char *implicit_files_dom_name);
++
+ /**
+  * Get a null-terminated linked-list of all domain names
+  * @param[in] mem_ctx The parent memory context for the value list
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index 8c23fd271334acca6dbaf7df5d5aab15b3af5a42..44fb777eccd24d511067fee850f01ba9f3c1f134 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -64,6 +64,7 @@ option_strings = {
+     'certificate_verification' : _('Tune certificate verification'),
+     'override_space': _('All spaces in group or user names will be replaced with this character'),
+     'disable_netlink' : _('Tune sssd to honor or ignore netlink state changes'),
++    'enable_files_domain' : _('Enable or disable the implicit files domain'),
+ 
+     # [nss]
+     'enum_cache_timeout' : _('Enumeration cache timeout length (seconds)'),
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index 0da5d63a198bf7242daf7f985ede8e0bc3df3841..8cb03adcbb55c4ca350af1504c0cb3ea1a2d236d 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -312,7 +312,8 @@ class SSSDConfigTestSSSDService(unittest.TestCase):
+             'description',
+             'certificate_verification',
+             'override_space',
+-            'disable_netlink']
++            'disable_netlink',
++            'enable_files_domain']
+ 
+         self.assertTrue(type(options) == dict,
+                         "Options should be a dictionary")
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index 51981c3d0fc89d3f091dbe182cdd1d6de5618e1e..dd0f04b1a829c941215e96e1a160aeba7759e2bf 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -41,6 +41,7 @@ option = certificate_verification
+ option = override_space
+ option = config_file_version
+ option = disable_netlink
++option = enable_files_domain
+ 
+ [rule/allowed_nss_options]
+ validator = ini_allowed_options
+diff --git a/src/config/etc/sssd.api.conf b/src/config/etc/sssd.api.conf
+index 56540066fde71cad53f909e3534b3a674633af3f..7d21d6b7016e51021d168243e5bfd36e999801e4 100644
+--- a/src/config/etc/sssd.api.conf
++++ b/src/config/etc/sssd.api.conf
+@@ -30,6 +30,7 @@ default_domain_suffix = str, None, false
+ certificate_verification = str, None, false
+ override_space = str, None, false
+ disable_netlink = bool, None, false
++enable_files_domain = str, None, false
+ 
+ [nss]
+ # Name service
+diff --git a/src/man/Makefile.am b/src/man/Makefile.am
+index 760bb7831b5852e1bf3be497ad5babdb4f4318c2..215ce693b56e74db394dbc238c03c87f5f6efe99 100644
+--- a/src/man/Makefile.am
++++ b/src/man/Makefile.am
+@@ -35,7 +35,12 @@ endif
+ if HAVE_SYSTEMD_UNIT
+ SYSTEMD_CONDS = ;have_systemd
+ endif
+-CONDS = with_false$(SUDO_CONDS)$(AUTOFS_CONDS)$(SSH_CONDS)$(PAC_RESPONDER_CONDS)$(IFP_CONDS)$(GPO_CONDS)$(SEC_CONDS)$(SYSTEMD_CONDS)
++if ADD_FILES_DOMAIN
++FILES_CONDS = ;enable_files_domain
++else
++FILES_CONDS = ;no_enable_files_domain
++endif
++CONDS = with_false$(SUDO_CONDS)$(AUTOFS_CONDS)$(SSH_CONDS)$(PAC_RESPONDER_CONDS)$(IFP_CONDS)$(GPO_CONDS)$(SEC_CONDS)$(SYSTEMD_CONDS)$(FILES_CONDS)
+ 
+ 
+ #Special Rules:
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index 782aef7bf62d9bcef3c3dab534a25e01d85c1764..2a2ef69ff2da817087d60e81cff8075e91736bae 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -525,6 +525,23 @@
+                             </para>
+                         </listitem>
+                     </varlistentry>
++                    <varlistentry>
++                        <term>enable_files_domain (boolean)</term>
++                        <listitem>
++                            <para>
++                                When this option is enabled, SSSD
++                                prepends an implicit domain with
++                                <quote>id_provider=files</quote> before
++                                any explicitly configured domains.
++                            </para>
++                            <para condition="no_enable_files_domain">
++                                Default: false
++                            </para>
++                            <para condition="enable_files_domain">
++                                Default: true
++                            </para>
++                        </listitem>
++                    </varlistentry>
+                 </variablelist>
+             </para>
+         </refsect2>
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index 59bf70741b76871c4937ad75c448aaf776cc37eb..7e7b5a07d11aecf1c0b11592213b90d385fd5076 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -90,6 +90,9 @@
+                                  "that the file is accessible only by the "\
+                                  "owner and owned by root.root.\n"
+ 
++/* SSSD domain name that is used for the auto-configured files domain */
++#define IMPLICIT_FILES_DOMAIN_NAME "implicit_files"
++
+ int cmdline_debug_level;
+ int cmdline_debug_timestamps;
+ int cmdline_debug_microseconds;
+@@ -1053,6 +1056,14 @@ static int get_monitor_config(struct mt_ctx *ctx)
+         return ret;
+     }
+ 
++    ret = confdb_ensure_files_domain(ctx->cdb, IMPLICIT_FILES_DOMAIN_NAME);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "Cannot add the implicit files domain [%d]: %s\n",
++              ret, strerror(ret));
++        /* Not fatal */
++    }
++
+     ret = confdb_get_domains(ctx->cdb, &ctx->domains);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_FATAL_FAILURE, "No domains configured.\n");
+-- 
+2.9.3
+

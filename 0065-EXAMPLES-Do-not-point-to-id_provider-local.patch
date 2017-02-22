@@ -1,0 +1,38 @@
+From 89e53f7139b134360fda9e43d47ebfb89fcaac92 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 10 Feb 2017 16:39:19 +0100
+Subject: [PATCH 65/79] EXAMPLES: Do not point to id_provider=local
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It makes more sense to show id_provider=files
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/examples/sssd.conf | 4 +---
+ 1 file changed, 1 insertion(+), 3 deletions(-)
+
+diff --git a/src/examples/sssd.conf b/src/examples/sssd.conf
+index a851dbb7ecd5c3220fbd6a946a6c7be2822dbd27..1e8b537a730300a143764142ff0096db6a3f976b 100644
+--- a/src/examples/sssd.conf
++++ b/src/examples/sssd.conf
+@@ -1,5 +1,4 @@
+ [sssd]
+-config_file_version = 2
+ services = nss, pam
+ domains = shadowutils
+ 
+@@ -8,8 +7,7 @@ domains = shadowutils
+ [pam]
+ 
+ [domain/shadowutils]
+-id_provider = proxy
+-proxy_lib_name = files
++id_provider = files
+ 
+ auth_provider = proxy
+ proxy_pam_target = sssd-shadowutils
+-- 
+2.9.3
+

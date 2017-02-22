@@ -1,0 +1,41 @@
+From 26866484a985adbc7edf2e79a1e95b3bb6b8624c Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 2 Dec 2016 17:51:54 +0100
+Subject: [PATCH 48/79] RESPONDER: Include the files provider in
+ NEEDS_CHECK_PROVIDER
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It makes no sense to contact the Data Provider with the files provider
+except when the files provider is updating itself.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/common/responder.h | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/responder/common/responder.h b/src/responder/common/responder.h
+index 748dec4301b4a018691d9b8c8fca0193d18167a5..3515f76d2bd0a553e7bf6b089b6d511255cf1e93 100644
+--- a/src/responder/common/responder.h
++++ b/src/responder/common/responder.h
+@@ -48,9 +48,14 @@ extern hash_table_t *dp_requests;
+  * So we set umask to 0111. */
+ #define SCKT_RSP_UMASK 0111
+ 
+-/* if there is a provider other than the special local */
++/* Neither the local provider nor the files provider have a back
++ * end in the traditional sense and can always just consult
++ * the responder's cache
++ */
+ #define NEED_CHECK_PROVIDER(provider) \
+-    (provider != NULL && strcmp(provider, "local") != 0)
++    (provider != NULL && \
++     (strcmp(provider, "local") != 0 && \
++      strcmp(provider, "files") != 0))
+ 
+ /* needed until nsssrv.h is updated */
+ struct cli_request {
+-- 
+2.9.3
+

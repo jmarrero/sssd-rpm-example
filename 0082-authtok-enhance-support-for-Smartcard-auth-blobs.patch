@@ -1,0 +1,775 @@
+From dd17a3aaddab6f122dff3bd15b7005464c07c0ea Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Fri, 23 Sep 2016 17:11:35 +0200
+Subject: [PATCH 82/95] authtok: enhance support for Smartcard auth blobs
+
+The blobs contains beside the PIN the name of the PKCS#11 module and the
+token name where the certificate of the user was found and the key id.
+Those data will be used e.g. by the pkinit module to make sure them
+right certificate is used.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/tests/cmocka/test_authtok.c |  89 ++++++++++-
+ src/util/authtok-utils.c        |  91 ++++++++++++
+ src/util/authtok-utils.h        |  56 +++++++
+ src/util/authtok.c              | 320 ++++++++++++++++++++++++++++++++++++++--
+ src/util/authtok.h              |  84 +++++++++++
+ 5 files changed, 625 insertions(+), 15 deletions(-)
+
+diff --git a/src/tests/cmocka/test_authtok.c b/src/tests/cmocka/test_authtok.c
+index 30dcc9c8401103a275bd592fe8afd2c2f396ffb1..b2ef08a1c75625253706910e0cc80f4d5d28be5d 100644
+--- a/src/tests/cmocka/test_authtok.c
++++ b/src/tests/cmocka/test_authtok.c
+@@ -437,6 +437,85 @@ void test_sss_authtok_2fa_blobs(void **state)
+     talloc_free(fa2);
+ }
+ 
++void test_sss_authtok_sc_blobs(void **state)
++{
++    int ret;
++    struct test_state *ts;
++    size_t needed_size;
++    uint8_t *buf;
++    const char *pin;
++    size_t pin_len;
++    const char *token_name;
++    size_t token_name_len;
++    const char *module_name;
++    size_t module_name_len;
++    const char *key_id;
++    size_t key_id_len;
++
++    ts = talloc_get_type_abort(*state, struct test_state);
++
++    ret = sss_auth_pack_sc_blob("abc", 0, "defg", 0, "hijkl", 0, "mnopqr", 0,
++                                NULL, 0, &needed_size);
++    assert_int_equal(ret, EAGAIN);
++
++    buf = talloc_size(ts, needed_size);
++    assert_non_null(buf);
++
++    ret = sss_auth_pack_sc_blob("abc", 0, "defg", 0, "hijkl", 0, "mnopqr", 0,
++                                buf, needed_size, &needed_size);
++    assert_int_equal(ret, EOK);
++
++#if __BYTE_ORDER == __LITTLE_ENDIAN
++    assert_memory_equal(buf, "\4\0\0\0\5\0\0\0\6\0\0\0\7\0\0\0abc\0defg\0hijkl\0mnopqr\0",
++                        needed_size);
++#else
++    assert_memory_equal(buf, "\0\0\0\4\0\0\0\5\0\0\0\6\0\0\0\7abc\0defg\0hijkl\0mnopqr\0",
++                        needed_size);
++#endif
++
++    ret = sss_authtok_set(ts->authtoken, SSS_AUTHTOK_TYPE_SC_PIN, buf,
++                          needed_size);
++    assert_int_equal(ret, EOK);
++
++    ret = sss_authtok_get_sc(ts->authtoken, &pin, &pin_len,
++                             &token_name, &token_name_len,
++                             &module_name, &module_name_len,
++                             &key_id, &key_id_len);
++    assert_int_equal(ret, EOK);
++    assert_int_equal(pin_len, 3);
++    assert_string_equal(pin, "abc");
++    assert_int_equal(token_name_len, 4);
++    assert_string_equal(token_name, "defg");
++    assert_int_equal(module_name_len, 5);
++    assert_string_equal(module_name, "hijkl");
++    assert_int_equal(key_id_len, 6);
++    assert_string_equal(key_id, "mnopqr");
++
++    ret = sss_authtok_get_sc(ts->authtoken, NULL, NULL,
++                             &token_name, &token_name_len,
++                             &module_name, &module_name_len,
++                             &key_id, &key_id_len);
++    assert_int_equal(ret, EOK);
++    assert_int_equal(token_name_len, 4);
++    assert_string_equal(token_name, "defg");
++    assert_int_equal(module_name_len, 5);
++    assert_string_equal(module_name, "hijkl");
++    assert_int_equal(key_id_len, 6);
++    assert_string_equal(key_id, "mnopqr");
++
++    ret = sss_authtok_get_sc(ts->authtoken, NULL, NULL,
++                             &token_name, NULL,
++                             &module_name, NULL,
++                             &key_id, NULL);
++    assert_int_equal(ret, EOK);
++    assert_string_equal(token_name, "defg");
++    assert_string_equal(module_name, "hijkl");
++    assert_string_equal(key_id, "mnopqr");
++
++    sss_authtok_set_empty(ts->authtoken);
++    talloc_free(buf);
++}
++
+ #define MISSING_NULL_CHECK do { \
+     assert_int_equal(ret, EOK); \
+     assert_int_equal(fa1_len, 3); \
+@@ -524,8 +603,8 @@ void test_sss_authtok_sc_pin(void **state)
+     assert_int_equal(sss_authtok_get_type(ts->authtoken),
+                      SSS_AUTHTOK_TYPE_SC_PIN);
+     size = sss_authtok_get_size(ts->authtoken);
+-    assert_int_equal(size, 9);
+-    assert_memory_equal(sss_authtok_get_data(ts->authtoken), "12345678\0",
++    assert_int_equal(size, 28);
++    assert_memory_equal(sss_authtok_get_data(ts->authtoken), "\11\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0" "12345678\0\0\0\0",
+                                              size);
+ 
+     ret = sss_authtok_set_sc_pin(ts->authtoken, "12345678", 5);
+@@ -533,8 +612,8 @@ void test_sss_authtok_sc_pin(void **state)
+     assert_int_equal(sss_authtok_get_type(ts->authtoken),
+                      SSS_AUTHTOK_TYPE_SC_PIN);
+     size = sss_authtok_get_size(ts->authtoken);
+-    assert_int_equal(size, 6);
+-    assert_memory_equal(sss_authtok_get_data(ts->authtoken), "12345\0",
++    assert_int_equal(size, 25);
++    assert_memory_equal(sss_authtok_get_data(ts->authtoken), "\6\0\0\0\1\0\0\0\1\0\0\0\1\0\0\0" "12345\0\0\0\0",
+                                              size);
+ 
+     ret = sss_authtok_get_sc_pin(ts->authtoken, &pin, &len);
+@@ -592,6 +671,8 @@ int main(int argc, const char *argv[])
+                                         setup, teardown),
+         cmocka_unit_test_setup_teardown(test_sss_authtok_sc_pin,
+                                         setup, teardown),
++        cmocka_unit_test_setup_teardown(test_sss_authtok_sc_blobs,
++                                        setup, teardown),
+     };
+ 
+     /* Set debug level to invalid value so we can deside if -d 0 was used. */
+diff --git a/src/util/authtok-utils.c b/src/util/authtok-utils.c
+index 65fba9022db11786c0c7e4dcab6fec89c9e0cb19..e7123df341ef0f1954b1202921124e9144909fc1 100644
+--- a/src/util/authtok-utils.c
++++ b/src/util/authtok-utils.c
+@@ -72,3 +72,94 @@ errno_t sss_auth_pack_2fa_blob(const char *fa1, size_t fa1_len,
+ 
+     return 0;
+ }
++
++errno_t sss_auth_pack_sc_blob(const char *pin, size_t pin_len,
++                              const char *token_name, size_t token_name_len,
++                              const char *module_name, size_t module_name_len,
++                              const char *key_id, size_t key_id_len,
++                              uint8_t *buf, size_t buf_len,
++                              size_t *_sc_blob_len)
++{
++    size_t c;
++    uint32_t tmp_uint32_t;
++
++    if (pin_len > UINT32_MAX || token_name_len > UINT32_MAX
++            || module_name_len > UINT32_MAX
++            || (pin_len != 0 && pin == NULL)
++            || (token_name_len != 0 && token_name == NULL)
++            || (module_name_len != 0 && module_name == NULL)
++            || (key_id_len != 0 && key_id == NULL)) {
++        return EINVAL;
++    }
++
++    /* A missing pin is ok in the case of a reader with a keyboard */
++    if (pin == NULL) {
++        pin = "";
++        pin_len = 0;
++    }
++
++    if (token_name == NULL) {
++        token_name = "";
++        token_name_len = 0;
++    }
++
++    if (module_name == NULL) {
++        module_name = "";
++        module_name_len = 0;
++    }
++
++    if (key_id == NULL) {
++        key_id = "";
++        key_id_len = 0;
++    }
++
++    /* len should not include the trailing \0 */
++    if (pin_len == 0 || pin[pin_len - 1] == '\0') {
++        pin_len = strlen(pin);
++    }
++
++    if (token_name_len == 0 || token_name[token_name_len - 1] == '\0') {
++        token_name_len = strlen(token_name);
++    }
++
++    if (module_name_len == 0 || module_name[module_name_len - 1] == '\0') {
++        module_name_len = strlen(module_name);
++    }
++
++    if (key_id_len == 0 || key_id[key_id_len - 1] == '\0') {
++        key_id_len = strlen(key_id);
++    }
++
++    *_sc_blob_len = pin_len + token_name_len + module_name_len + key_id_len + 4
++                            + 4 * sizeof(uint32_t);
++    if (buf == NULL || buf_len < *_sc_blob_len) {
++        return EAGAIN;
++    }
++
++    c = 0;
++    tmp_uint32_t = (uint32_t) pin_len + 1;
++    SAFEALIGN_COPY_UINT32(buf, &tmp_uint32_t, &c);
++    tmp_uint32_t = (uint32_t) token_name_len + 1;
++    SAFEALIGN_COPY_UINT32(buf + c, &tmp_uint32_t, &c);
++    tmp_uint32_t = (uint32_t) module_name_len + 1;
++    SAFEALIGN_COPY_UINT32(buf + c, &tmp_uint32_t, &c);
++    tmp_uint32_t = (uint32_t) key_id_len + 1;
++    SAFEALIGN_COPY_UINT32(buf + c, &tmp_uint32_t, &c);
++
++    memcpy(buf + c, pin, pin_len);
++    buf[c + pin_len] = '\0';
++    c += pin_len + 1;
++
++    memcpy(buf + c, token_name, token_name_len);
++    buf[c + token_name_len] = '\0';
++    c += token_name_len + 1;
++
++    memcpy(buf + c, module_name, module_name_len);
++    buf[c + module_name_len] = '\0';
++    c += module_name_len + 1;
++
++    memcpy(buf + c, key_id, key_id_len);
++    buf[c + key_id_len] = '\0';
++
++    return 0;
++}
+diff --git a/src/util/authtok-utils.h b/src/util/authtok-utils.h
+index 07aef3c18395d6e967289f6e345f27e9ee868da2..c5aace39feea0b3c7e24c7ea80206e663712a11c 100644
+--- a/src/util/authtok-utils.h
++++ b/src/util/authtok-utils.h
+@@ -25,6 +25,37 @@
+ #include "sss_client/sss_cli.h"
+ 
+ /**
++ * @brief Fill memory buffer with Smartcard authentication blob
++ *
++ * @param[in]  pin         PIN, null terminated
++ * @param[in]  pin_len     Length of the PIN, if 0
++ *                         strlen() will be called internally
++ * @param[in]  token_name  Token name, null terminated
++ * @param[in]  token_name_len     Length of the token name, if 0
++ *                         strlen() will be called internally
++ * @param[in]  module_name Name of PKCS#11 module, null terminated
++ * @param[in]  module_name_len     Length of the module name, if 0
++ *                         strlen() will be called internally
++ * @param[in]  key_id      Key ID of the certificate
++ * @param[in]  key_id_len  Length of the key id of the certificate, if 0
++ *                         strlen() will be called internally
++ * @param[in]  buf         memory buffer of size buf_len, may be NULL
++ * @param[in]  buf_len     size of memory buffer buf
++ *
++ * @param[out] _sc_blob    len size of the Smartcard authentication blob
++ *
++ * @return     EOK         on success
++ *             EINVAL      if input data is not consistent
++ *             EAGAIN      if provided buffer is too small, _sc_blob_len
++ *                         contains the size needed to store the SC blob
++ */
++errno_t sss_auth_pack_sc_blob(const char *pin, size_t pin_len,
++                              const char *token_name, size_t token_name_len,
++                              const char *module_name, size_t module_name_len,
++                              const char *key_id, size_t key_id_len,
++                              uint8_t *buf, size_t buf_len,
++                              size_t *_sc_blob_len);
++/**
+  * @brief Fill memory buffer with 2FA blob
+  *
+  * @param[in]  fa1       First authentication factor, null terminated
+@@ -67,4 +98,29 @@ errno_t sss_auth_unpack_2fa_blob(TALLOC_CTX *mem_ctx,
+                                  const uint8_t *blob, size_t blob_len,
+                                  char **fa1, size_t *_fa1_len,
+                                  char **fa2, size_t *_fa2_len);
++
++/**
++ * @brief Extract SC data from memory buffer
++ *
++ * @param[in]  mem_ctx           Talloc memory context to allocate the 2FA
++ *                               data on
++ * @param[in]  blob              Memory buffer containing the 2FA data
++ * @param[in]  blob_len          Size of the memory buffer
++ * @param[out] _pin              PIN, null terminated
++ * @param[out] _pin_len          Length of the PIN
++ * @param[out] _token_name       Token name, null terminated
++ * @param[out] _token_name_len   Length of the token name
++ * @param[out] _module_name      Name of PKCS#11 module, null terminated
++ * @param[out] _module_name_len  Length of the module name
++ *
++ * @return     EOK       on success
++ *             EINVAL    if input data is not consistent
++ *             EINVAL    if no memory can be allocated
++ */
++errno_t sss_auth_unpack_sc_blob(TALLOC_CTX *mem_ctx,
++                                 const uint8_t *blob, size_t blob_len,
++                                 char **pin, size_t *_pin_len,
++                                 char **token_name, size_t *_token_name_len,
++                                 char **module_name, size_t *_module_name_len,
++                                 char **key_id, size_t *_key_id_len);
+ #endif /*  __AUTHTOK_UTILS_H__ */
+diff --git a/src/util/authtok.c b/src/util/authtok.c
+index 6062cd875ce2c6b541ef237e7f7bdddac80366c5..c2f78be329230a255ce04ce68a01084f7f584c7c 100644
+--- a/src/util/authtok.c
++++ b/src/util/authtok.c
+@@ -196,10 +196,9 @@ errno_t sss_authtok_set(struct sss_auth_token *tok,
+     case SSS_AUTHTOK_TYPE_2FA:
+         return sss_authtok_set_2fa_from_blob(tok, data, len);
+     case SSS_AUTHTOK_TYPE_SC_PIN:
+-        return sss_authtok_set_sc_pin(tok, (const char*)data, len);
++        return sss_authtok_set_sc_from_blob(tok, data, len);
+     case SSS_AUTHTOK_TYPE_SC_KEYPAD:
+-        sss_authtok_set_sc_keypad(tok);
+-        return EOK;
++        return sss_authtok_set_sc_from_blob(tok, data, len);
+     case SSS_AUTHTOK_TYPE_EMPTY:
+         sss_authtok_set_empty(tok);
+         return EOK;
+@@ -425,6 +424,104 @@ errno_t sss_authtok_set_2fa(struct sss_auth_token *tok,
+     return EOK;
+ }
+ 
++errno_t sss_authtok_set_sc(struct sss_auth_token *tok,
++                           enum sss_authtok_type type,
++                           const char *pin, size_t pin_len,
++                           const char *token_name, size_t token_name_len,
++                           const char *module_name, size_t module_name_len,
++                           const char *key_id, size_t key_id_len)
++{
++    int ret;
++    size_t needed_size;
++
++    if (type != SSS_AUTHTOK_TYPE_SC_PIN
++            && type != SSS_AUTHTOK_TYPE_SC_KEYPAD) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Invalid type [%d].\n", type);
++        return EINVAL;
++    }
++
++    sss_authtok_set_empty(tok);
++
++    ret = sss_auth_pack_sc_blob(pin, pin_len, token_name, token_name_len,
++                                module_name, module_name_len,
++                                key_id, key_id_len, NULL, 0,
++                                &needed_size);
++    if (ret != EAGAIN) {
++        DEBUG(SSSDBG_OP_FAILURE, "sss_auth_pack_sc_blob failed.\n");
++        return ret;
++    }
++
++    tok->data = talloc_size(tok, needed_size);
++    if (tok->data == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, "talloc_size failed.\n");
++        return ENOMEM;
++    }
++
++    ret = sss_auth_pack_sc_blob(pin, pin_len, token_name, token_name_len,
++                                module_name, module_name_len,
++                                key_id, key_id_len, tok->data,
++                                needed_size, &needed_size);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "sss_auth_pack_sc_blob failed.\n");
++        talloc_free(tok->data);
++        return ret;
++    }
++
++    tok->length = needed_size;
++    tok->type = type;
++
++    return EOK;
++}
++
++errno_t sss_authtok_set_sc_from_blob(struct sss_auth_token *tok,
++                                     const uint8_t *data,
++                                     size_t len)
++{
++    int ret;
++    char *pin = NULL;
++    size_t pin_len;
++    char *token_name = NULL;
++    size_t token_name_len;
++    char *module_name = NULL;
++    size_t module_name_len;
++    char *key_id = NULL;
++    size_t key_id_len;
++    TALLOC_CTX *tmp_ctx;
++
++    if (tok == NULL) {
++        return EFAULT;
++    }
++    if (data == NULL || len == 0) {
++        return EINVAL;
++    }
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, "talloc_new failed.\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = sss_auth_unpack_sc_blob(tmp_ctx, data, len, &pin, &pin_len,
++                                  &token_name, &token_name_len,
++                                  &module_name, &module_name_len,
++                                  &key_id, &key_id_len);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "sss_auth_unpack_sc_blob failed.\n");
++        goto done;
++    }
++
++    ret = sss_authtok_set_sc(tok, SSS_AUTHTOK_TYPE_SC_PIN, pin, pin_len,
++                             token_name, token_name_len,
++                             module_name, module_name_len,
++                             key_id, key_id_len);
++
++done:
++    talloc_free(tmp_ctx);
++
++    return ret;
++}
++
+ errno_t sss_authtok_set_sc_pin(struct sss_auth_token *tok, const char *pin,
+                                size_t len)
+ {
+@@ -435,15 +532,17 @@ errno_t sss_authtok_set_sc_pin(struct sss_auth_token *tok, const char *pin,
+         return EINVAL;
+     }
+ 
+-    sss_authtok_set_empty(tok);
+-
+-    return sss_authtok_set_string(tok, SSS_AUTHTOK_TYPE_SC_PIN,
+-                                  "sc_pin", pin, len);
++    return sss_authtok_set_sc(tok, SSS_AUTHTOK_TYPE_SC_PIN, pin, len,
++                              NULL, 0, NULL, 0, NULL, 0);
+ }
+ 
+-errno_t sss_authtok_get_sc_pin(struct sss_auth_token *tok, const char **pin,
++errno_t sss_authtok_get_sc_pin(struct sss_auth_token *tok, const char **_pin,
+                                size_t *len)
+ {
++    int ret;
++    const char *pin = NULL;
++    size_t pin_len;
++
+     if (!tok) {
+         return EFAULT;
+     }
+@@ -451,9 +550,16 @@ errno_t sss_authtok_get_sc_pin(struct sss_auth_token *tok, const char **pin,
+     case SSS_AUTHTOK_TYPE_EMPTY:
+         return ENOENT;
+     case SSS_AUTHTOK_TYPE_SC_PIN:
+-        *pin = (const char *)tok->data;
++        ret = sss_authtok_get_sc(tok, &pin, &pin_len,
++                                 NULL, NULL, NULL, NULL, NULL, NULL);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "sss_authtok_get_sc failed.\n");
++            return ret;
++        }
++
++        *_pin = pin;
+         if (len) {
+-            *len = tok->length - 1;
++            *len = pin_len;
+         }
+         return EOK;
+     case SSS_AUTHTOK_TYPE_PASSWORD:
+@@ -468,10 +574,202 @@ errno_t sss_authtok_get_sc_pin(struct sss_auth_token *tok, const char **pin,
+ 
+ void sss_authtok_set_sc_keypad(struct sss_auth_token *tok)
+ {
+-    if (!tok) {
++    if (tok == NULL) {
+         return;
+     }
++
+     sss_authtok_set_empty(tok);
+ 
+     tok->type = SSS_AUTHTOK_TYPE_SC_KEYPAD;
+ }
++
++errno_t sss_auth_unpack_sc_blob(TALLOC_CTX *mem_ctx,
++                                 const uint8_t *blob, size_t blob_len,
++                                 char **pin, size_t *_pin_len,
++                                 char **token_name, size_t *_token_name_len,
++                                 char **module_name, size_t *_module_name_len,
++                                 char **key_id, size_t *_key_id_len)
++{
++    size_t c;
++    uint32_t pin_len;
++    uint32_t token_name_len;
++    uint32_t module_name_len;
++    uint32_t key_id_len;
++
++    c = 0;
++
++    if (blob == NULL || blob_len == 0) {
++        pin_len = 0;
++        token_name_len = 0;
++        module_name_len = 0;
++        key_id_len = 0;
++    } else if (blob_len > 0
++                && strnlen((const char *) blob, blob_len) == blob_len - 1) {
++        pin_len = blob_len;
++        token_name_len = 0;
++        module_name_len = 0;
++        key_id_len = 0;
++    } else {
++        if (blob_len < 4 * sizeof(uint32_t)) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Blob too small.\n");
++            return EINVAL;
++        }
++
++        SAFEALIGN_COPY_UINT32(&pin_len, blob, &c);
++        SAFEALIGN_COPY_UINT32(&token_name_len, blob + c, &c);
++        SAFEALIGN_COPY_UINT32(&module_name_len, blob + c, &c);
++        SAFEALIGN_COPY_UINT32(&key_id_len, blob + c, &c);
++
++        if (blob_len != 4 * sizeof(uint32_t) + pin_len + token_name_len
++                                             + module_name_len + key_id_len) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Blob size mismatch.\n");
++            return EINVAL;
++        }
++    }
++
++    if (pin_len != 0) {
++        *pin = talloc_strndup(mem_ctx, (const char *) blob + c, pin_len);
++        if (*pin == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, "talloc_strndup failed.\n");
++            return ENOMEM;
++        }
++    } else {
++        *pin = NULL;
++    }
++
++    if (token_name_len != 0) {
++        *token_name = talloc_strndup(mem_ctx, (const char *) blob + c + pin_len,
++                                     token_name_len);
++        if (*token_name == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, "talloc_strndup failed.\n");
++            talloc_free(*pin);
++            return ENOMEM;
++        }
++    } else {
++        *token_name = NULL;
++    }
++
++    if (module_name_len != 0) {
++        *module_name = talloc_strndup(mem_ctx,
++                                      (const char *) blob + c + pin_len
++                                                              + token_name_len,
++                                      module_name_len);
++        if (*module_name == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, "talloc_strndup failed.\n");
++            talloc_free(*pin);
++            talloc_free(*token_name);
++            return ENOMEM;
++        }
++    } else {
++        *module_name = NULL;
++    }
++
++    if (key_id_len != 0) {
++        *key_id = talloc_strndup(mem_ctx,
++                                      (const char *) blob + c + pin_len
++                                                              + token_name_len
++                                                              + module_name_len,
++                                      key_id_len);
++        if (*key_id == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, "talloc_strndup failed.\n");
++            talloc_free(*pin);
++            talloc_free(*token_name);
++            talloc_free(*module_name);
++            return ENOMEM;
++        }
++    } else {
++        *key_id = NULL;
++    }
++
++    /* Re-calculate length for the case where \0 was missing in the blob */
++    if (_pin_len != NULL) {
++        *_pin_len = (*pin == NULL) ? 0 : strlen(*pin);
++    }
++    if (_token_name_len != NULL) {
++        *_token_name_len = (*token_name == NULL) ? 0 : strlen(*token_name);
++    }
++    if (_module_name_len != NULL) {
++        *_module_name_len = (*module_name == NULL) ? 0 : strlen(*module_name);
++    }
++
++    if (_key_id_len != NULL) {
++        *_key_id_len = (*key_id == NULL) ? 0 : strlen(*key_id);
++    }
++
++    return EOK;
++}
++
++errno_t sss_authtok_get_sc(struct sss_auth_token *tok,
++                           const char **_pin, size_t *_pin_len,
++                           const char **_token_name, size_t *_token_name_len,
++                           const char **_module_name, size_t *_module_name_len,
++                           const char **_key_id, size_t *_key_id_len)
++{
++    size_t c = 0;
++    size_t pin_len;
++    size_t token_name_len;
++    size_t module_name_len;
++    size_t key_id_len;
++    uint32_t tmp_uint32_t;
++
++    if (!tok) {
++        return EFAULT;
++    }
++
++    if (tok->type != SSS_AUTHTOK_TYPE_SC_PIN
++            && tok->type != SSS_AUTHTOK_TYPE_SC_KEYPAD) {
++        return (tok->type == SSS_AUTHTOK_TYPE_EMPTY) ? ENOENT : EACCES;
++    }
++
++    if (tok->length < 4 * sizeof(uint32_t)) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Blob too small.\n");
++        return EINVAL;
++    }
++
++    SAFEALIGN_COPY_UINT32(&tmp_uint32_t, tok->data, &c);
++    pin_len = tmp_uint32_t - 1;
++    SAFEALIGN_COPY_UINT32(&tmp_uint32_t, tok->data + c, &c);
++    token_name_len = tmp_uint32_t - 1;
++    SAFEALIGN_COPY_UINT32(&tmp_uint32_t, tok->data + c, &c);
++    module_name_len = tmp_uint32_t -1;
++    SAFEALIGN_COPY_UINT32(&tmp_uint32_t, tok->data + c, &c);
++    key_id_len = tmp_uint32_t -1;
++
++    if (tok->length != 4 * sizeof(uint32_t) +  4 + pin_len + token_name_len
++                                         + module_name_len + key_id_len) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Blob size mismatch.\n");
++        return EINVAL;
++    }
++
++    if (_pin != NULL) {
++        *_pin = (const char *) tok->data + c;
++    }
++    if (_pin_len != NULL) {
++        *_pin_len = pin_len;
++    }
++
++    if (_token_name != NULL) {
++        *_token_name = (const char *) tok->data + c + pin_len + 1;
++    }
++    if (_token_name_len != NULL) {
++        *_token_name_len = token_name_len;
++    }
++
++    if (_module_name != NULL) {
++        *_module_name = (const char *) tok->data + c + pin_len + 1
++                                                     + token_name_len + 1;
++    }
++    if (_module_name_len != NULL) {
++        *_module_name_len = module_name_len;
++    }
++
++    if (_key_id != NULL) {
++        *_key_id = (const char *) tok->data + c + pin_len + 1
++                               + token_name_len + 1 + module_name_len + 1;
++    }
++    if (_key_id_len != NULL) {
++        *_key_id_len = key_id_len;
++    }
++
++    return EOK;
++}
+diff --git a/src/util/authtok.h b/src/util/authtok.h
+index f1a01a42306a720fc39e701078550a071835e980..c146ba2066f2aca032e04d6a33459c47c963370f 100644
+--- a/src/util/authtok.h
++++ b/src/util/authtok.h
+@@ -264,4 +264,88 @@ errno_t sss_authtok_get_sc_pin(struct sss_auth_token *tok, const char **pin,
+  */
+ void sss_authtok_set_sc_keypad(struct sss_auth_token *tok);
+ 
++/**
++ * @brief Set complete Smart Card authentication blob including PKCS#11 token
++ *        name, module name and key id.
++ *
++ * @param tok             A pointer to an sss_auth_token
++ * @param type            Authentication token type, may be
++ *                        SSS_AUTHTOK_TYPE_SC_PIN or SSS_AUTHTOK_TYPE_SC_KEYPAD
++ * @param pin             A pointer to a const char *, that will point to a null
++ *                        terminated string containing the pin
++ * @param pin_len         The length of the pin string, if set to 0 it will be
++ *                        calculated
++ * @param token_name      A pointer to a const char *, that will point to a null
++ *                        terminated string containing the PKCS#11 token name
++ * @param token_name_len  The length of the token name string, if set to 0 it
++ *                        will be calculated
++ * @param module_name     A pointer to a const char *, that will point to a null
++ *                        terminated string containing the PKCS#11 module name
++ * @param module_name_len The length of the module name string, if set to 0 it
++ *                        will be calculated
++ * @param key_id          A pointer to a const char *, that will point to a null
++ *                        terminated string containing the PKCS#11 key id
++ * @param key_id_len      The length of the key id string, if set to 0 it will be
++ *                        calculated
++ *
++ * @return       EOK on success
++ *               EINVAL unexpected or inval input
++ *               ENOMEM memory allocation error
++ */
++errno_t sss_authtok_set_sc(struct sss_auth_token *tok,
++                           enum sss_authtok_type type,
++                           const char *pin, size_t pin_len,
++                           const char *token_name, size_t token_name_len,
++                           const char *module_name, size_t module_name_len,
++                           const char *key_id, size_t key_id_len);
++/**
++ * @brief Set a Smart Card authentication data, replacing any previous data
++ *
++ * @param tok    A pointer to a sss_auth_token structure to change, also
++ *               used as a memory context to allocate the internal data.
++ * @param data   Smart Card authentication data blob
++ * @param len    The length of the blob
++ *
++ * @return       EOK on success
++ *               ENOMEM on error
++ */
++errno_t sss_authtok_set_sc_from_blob(struct sss_auth_token *tok,
++                                     const uint8_t *data,
++                                     size_t len);
++
++/**
++ * @brief Get complete Smart Card authtoken data
++ *
++ * @param tok                   A pointer to a sss_auth_token structure
++ * @param[out] _pin             A pointer to a const char *, that will point to
++ *                              a null terminated string holding the pin,
++ *                              may not be modified or freed
++ * @param[out] _pin__len        Length of the pin
++ * @param[out] _token_name      A pointer to a const char *, that will point to
++ *                              a null terminated string holding the PKCS#11
++ *                              token name, may not be modified or freed
++ * @param[out] _token_name_len  Length of the PKCS#11 token name
++ * @param[out] _module_name     A pointer to a const char *, that will point to
++ *                              a null terminated string holding the PKCS#11
++ *                              module name, may not be modified or freed
++ * @param[out] _module_name_len Length of the PKCS#11 module name
++ * @param[out] _key_id          A pointer to a const char *, that will point to
++ *                              a null terminated string holding the PKCS#11
++ *                              key id, may not be modified or freed
++ * @param[out] _key_id_len      Length of the PKCS#11 key id
++ *
++ * Any of the output pointers may be NULL if the caller does not need the
++ * specific item.
++ *
++ * @return     EOK     on success
++ *             EFAULT  missing token
++ *             EINVAL  if input data is not consistent
++ *             ENOENT  if the token is empty
++ *             EACCESS if the token is not a Smart Card token
++ */
++errno_t sss_authtok_get_sc(struct sss_auth_token *tok,
++                           const char **_pin, size_t *_pin_len,
++                           const char **_token_name, size_t *_token_name_len,
++                           const char **_module_name, size_t *_module_name_len,
++                           const char **_key_id, size_t *_key_id_len);
+ #endif /*  __AUTHTOK_H__ */
+-- 
+2.9.3
+

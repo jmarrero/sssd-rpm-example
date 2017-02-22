@@ -1,0 +1,72 @@
+From 327a16652bbafbb77b5b90cc7abac3ded7c14364 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 25 Jan 2017 17:34:54 +0100
+Subject: [PATCH 78/95] PAM: fix memory leak in pam_sss
+
+Since there can be multiple rounds trips between the PAM client and SSSD
+it might be possible that the same data is send multiple times by SSSD.
+So before overriding the old data it should be freed. I've seen this
+with the domain name which is send both in the pre-auth and the auth
+responses. To be on the safe side I added free() for some other items as
+well.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/sss_client/pam_sss.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/sss_client/pam_sss.c b/src/sss_client/pam_sss.c
+index 03613b8cd0cc3e3521f520e86d5e67371ed6ed48..8f97af77e3a0c2fa26c84962b6438fe774a75f1a 100644
+--- a/src/sss_client/pam_sss.c
++++ b/src/sss_client/pam_sss.c
+@@ -869,6 +869,7 @@ static int eval_response(pam_handle_t *pamh, size_t buflen, uint8_t *buf,
+                     break;
+                 }
+                 D(("domain name: [%s]", &buf[p]));
++                free(pi->domain_name);
+                 pi->domain_name = strdup((char *) &buf[p]);
+                 if (pi->domain_name == NULL) {
+                     D(("strdup failed"));
+@@ -937,6 +938,7 @@ static int eval_response(pam_handle_t *pamh, size_t buflen, uint8_t *buf,
+                     break;
+                 }
+ 
++                free(pi->otp_vendor);
+                 pi->otp_vendor = strdup((char *) &buf[p]);
+                 if (pi->otp_vendor == NULL) {
+                     D(("strdup failed"));
+@@ -950,6 +952,7 @@ static int eval_response(pam_handle_t *pamh, size_t buflen, uint8_t *buf,
+                     pi->otp_vendor = NULL;
+                     break;
+                 }
++                free(pi->otp_token_id);
+                 pi->otp_token_id = strdup((char *) &buf[p + offset]);
+                 if (pi->otp_token_id == NULL) {
+                     D(("strdup failed"));
+@@ -963,6 +966,7 @@ static int eval_response(pam_handle_t *pamh, size_t buflen, uint8_t *buf,
+                     pi->otp_token_id = NULL;
+                     break;
+                 }
++                free(pi->otp_challenge);
+                 pi->otp_challenge = strdup((char *) &buf[p + offset]);
+                 if (pi->otp_challenge == NULL) {
+                     D(("strdup failed"));
+@@ -976,6 +980,7 @@ static int eval_response(pam_handle_t *pamh, size_t buflen, uint8_t *buf,
+                     break;
+                 }
+ 
++                free(pi->cert_user);
+                 pi->cert_user = strdup((char *) &buf[p]);
+                 if (pi->cert_user == NULL) {
+                     D(("strdup failed"));
+@@ -1010,6 +1015,7 @@ static int eval_response(pam_handle_t *pamh, size_t buflen, uint8_t *buf,
+                     pi->cert_user = NULL;
+                     break;
+                 }
++                free(pi->token_name);
+                 pi->token_name = strdup((char *) &buf[p + offset]);
+                 if (pi->token_name == NULL) {
+                     D(("strdup failed"));
+-- 
+2.9.3
+

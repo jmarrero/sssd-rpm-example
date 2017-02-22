@@ -1,0 +1,168 @@
+From b1afef0bc8d98c389a7f71307bee8ef9fc991ced Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 24 Jan 2017 14:02:51 +0100
+Subject: [PATCH 10/79] SBUS: use sss_ptr_hash for signals table
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This patch reuses sss_ptr_hash module introduced in NSS patches in sbus code.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/sbus/sssd_dbus_connection.c |  4 +--
+ src/sbus/sssd_dbus_private.h    |  5 ++--
+ src/sbus/sssd_dbus_signals.c    | 58 ++++++++++-------------------------------
+ 3 files changed, 18 insertions(+), 49 deletions(-)
+
+diff --git a/src/sbus/sssd_dbus_connection.c b/src/sbus/sssd_dbus_connection.c
+index 5e493fb03e835d5f939a599efdc07f7ab2f9be28..de134f2f21bfb9697fcc8a42622817bc50b54f2a 100644
+--- a/src/sbus/sssd_dbus_connection.c
++++ b/src/sbus/sssd_dbus_connection.c
+@@ -177,8 +177,8 @@ int sbus_init_connection(TALLOC_CTX *ctx,
+         return EIO;
+     }
+ 
+-    ret = sbus_incoming_signal_hash_init(conn, &conn->incoming_signals);
+-    if (ret != EOK) {
++    conn->incoming_signals = sbus_incoming_signal_hash_init(conn);
++    if (conn->incoming_signals == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot create incoming singals "
+               "hash table\n");
+         talloc_free(conn);
+diff --git a/src/sbus/sssd_dbus_private.h b/src/sbus/sssd_dbus_private.h
+index a5a2d47f4bfac99960fcca56aaa48077c36b96e4..a3d4bae166d5a4d17037b16094248d22de7e8f62 100644
+--- a/src/sbus/sssd_dbus_private.h
++++ b/src/sbus/sssd_dbus_private.h
+@@ -180,9 +180,8 @@ sbus_signal_handler(DBusConnection *conn,
+                     DBusMessage *message,
+                     void *handler_data);
+ 
+-errno_t
+-sbus_incoming_signal_hash_init(TALLOC_CTX *mem_ctx,
+-                               hash_table_t **_table);
++hash_table_t *
++sbus_incoming_signal_hash_init(TALLOC_CTX *mem_ctx);
+ 
+ void sbus_register_common_signals(struct sbus_connection *conn, void *pvt);
+ 
+diff --git a/src/sbus/sssd_dbus_signals.c b/src/sbus/sssd_dbus_signals.c
+index 3f463e603a625cae8415fb17f5cd811ef0c10e15..be1c8527e5513bc258e7764239d9b16af083ac65 100644
+--- a/src/sbus/sssd_dbus_signals.c
++++ b/src/sbus/sssd_dbus_signals.c
+@@ -23,6 +23,7 @@
+ #include <dhash.h>
+ 
+ #include "util/util.h"
++#include "util/sss_ptr_hash.h"
+ #include "sbus/sssd_dbus.h"
+ #include "sbus/sssd_dbus_private.h"
+ 
+@@ -60,11 +61,10 @@ struct sbus_incoming_signal_data {
+     void *handler_data;
+ };
+ 
+-errno_t
+-sbus_incoming_signal_hash_init(TALLOC_CTX *mem_ctx,
+-                               hash_table_t **_table)
++hash_table_t *
++sbus_incoming_signal_hash_init(TALLOC_CTX *mem_ctx)
+ {
+-    return sss_hash_create(mem_ctx, 10, _table);
++    return sss_ptr_hash_create(mem_ctx, NULL, NULL);
+ }
+ 
+ static errno_t
+@@ -76,30 +76,20 @@ sbus_incoming_signal_hash_add(hash_table_t *table,
+ {
+     TALLOC_CTX *tmp_ctx;
+     struct sbus_incoming_signal_data *data;
+-    hash_key_t key;
+-    hash_value_t value;
++    char *key;
+     errno_t ret;
+-    bool has_key;
+-    int hret;
+ 
+     tmp_ctx = talloc_new(NULL);
+     if (tmp_ctx == NULL) {
+         return ENOMEM;
+     }
+ 
+-    key.type = HASH_KEY_STRING;
+-    key.str = talloc_asprintf(tmp_ctx, "%s.%s", iface, a_signal);
+-    if (key.str == NULL) {
++    key = talloc_asprintf(tmp_ctx, "%s.%s", iface, a_signal);
++    if (key == NULL) {
+         ret = ENOMEM;
+         goto done;
+     }
+ 
+-    has_key = hash_has_key(table, &key);
+-    if (has_key) {
+-        ret = EEXIST;
+-        goto done;
+-    }
+-
+     data = talloc_zero(tmp_ctx, struct sbus_incoming_signal_data);
+     if (data == NULL) {
+         ret = ENOMEM;
+@@ -109,16 +99,11 @@ sbus_incoming_signal_hash_add(hash_table_t *table,
+     data->handler_data = handler_data;
+     data->handler_fn = handler_fn;
+ 
+-    value.type = HASH_VALUE_PTR;
+-    value.ptr = data;
+-
+-    hret = hash_enter(table, &key, &value);
+-    if (hret != HASH_SUCCESS) {
+-        ret = EIO;
++    ret = sss_ptr_hash_add(table, key, data, struct sbus_incoming_signal_data);
++    if (ret != EOK) {
+         goto done;
+     }
+ 
+-    talloc_steal(table, key.str);
+     talloc_steal(table, data);
+ 
+     ret = EOK;
+@@ -134,31 +119,16 @@ sbus_incoming_signal_hash_lookup(hash_table_t *table,
+                                  const char *a_signal)
+ {
+     struct sbus_incoming_signal_data *data;
+-    hash_key_t key;
+-    hash_value_t value;
+-    int hret;
++    char *key;
+ 
+-    key.type = HASH_KEY_STRING;
+-    key.str = talloc_asprintf(NULL, "%s.%s", iface, a_signal);
+-    if (key.str == NULL) {
++    key = talloc_asprintf(NULL, "%s.%s", iface, a_signal);
++    if (key == NULL) {
+         return NULL;
+     }
+ 
+-    hret = hash_lookup(table, &key, &value);
+-    if (hret == HASH_ERROR_KEY_NOT_FOUND) {
+-        data = NULL;
+-        goto done;
+-    } else if (hret != HASH_SUCCESS) {
+-        DEBUG(SSSDBG_OP_FAILURE,
+-              "Unable to search hash table: hret=%d\n", hret);
+-        data = NULL;
+-        goto done;
+-    }
++    data = sss_ptr_hash_lookup(table, key, struct sbus_incoming_signal_data);
++    talloc_free(key);
+ 
+-    data = talloc_get_type(value.ptr, struct sbus_incoming_signal_data);
+-
+-done:
+-    talloc_free(key.str);
+     return data;
+ }
+ 
+-- 
+2.9.3
+

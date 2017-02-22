@@ -1,0 +1,23 @@
+From 33da7b13eaed678789b7ccba00e49065a8838e9a Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 25 Jan 2017 16:46:31 +0100
+Subject: [PATCH 01/79] Updating the version to track the 1.15.1 release
+
+---
+ version.m4 | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/version.m4 b/version.m4
+index 5ff77ba10a8e8a512057e4176377ba33713eb285..bec03afc6e4357e8f505978b0474888c2ab16a85 100644
+--- a/version.m4
++++ b/version.m4
+@@ -1,5 +1,5 @@
+ # Primary version number
+-m4_define([VERSION_NUMBER], [1.15.0])
++m4_define([VERSION_NUMBER], [1.15.1])
+ 
+ # If the PRERELEASE_VERSION_NUMBER is set, we'll append
+ # it to the release tag when creating an RPM or SRPM
+-- 
+2.9.3
+

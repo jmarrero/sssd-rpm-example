@@ -1,0 +1,561 @@
+From c109f063b4469818fd335b8b509f0458e7b33b0a Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Sun, 30 Oct 2016 07:05:43 +0100
+Subject: [PATCH 42/79] RESPONDER: Add a responder sbus interface to set domain
+ state
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adds a generic responder s-bus interface that all responders implement.
+The interface currently contains methods that make it possible for a sssd
+domain to be marked as active or inconsistent by a back end.
+
+In the future, this commit will be superseded by sbus signals.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                                        | 18 ++++-
+ src/responder/common/iface/responder_domain.c      | 73 ++++++++++++++++++++
+ src/responder/common/iface/responder_iface.c       | 36 ++++++++++
+ src/responder/common/iface/responder_iface.h       | 37 ++++++++++
+ src/responder/common/iface/responder_iface.xml     | 13 ++++
+ .../common/iface/responder_iface_generated.c       | 78 ++++++++++++++++++++++
+ .../common/iface/responder_iface_generated.h       | 63 +++++++++++++++++
+ src/responder/common/responder_common.c            | 15 +++++
+ src/tests/cwrap/Makefile.am                        | 12 ++++
+ src/util/domain_info_utils.c                       | 19 ++++++
+ 10 files changed, 362 insertions(+), 2 deletions(-)
+ create mode 100644 src/responder/common/iface/responder_domain.c
+ create mode 100644 src/responder/common/iface/responder_iface.c
+ create mode 100644 src/responder/common/iface/responder_iface.h
+ create mode 100644 src/responder/common/iface/responder_iface.xml
+ create mode 100644 src/responder/common/iface/responder_iface_generated.c
+ create mode 100644 src/responder/common/iface/responder_iface_generated.h
+
+diff --git a/Makefile.am b/Makefile.am
+index 2304b39c7eb75225f7cd8cbc30d23592506c146e..32f62b5b4391e5d6efb7f7dc19e9b29eaa658550 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -516,6 +516,12 @@ SSSD_CACHE_REQ_OBJ = \
+ 	src/responder/common/cache_req/plugins/cache_req_host_by_name.c \
+ 	$(NULL)
+ 
++SSSD_RESPONDER_IFACE_OBJ = \
++    src/responder/common/iface/responder_iface.c \
++    src/responder/common/iface/responder_domain.c \
++    src/responder/common/iface/responder_iface_generated.c \
++    $(NULL)
++
+ SSSD_RESPONDER_OBJ = \
+     src/responder/common/negcache_files.c \
+     src/responder/common/negcache.c \
+@@ -530,6 +536,7 @@ SSSD_RESPONDER_OBJ = \
+     src/responder/common/data_provider/rdp_client.c \
+     src/monitor/monitor_iface_generated.c \
+     src/providers/data_provider_req.c \
++    $(SSSD_RESPONDER_IFACE_OBJ) \
+     $(SSSD_CACHE_REQ_OBJ) \
+     $(NULL)
+ 
+@@ -640,6 +647,8 @@ dist_noinst_HEADERS = \
+     src/responder/common/responder.h \
+     src/responder/common/responder_packet.h \
+     src/responder/common/responder_sbus.h \
++    src/responder/common/iface/responder_iface.h \
++    src/responder/common/iface/responder_iface_generated.h \
+     src/responder/common/cache_req/cache_req.h \
+     src/responder/common/cache_req/cache_req_plugin.h \
+     src/responder/common/cache_req/cache_req_private.h \
+@@ -1221,7 +1230,9 @@ CODEGEN_XML = \
+     $(srcdir)/src/providers/data_provider/dp_iface.xml \
+     $(srcdir)/src/providers/proxy/proxy_iface.xml \
+     $(srcdir)/src/responder/ifp/ifp_iface.xml \
+-    $(srcdir)/src/responder/nss/nss_iface.xml
++    $(srcdir)/src/responder/nss/nss_iface.xml \
++    $(srcdir)/src/responder/common/iface/responder_iface.xml \
++    $(NULL)
+ 
+ SBUS_CODEGEN = src/sbus/sbus_codegen
+ 
+@@ -2038,7 +2049,9 @@ responder_socket_access_tests_SOURCES = \
+     src/responder/common/responder_packet.c \
+     src/responder/common/responder_cmd.c \
+     src/responder/common/data_provider/rdp_message.c \
+-    src/responder/common/data_provider/rdp_client.c
++    src/responder/common/data_provider/rdp_client.c \
++    $(SSSD_RESPONDER_IFACE_OBJ) \
++    $(NULL)
+ responder_socket_access_tests_CFLAGS = \
+     $(AM_CFLAGS) \
+     $(CHECK_CFLAGS)
+@@ -2125,6 +2138,7 @@ TEST_MOCK_RESP_OBJ = \
+      src/responder/common/data_provider/rdp_client.c \
+      src/responder/common/responder_utils.c \
+      $(SSSD_CACHE_REQ_OBJ) \
++     $(SSSD_RESPONDER_IFACE_OBJ) \
+      $(NULL)
+ 
+ TEST_MOCK_PROVIDER_OBJ = \
+diff --git a/src/responder/common/iface/responder_domain.c b/src/responder/common/iface/responder_domain.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..2e7f788550b3cd0dcec20fc5b91fe8a4cb366875
+--- /dev/null
++++ b/src/responder/common/iface/responder_domain.c
+@@ -0,0 +1,73 @@
++/*
++    Copyright (C) 2016 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <string.h>
++#include <errno.h>
++
++#include "util/util.h"
++#include "sbus/sssd_dbus.h"
++#include "responder/common/responder.h"
++#include "responder/common/iface/responder_iface.h"
++
++static void set_domain_state_by_name(struct resp_ctx *rctx,
++                                     const char *domain_name,
++                                     enum sss_domain_state state)
++{
++    struct sss_domain_info *dom;
++
++    if (domain_name == NULL) {
++        DEBUG(SSSDBG_MINOR_FAILURE, "BUG: NULL domain name\n");
++        return;
++    }
++
++    DEBUG(SSSDBG_TRACE_LIBS, "Setting state of domain %s\n", domain_name);
++
++    for (dom = rctx->domains;
++         dom != NULL;
++         dom = get_next_domain(dom, SSS_GND_ALL_DOMAINS)) {
++
++        if (strcasecmp(dom->name, domain_name) == 0) {
++            break;
++        }
++    }
++
++    if (dom != NULL) {
++        sss_domain_set_state(dom, state);
++    }
++}
++
++int sss_resp_domain_active(struct sbus_request *req,
++                           void *data,
++                           const char *domain_name)
++{
++    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
++
++    DEBUG(SSSDBG_TRACE_LIBS, "Enabling domain %s\n", domain_name);
++    set_domain_state_by_name(rctx, domain_name, DOM_ACTIVE);
++    return iface_responder_domain_SetActive_finish(req);
++}
++
++int sss_resp_domain_inconsistent(struct sbus_request *req,
++                                 void *data,
++                                 const char *domain_name)
++{
++    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
++
++    DEBUG(SSSDBG_TRACE_LIBS, "Disabling domain %s\n", domain_name);
++    set_domain_state_by_name(rctx, domain_name, DOM_INCONSISTENT);
++    return iface_responder_domain_SetInconsistent_finish(req);
++}
+diff --git a/src/responder/common/iface/responder_iface.c b/src/responder/common/iface/responder_iface.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..f1e618b659af3e7a5ffa1b7307f3d61124180f0c
+--- /dev/null
++++ b/src/responder/common/iface/responder_iface.c
+@@ -0,0 +1,36 @@
++/*
++    Copyright (C) 2016 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "sbus/sssd_dbus.h"
++#include "responder/common/iface/responder_iface.h"
++#include "responder/common/responder.h"
++
++struct iface_responder_domain iface_responder_domain = {
++    { &iface_responder_domain_meta, 0 },
++    .SetActive = sss_resp_domain_active,
++    .SetInconsistent = sss_resp_domain_inconsistent,
++};
++
++static struct sbus_iface_map iface_map[] = {
++    { RESPONDER_PATH, &iface_responder_domain.vtable },
++    { NULL, NULL }
++};
++
++struct sbus_iface_map *responder_get_sbus_interface()
++{
++    return iface_map;
++}
+diff --git a/src/responder/common/iface/responder_iface.h b/src/responder/common/iface/responder_iface.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..abd7c83ce0b0efbc13867ffb56ec871503c92567
+--- /dev/null
++++ b/src/responder/common/iface/responder_iface.h
+@@ -0,0 +1,37 @@
++/*
++    Copyright (C) 2016 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef _RESPONDER_IFACE_H_
++#define _RESPONDER_IFACE_H_
++
++#include "responder/common/iface/responder_iface_generated.h"
++
++#define RESPONDER_PATH "/org/freedesktop/sssd/responder"
++
++struct sbus_iface_map *responder_get_sbus_interface(void);
++
++/* org.freedesktop.sssd.Responder.Domain */
++
++int sss_resp_domain_active(struct sbus_request *req,
++                           void *data,
++                           const char *domain_name);
++
++int sss_resp_domain_inconsistent(struct sbus_request *req,
++                                 void *data,
++                                 const char *domain_name);
++
++#endif /* _RESPONDER_IFACE_H_ */
+diff --git a/src/responder/common/iface/responder_iface.xml b/src/responder/common/iface/responder_iface.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..d3d0ff40ed5a8457492f2f54d551d9ae20cc56c3
+--- /dev/null
++++ b/src/responder/common/iface/responder_iface.xml
+@@ -0,0 +1,13 @@
++<!DOCTYPE node PUBLIC "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
++ "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
++<node>
++    <interface name="org.freedesktop.sssd.Responder.Domain">
++        <annotation value="iface_responder_domain" name="org.freedesktop.DBus.GLib.CSymbol"/>
++        <method name="SetActive">
++            <arg name="name" type="s" direction="in" />
++        </method>
++        <method name="SetInconsistent">
++            <arg name="name" type="s" direction="in" />
++        </method>
++    </interface>
++</node>
+diff --git a/src/responder/common/iface/responder_iface_generated.c b/src/responder/common/iface/responder_iface_generated.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..1d59eafed0eb739fb208c864b5b726cf9883df94
+--- /dev/null
++++ b/src/responder/common/iface/responder_iface_generated.c
+@@ -0,0 +1,78 @@
++/* The following definitions are auto-generated from responder_iface.xml */
++
++#include "util/util.h"
++#include "sbus/sssd_dbus.h"
++#include "sbus/sssd_dbus_meta.h"
++#include "sbus/sssd_dbus_invokers.h"
++#include "responder_iface_generated.h"
++
++/* invokes a handler with a 's' DBus signature */
++static int invoke_s_method(struct sbus_request *dbus_req, void *function_ptr);
++
++/* arguments for org.freedesktop.sssd.Responder.Domain.SetActive */
++const struct sbus_arg_meta iface_responder_domain_SetActive__in[] = {
++    { "name", "s" },
++    { NULL, }
++};
++
++int iface_responder_domain_SetActive_finish(struct sbus_request *req)
++{
++   return sbus_request_return_and_finish(req,
++                                         DBUS_TYPE_INVALID);
++}
++
++/* arguments for org.freedesktop.sssd.Responder.Domain.SetInconsistent */
++const struct sbus_arg_meta iface_responder_domain_SetInconsistent__in[] = {
++    { "name", "s" },
++    { NULL, }
++};
++
++int iface_responder_domain_SetInconsistent_finish(struct sbus_request *req)
++{
++   return sbus_request_return_and_finish(req,
++                                         DBUS_TYPE_INVALID);
++}
++
++/* methods for org.freedesktop.sssd.Responder.Domain */
++const struct sbus_method_meta iface_responder_domain__methods[] = {
++    {
++        "SetActive", /* name */
++        iface_responder_domain_SetActive__in,
++        NULL, /* no out_args */
++        offsetof(struct iface_responder_domain, SetActive),
++        invoke_s_method,
++    },
++    {
++        "SetInconsistent", /* name */
++        iface_responder_domain_SetInconsistent__in,
++        NULL, /* no out_args */
++        offsetof(struct iface_responder_domain, SetInconsistent),
++        invoke_s_method,
++    },
++    { NULL, }
++};
++
++/* interface info for org.freedesktop.sssd.Responder.Domain */
++const struct sbus_interface_meta iface_responder_domain_meta = {
++    "org.freedesktop.sssd.Responder.Domain", /* name */
++    iface_responder_domain__methods,
++    NULL, /* no signals */
++    NULL, /* no properties */
++    sbus_invoke_get_all, /* GetAll invoker */
++};
++
++/* invokes a handler with a 's' DBus signature */
++static int invoke_s_method(struct sbus_request *dbus_req, void *function_ptr)
++{
++    const char * arg_0;
++    int (*handler)(struct sbus_request *, void *, const char *) = function_ptr;
++
++    if (!sbus_request_parse_or_finish(dbus_req,
++                               DBUS_TYPE_STRING, &arg_0,
++                               DBUS_TYPE_INVALID)) {
++         return EOK; /* request handled */
++    }
++
++    return (handler)(dbus_req, dbus_req->intf->handler_data,
++                     arg_0);
++}
+diff --git a/src/responder/common/iface/responder_iface_generated.h b/src/responder/common/iface/responder_iface_generated.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..e7f5c64feb062e13dc04352128cada6883f6f4fa
+--- /dev/null
++++ b/src/responder/common/iface/responder_iface_generated.h
+@@ -0,0 +1,63 @@
++/* The following declarations are auto-generated from responder_iface.xml */
++
++#ifndef __RESPONDER_IFACE_XML__
++#define __RESPONDER_IFACE_XML__
++
++#include "sbus/sssd_dbus.h"
++
++/* ------------------------------------------------------------------------
++ * DBus Constants
++ *
++ * Various constants of interface and method names mostly for use by clients
++ */
++
++/* constants for org.freedesktop.sssd.Responder.Domain */
++#define IFACE_RESPONDER_DOMAIN "org.freedesktop.sssd.Responder.Domain"
++#define IFACE_RESPONDER_DOMAIN_SETACTIVE "SetActive"
++#define IFACE_RESPONDER_DOMAIN_SETINCONSISTENT "SetInconsistent"
++
++/* ------------------------------------------------------------------------
++ * DBus handlers
++ *
++ * These structures are filled in by implementors of the different
++ * dbus interfaces to handle method calls.
++ *
++ * Handler functions of type sbus_msg_handler_fn accept raw messages,
++ * other handlers are typed appropriately. If a handler that is
++ * set to NULL is invoked it will result in a
++ * org.freedesktop.DBus.Error.NotSupported error for the caller.
++ *
++ * Handlers have a matching xxx_finish() function (unless the method has
++ * accepts raw messages). These finish functions the
++ * sbus_request_return_and_finish() with the appropriate arguments to
++ * construct a valid reply. Once a finish function has been called, the
++ * @dbus_req it was called with is freed and no longer valid.
++ */
++
++/* vtable for org.freedesktop.sssd.Responder.Domain */
++struct iface_responder_domain {
++    struct sbus_vtable vtable; /* derive from sbus_vtable */
++    int (*SetActive)(struct sbus_request *req, void *data, const char *arg_name);
++    int (*SetInconsistent)(struct sbus_request *req, void *data, const char *arg_name);
++};
++
++/* finish function for SetActive */
++int iface_responder_domain_SetActive_finish(struct sbus_request *req);
++
++/* finish function for SetInconsistent */
++int iface_responder_domain_SetInconsistent_finish(struct sbus_request *req);
++
++/* ------------------------------------------------------------------------
++ * DBus Interface Metadata
++ *
++ * These structure definitions are filled in with the information about
++ * the interfaces, methods, properties and so on.
++ *
++ * The actual definitions are found in the accompanying C file next
++ * to this header.
++ */
++
++/* interface info for org.freedesktop.sssd.Responder.Domain */
++extern const struct sbus_interface_meta iface_responder_domain_meta;
++
++#endif /* __RESPONDER_IFACE_XML__ */
+diff --git a/src/responder/common/responder_common.c b/src/responder/common/responder_common.c
+index 67922bfccda8f00f256a4d1281aebfe20950d169..1959247ffda76d5041bc031c4c774aef9e0295d8 100644
+--- a/src/responder/common/responder_common.c
++++ b/src/responder/common/responder_common.c
+@@ -38,6 +38,7 @@
+ #include "confdb/confdb.h"
+ #include "sbus/sssd_dbus.h"
+ #include "responder/common/responder.h"
++#include "responder/common/iface/responder_iface.h"
+ #include "responder/common/responder_packet.h"
+ #include "providers/data_provider.h"
+ #include "monitor/monitor_interfaces.h"
+@@ -666,6 +667,7 @@ static int sss_dp_init(struct resp_ctx *rctx,
+ {
+     struct be_conn *be_conn;
+     int ret;
++    struct sbus_iface_map *resp_sbus_iface;
+ 
+     be_conn = talloc_zero(rctx, struct be_conn);
+     if (!be_conn) return ENOMEM;
+@@ -697,6 +699,19 @@ static int sss_dp_init(struct resp_ctx *rctx,
+         }
+     }
+ 
++    resp_sbus_iface = responder_get_sbus_interface();
++    if (resp_sbus_iface != NULL) {
++        ret = sbus_conn_register_iface_map(be_conn->conn,
++                                           resp_sbus_iface,
++                                           rctx);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_FATAL_FAILURE,
++                  "Cannot register generic responder iface at %s: %d\n",
++                  resp_sbus_iface->path, ret);
++            return ret;
++        }
++    }
++
+     DLIST_ADD_END(rctx->be_conns, be_conn, struct be_conn *);
+ 
+     /* Identify ourselves to the DP */
+diff --git a/src/tests/cwrap/Makefile.am b/src/tests/cwrap/Makefile.am
+index 09a8b5307dd3ebf9c7f27148097a90eac527a213..f50e9aa58fa5f2b0b8aa144582500d925a0a6438 100644
+--- a/src/tests/cwrap/Makefile.am
++++ b/src/tests/cwrap/Makefile.am
+@@ -63,6 +63,12 @@ SSSD_CACHE_REQ_OBJ = \
+     ../../../src/responder/common/cache_req/plugins/cache_req_host_by_name.c \
+     $(NULL)
+ 
++SSSD_RESPONDER_IFACE_OBJ = \
++    ../../../src/responder/common/iface/responder_iface.c \
++    ../../../src/responder/common/iface/responder_domain.c \
++    ../../../src/responder/common/iface/responder_iface_generated.c \
++    $(NULL)
++
+ SSSD_RESPONDER_OBJ = \
+     ../../../src/responder/common/negcache_files.c \
+     ../../../src/responder/common/negcache.c \
+@@ -77,6 +83,7 @@ SSSD_RESPONDER_OBJ = \
+     ../../../src/responder/common/data_provider/rdp_client.c \
+     ../../../src/monitor/monitor_iface_generated.c \
+     ../../../src/providers/data_provider_req.c \
++    $(SSSD_RESPONDER_IFACE_OBJ) \
+     $(SSSD_CACHE_REQ_OBJ) \
+     $(NULL)
+ 
+@@ -158,6 +165,9 @@ endif
+ 
+ responder_common_tests_SOURCES =\
+     test_responder_common.c \
++    ../../../src/responder/common/iface/responder_iface.c \
++    ../../../src/responder/common/iface/responder_domain.c \
++    ../../../src/responder/common/iface/responder_iface_generated.c \
+     ../../../src/responder/common/negcache_files.c \
+     ../../../src/responder/common/negcache.c \
+     ../../../src/responder/common/data_provider/rdp_message.c \
+@@ -165,6 +175,8 @@ responder_common_tests_SOURCES =\
+     ../../../src/responder/common/responder_common.c \
+     ../../../src/responder/common/responder_packet.c \
+     ../../../src/responder/common/responder_cmd.c \
++    ../../../src/tests/cmocka/common_mock_resp_dp.c \
++    $(SSSD_CACHE_REQ_OBJ) \
+     $(NULL)
+ responder_common_tests_CFLAGS = \
+     $(AM_CFLAGS) \
+diff --git a/src/util/domain_info_utils.c b/src/util/domain_info_utils.c
+index 0feda148bd44b9cefc43c094ddc5a72820412322..6ef6bcfb8c078a360673b6bdd2364fc2918cb324 100644
+--- a/src/util/domain_info_utils.c
++++ b/src/util/domain_info_utils.c
+@@ -814,8 +814,25 @@ done:
+     return ret;
+ }
+ 
++static const char *domain_state_str(struct sss_domain_info *dom)
++{
++    switch (dom->state) {
++    case DOM_ACTIVE:
++        return "Active";
++    case DOM_DISABLED:
++        return "Disabled";
++    case DOM_INACTIVE:
++        return "Inactive";
++    case DOM_INCONSISTENT:
++        return "Inconsistent";
++    }
++    return "Unknown";
++}
++
+ enum sss_domain_state sss_domain_get_state(struct sss_domain_info *dom)
+ {
++    DEBUG(SSSDBG_TRACE_LIBS,
++          "Domain %s is %s\n", dom->name, domain_state_str(dom));
+     return dom->state;
+ }
+ 
+@@ -823,6 +840,8 @@ void sss_domain_set_state(struct sss_domain_info *dom,
+                           enum sss_domain_state state)
+ {
+     dom->state = state;
++    DEBUG(SSSDBG_TRACE_LIBS,
++          "Domain %s is %s\n", dom->name, domain_state_str(dom));
+ }
+ 
+ bool is_email_from_domain(const char *email, struct sss_domain_info *dom)
+-- 
+2.9.3
+

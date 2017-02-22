@@ -1,0 +1,44 @@
+From 86bcc81a665dde4799d67ab7ea2bbd23608e7dab Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Fri, 3 Feb 2017 18:31:51 +0100
+Subject: [PATCH 75/79] MONITOR: Don't return an error in case we fail to
+ register a service
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This behaviour was mistakenly changed by the {dbus,socket}-activation
+series and, as it's now, I've noticed the monitor may end up in some
+weird state due to this change, where it doesn't stop properly and leave
+some defuncts children processes.
+
+Let's change it back to what it was before and avoid possible
+regressions (even if no regression where hit yet).
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/monitor/monitor.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index bc7402103d8024391d2ee27f48b28247ff9cd49c..59bf70741b76871c4937ad75c448aaf776cc37eb 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -372,11 +372,7 @@ static int client_registration(struct sbus_request *dbus_req, void *data)
+         sbus_request_finish(dbus_req, NULL);
+         /* FIXME: should we just talloc_zfree(conn) ? */
+ 
+-        if (ret == ENOENT) {
+-            goto done;
+-        }
+-
+-        return ret;
++        goto done;
+     }
+ 
+     /* Fill in svc structure with connection data */
+-- 
+2.9.3
+

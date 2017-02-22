@@ -1,0 +1,47 @@
+From 0965a77c4ff0b358d24582955cb7ae375ebaa0d2 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 22 Feb 2017 11:39:48 +0100
+Subject: [PATCH 74/79] pam_sss: check conversation callback
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+With this patch pam_sss checks if a conversation callback is available
+before using it.
+
+Resolves https://fedorahosted.org/sssd/ticket/3296
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/sss_client/pam_sss.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/sss_client/pam_sss.c b/src/sss_client/pam_sss.c
+index b4175ae2c7fc1385a19f81045695bcd73d43f754..03613b8cd0cc3e3521f520e86d5e67371ed6ed48 100644
+--- a/src/sss_client/pam_sss.c
++++ b/src/sss_client/pam_sss.c
+@@ -205,6 +205,10 @@ static int do_pam_conversation(pam_handle_t *pamh, const int msg_style,
+ 
+     ret=pam_get_item(pamh, PAM_CONV, (const void **) &conv);
+     if (ret != PAM_SUCCESS) return ret;
++    if (conv == NULL || conv->conv == NULL) {
++        logger(pamh, LOG_ERR, "No conversation function");
++        return PAM_SYSTEM_ERR;
++    }
+ 
+     do {
+         pam_msg = malloc(sizeof(struct pam_message));
+@@ -1304,6 +1308,10 @@ static int prompt_2fa(pam_handle_t *pamh, struct pam_items *pi,
+     if (ret != PAM_SUCCESS) {
+         return ret;
+     }
++    if (conv == NULL || conv->conv == NULL) {
++        logger(pamh, LOG_ERR, "No conversation function");
++        return PAM_SYSTEM_ERR;
++    }
+ 
+     m[0].msg_style = PAM_PROMPT_ECHO_OFF;
+     m[0].msg = prompt_fa1;
+-- 
+2.9.3
+

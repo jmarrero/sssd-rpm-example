@@ -1,0 +1,453 @@
+From 53c31b83e4d06ea4c2813eec2f1e647a613b4a2b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 18 Jan 2017 12:12:01 +0100
+Subject: [PATCH 29/79] cache_req: add host by name search
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ Makefile.am                                        |   3 +-
+ src/responder/common/cache_req/cache_req.c         |   2 +
+ src/responder/common/cache_req/cache_req.h         |  23 ++++
+ src/responder/common/cache_req/cache_req_data.c    |  39 +++++++
+ src/responder/common/cache_req/cache_req_plugin.h  |   1 +
+ src/responder/common/cache_req/cache_req_private.h |   1 +
+ .../cache_req/plugins/cache_req_host_by_name.c     | 121 +++++++++++++++++++++
+ src/responder/common/responder.h                   |  15 +++
+ .../{ssh/sshsrv_dp.c => common/responder_dp_ssh.c} |   3 +-
+ src/responder/ssh/sshsrv_private.h                 |  15 ---
+ src/tests/cmocka/common_mock_resp_dp.c             |  33 ++++++
+ src/tests/cwrap/Makefile.am                        |   2 +
+ 12 files changed, 240 insertions(+), 18 deletions(-)
+ create mode 100644 src/responder/common/cache_req/plugins/cache_req_host_by_name.c
+ rename src/responder/{ssh/sshsrv_dp.c => common/responder_dp_ssh.c} (99%)
+
+diff --git a/Makefile.am b/Makefile.am
+index 9dd2060c6615b1c23ae8adb61886341bcdc49560..6592261df87fc4fd0b83aba42e9f5cd12238a6cb 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -513,6 +513,7 @@ SSSD_CACHE_REQ_OBJ = \
+ 	src/responder/common/cache_req/plugins/cache_req_svc_by_name.c \
+ 	src/responder/common/cache_req/plugins/cache_req_svc_by_port.c \
+ 	src/responder/common/cache_req/plugins/cache_req_netgroup_by_name.c \
++	src/responder/common/cache_req/plugins/cache_req_host_by_name.c \
+ 	$(NULL)
+ 
+ SSSD_RESPONDER_OBJ = \
+@@ -521,6 +522,7 @@ SSSD_RESPONDER_OBJ = \
+     src/responder/common/responder_cmd.c \
+     src/responder/common/responder_common.c \
+     src/responder/common/responder_dp.c \
++    src/responder/common/responder_dp_ssh.c \
+     src/responder/common/responder_packet.c \
+     src/responder/common/responder_get_domains.c \
+     src/responder/common/responder_utils.c \
+@@ -1331,7 +1333,6 @@ endif
+ if BUILD_SSH
+ sssd_ssh_SOURCES = \
+     src/responder/ssh/sshsrv.c \
+-    src/responder/ssh/sshsrv_dp.c \
+     src/responder/ssh/sshsrv_cmd.c \
+     $(SSSD_RESPONDER_OBJ) \
+     $(NULL)
+diff --git a/src/responder/common/cache_req/cache_req.c b/src/responder/common/cache_req/cache_req.c
+index 31c220b3a66db815100b10a4f2e04388c13eaf78..16429c666a6db79afaad52b509fc63d639815b31 100644
+--- a/src/responder/common/cache_req/cache_req.c
++++ b/src/responder/common/cache_req/cache_req.c
+@@ -56,6 +56,8 @@ cache_req_get_plugin(enum cache_req_type type)
+         &cache_req_svc_by_port,
+ 
+         &cache_req_netgroup_by_name,
++
++        &cache_req_host_by_name,
+     };
+ 
+     if (type >= CACHE_REQ_SENTINEL) {
+diff --git a/src/responder/common/cache_req/cache_req.h b/src/responder/common/cache_req/cache_req.h
+index 2740c21ee0e390c64d94fedd6ab2cb7483cfe302..185558d7d7abd03429e35f391616d249e52c2f76 100644
+--- a/src/responder/common/cache_req/cache_req.h
++++ b/src/responder/common/cache_req/cache_req.h
+@@ -52,6 +52,8 @@ enum cache_req_type {
+ 
+     CACHE_REQ_NETGROUP_BY_NAME,
+ 
++    CACHE_REQ_HOST_BY_NAME,
++
+     CACHE_REQ_SENTINEL
+ };
+ 
+@@ -103,6 +105,13 @@ cache_req_data_svc(TALLOC_CTX *mem_ctx,
+                    const char *protocol,
+                    uint16_t port);
+ 
++struct cache_req_data *
++cache_req_data_host(TALLOC_CTX *mem_ctx,
++                    enum cache_req_type type,
++                    const char *name,
++                    const char *alias,
++                    const char **attrs);
++
+ /* Output data. */
+ 
+ struct cache_req_result {
+@@ -377,4 +386,18 @@ cache_req_netgroup_by_name_send(TALLOC_CTX *mem_ctx,
+ #define cache_req_netgroup_by_name_recv(mem_ctx, req, _result) \
+     cache_req_single_domain_recv(mem_ctx, req, _result)
+ 
++struct tevent_req *
++cache_req_host_by_name_send(TALLOC_CTX *mem_ctx,
++                            struct tevent_context *ev,
++                            struct resp_ctx *rctx,
++                            struct sss_nc_ctx *ncache,
++                            int cache_refresh_percent,
++                            const char *domain,
++                            const char *name,
++                            const char *alias,
++                            const char **attrs);
++
++#define cache_req_host_by_name_recv(mem_ctx, req, _result) \
++    cache_req_single_domain_recv(mem_ctx, req, _result)
++
+ #endif /* _CACHE_REQ_H_ */
+diff --git a/src/responder/common/cache_req/cache_req_data.c b/src/responder/common/cache_req/cache_req_data.c
+index d0564785f7fc5ffe826b197a41da720e9f26a43a..b2e22ec1bab699ad71978df6905df19908369ff1 100644
+--- a/src/responder/common/cache_req/cache_req_data.c
++++ b/src/responder/common/cache_req/cache_req_data.c
+@@ -188,6 +188,29 @@ cache_req_data_create(TALLOC_CTX *mem_ctx,
+         }
+ 
+         break;
++    case CACHE_REQ_HOST_BY_NAME:
++        if (input->name.input == NULL) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Bug: name cannot be NULL!\n");
++            ret = ERR_INTERNAL;
++            goto done;
++        }
++
++        data->name.input = talloc_strdup(data, input->name.input);
++        if (data->name.input == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++
++        if (input->alias == NULL) {
++            break;
++        }
++
++        data->alias = talloc_strdup(data, input->alias);
++        if (data->alias == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++        break;
+     case CACHE_REQ_SENTINEL:
+         DEBUG(SSSDBG_CRIT_FAILURE, "Invalid cache request type!\n");
+         ret = ERR_INTERNAL;
+@@ -318,3 +341,19 @@ cache_req_data_svc(TALLOC_CTX *mem_ctx,
+ 
+     return cache_req_data_create(mem_ctx, type, &input);
+ }
++
++struct cache_req_data *
++cache_req_data_host(TALLOC_CTX *mem_ctx,
++                    enum cache_req_type type,
++                    const char *name,
++                    const char *alias,
++                    const char **attrs)
++{
++    struct cache_req_data input = {0};
++
++    input.name.input = name;
++    input.alias = alias;
++    input.attrs = attrs;
++
++    return cache_req_data_create(mem_ctx, type, &input);
++}
+diff --git a/src/responder/common/cache_req/cache_req_plugin.h b/src/responder/common/cache_req/cache_req_plugin.h
+index 61e346dacfe0d180fb2aae354bc7867093276ab0..e0b619528f6aa31a10a5b48c3c5acc96de90caa1 100644
+--- a/src/responder/common/cache_req/cache_req_plugin.h
++++ b/src/responder/common/cache_req/cache_req_plugin.h
+@@ -231,5 +231,6 @@ extern const struct cache_req_plugin cache_req_enum_svc;
+ extern const struct cache_req_plugin cache_req_svc_by_name;
+ extern const struct cache_req_plugin cache_req_svc_by_port;
+ extern const struct cache_req_plugin cache_req_netgroup_by_name;
++extern const struct cache_req_plugin cache_req_host_by_name;
+ 
+ #endif /* _CACHE_REQ_PLUGIN_H_ */
+diff --git a/src/responder/common/cache_req/cache_req_private.h b/src/responder/common/cache_req/cache_req_private.h
+index b544b739e92552189f806f4675ff28689b91ce66..cc473759159fe324e37a4c51dc15ed136f6a09ef 100644
+--- a/src/responder/common/cache_req/cache_req_private.h
++++ b/src/responder/common/cache_req/cache_req_private.h
+@@ -76,6 +76,7 @@ struct cache_req_data {
+     uint32_t id;
+     const char *cert;
+     const char *sid;
++    const char *alias;
+     const char **attrs;
+ 
+     struct {
+diff --git a/src/responder/common/cache_req/plugins/cache_req_host_by_name.c b/src/responder/common/cache_req/plugins/cache_req_host_by_name.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..18511e33bc18e44f418a26764f066ff287092d26
+--- /dev/null
++++ b/src/responder/common/cache_req/plugins/cache_req_host_by_name.c
+@@ -0,0 +1,121 @@
++/*
++    Authors:
++        Pavel Březina <pbrezina@redhat.com>
++
++    Copyright (C) 2016 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <talloc.h>
++#include <ldb.h>
++
++#include "db/sysdb_ssh.h"
++#include "util/util.h"
++#include "providers/data_provider.h"
++#include "responder/common/cache_req/cache_req_plugin.h"
++
++static const char *
++cache_req_host_by_name_create_debug_name(TALLOC_CTX *mem_ctx,
++                                         struct cache_req_data *data,
++                                         struct sss_domain_info *domain)
++{
++    return talloc_strdup(mem_ctx, data->name.name);
++}
++
++static errno_t
++cache_req_host_by_name_lookup(TALLOC_CTX *mem_ctx,
++                              struct cache_req *cr,
++                              struct cache_req_data *data,
++                              struct sss_domain_info *domain,
++                              struct ldb_result **_result)
++{
++    struct ldb_result *result;
++    struct ldb_message *msg;
++    errno_t ret;
++
++    ret = sysdb_get_ssh_host(mem_ctx, domain, data->name.name,
++                             data->attrs, &msg);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    result = cache_req_create_ldb_result_from_msg(mem_ctx, msg);
++    if (result == NULL) {
++        return ENOMEM;
++    }
++
++    *_result = result;
++
++    return EOK;
++}
++
++struct tevent_req *
++cache_req_host_by_name_dp_send(TALLOC_CTX *mem_ctx,
++                               struct cache_req *cr,
++                               struct cache_req_data *data,
++                               struct sss_domain_info *domain,
++                               struct ldb_result *result)
++{
++    return sss_dp_get_ssh_host_send(mem_ctx, cr->rctx, domain, false,
++                                    data->name.name, data->alias);
++}
++
++const struct cache_req_plugin cache_req_host_by_name = {
++    .name = "Host by name",
++    .attr_expiration = SYSDB_CACHE_EXPIRE,
++    .parse_name = true,
++    .ignore_default_domain = true,
++    .bypass_cache = false,
++    .only_one_result = true,
++    .search_all_domains = false,
++    .require_enumeration = false,
++    .allow_missing_fqn = true,
++    .allow_switch_to_upn = false,
++    .upn_equivalent = CACHE_REQ_SENTINEL,
++    .get_next_domain_flags = 0,
++
++    .is_well_known_fn = NULL,
++    .prepare_domain_data_fn = NULL,
++    .create_debug_name_fn = cache_req_host_by_name_create_debug_name,
++    .global_ncache_add_fn = NULL,
++    .ncache_check_fn = NULL,
++    .ncache_add_fn = NULL,
++    .lookup_fn = cache_req_host_by_name_lookup,
++    .dp_send_fn = cache_req_host_by_name_dp_send,
++    .dp_recv_fn = cache_req_common_dp_recv
++};
++
++struct tevent_req *
++cache_req_host_by_name_send(TALLOC_CTX *mem_ctx,
++                            struct tevent_context *ev,
++                            struct resp_ctx *rctx,
++                            struct sss_nc_ctx *ncache,
++                            int cache_refresh_percent,
++                            const char *domain,
++                            const char *name,
++                            const char *alias,
++                            const char **attrs)
++{
++    struct cache_req_data *data;
++
++    data = cache_req_data_host(mem_ctx, CACHE_REQ_HOST_BY_NAME, name,
++                               alias, attrs);
++    if (data == NULL) {
++        return NULL;
++    }
++
++    return cache_req_steal_data_and_send(mem_ctx, ev, rctx, ncache,
++                                         cache_refresh_percent, domain, data);
++}
+diff --git a/src/responder/common/responder.h b/src/responder/common/responder.h
+index c387c6ec326c612eef8798673c1c70c67efd5452..748dec4301b4a018691d9b8c8fca0193d18167a5 100644
+--- a/src/responder/common/responder.h
++++ b/src/responder/common/responder.h
+@@ -318,6 +318,21 @@ sss_dp_get_account_recv(TALLOC_CTX *mem_ctx,
+                         dbus_uint32_t *err_min,
+                         char **err_msg);
+ 
++struct tevent_req *
++sss_dp_get_ssh_host_send(TALLOC_CTX *mem_ctx,
++                         struct resp_ctx *rctx,
++                         struct sss_domain_info *dom,
++                         bool fast_reply,
++                         const char *name,
++                         const char *alias);
++
++errno_t
++sss_dp_get_ssh_host_recv(TALLOC_CTX *mem_ctx,
++                         struct tevent_req *req,
++                         dbus_uint16_t *dp_err,
++                         dbus_uint32_t *dp_ret,
++                         char **err_msg);
++
+ bool sss_utf8_check(const uint8_t *s, size_t n);
+ 
+ void responder_set_fd_limit(rlim_t fd_limit);
+diff --git a/src/responder/ssh/sshsrv_dp.c b/src/responder/common/responder_dp_ssh.c
+similarity index 99%
+rename from src/responder/ssh/sshsrv_dp.c
+rename to src/responder/common/responder_dp_ssh.c
+index f02c3f477e3789360075a6022086d21cfcd7aefd..303ba1568b6230b0d4dfa718e4a7c024ae84d4e9 100644
+--- a/src/responder/ssh/sshsrv_dp.c
++++ b/src/responder/common/responder_dp_ssh.c
+@@ -21,13 +21,12 @@
+ #include <talloc.h>
+ #include <tevent.h>
+ #include <dbus/dbus.h>
+-#include "sbus/sssd_dbus.h"
+ 
+ #include "util/util.h"
+ #include "sbus/sbus_client.h"
++#include "sbus/sssd_dbus.h"
+ #include "providers/data_provider/dp_responder_iface.h"
+ #include "responder/common/responder.h"
+-#include "responder/ssh/sshsrv_private.h"
+ 
+ struct sss_dp_get_ssh_host_info {
+     struct sss_domain_info *dom;
+diff --git a/src/responder/ssh/sshsrv_private.h b/src/responder/ssh/sshsrv_private.h
+index 9553cd7940571bf107d9fb4562d11d8c1eab3624..3ea895536657cbfa82328b8a2661da56859eb929 100644
+--- a/src/responder/ssh/sshsrv_private.h
++++ b/src/responder/ssh/sshsrv_private.h
+@@ -51,19 +51,4 @@ struct ssh_cmd_ctx {
+ 
+ struct sss_cmd_table *get_ssh_cmds(void);
+ 
+-struct tevent_req *
+-sss_dp_get_ssh_host_send(TALLOC_CTX *mem_ctx,
+-                         struct resp_ctx *rctx,
+-                         struct sss_domain_info *dom,
+-                         bool fast_reply,
+-                         const char *name,
+-                         const char *alias);
+-
+-errno_t
+-sss_dp_get_ssh_host_recv(TALLOC_CTX *mem_ctx,
+-                         struct tevent_req *req,
+-                         dbus_uint16_t *dp_err,
+-                         dbus_uint32_t *dp_ret,
+-                         char **err_msg);
+-
+ #endif /* _SSHSRV_PRIVATE_H_ */
+diff --git a/src/tests/cmocka/common_mock_resp_dp.c b/src/tests/cmocka/common_mock_resp_dp.c
+index cbdb65d745a63ae00613001847351d3dba0fe290..5db5255ab61231870982c4b78a39504ae8954bcd 100644
+--- a/src/tests/cmocka/common_mock_resp_dp.c
++++ b/src/tests/cmocka/common_mock_resp_dp.c
+@@ -61,6 +61,39 @@ sss_dp_get_account_recv(TALLOC_CTX *mem_ctx,
+     return test_request_recv(req);
+ }
+ 
++struct tevent_req *
++sss_dp_get_ssh_host_send(TALLOC_CTX *mem_ctx,
++                         struct resp_ctx *rctx,
++                         struct sss_domain_info *dom,
++                         bool fast_reply,
++                         const char *name,
++                         const char *alias)
++{
++    return test_req_succeed_send(mem_ctx, rctx->ev);
++}
++
++
++errno_t
++sss_dp_get_ssh_host_recv(TALLOC_CTX *mem_ctx,
++                         struct tevent_req *req,
++                         dbus_uint16_t *dp_err,
++                         dbus_uint32_t *dp_ret,
++                         char **err_msg)
++{
++    acct_cb_t cb;
++
++    *dp_err = sss_mock_type(dbus_uint16_t);
++    *dp_ret = sss_mock_type(dbus_uint32_t);
++    *err_msg = sss_mock_ptr_type(char *);
++
++    cb = sss_mock_ptr_type(acct_cb_t);
++    if (cb) {
++        (cb)(sss_mock_ptr_type(void *));
++    }
++
++    return test_request_recv(req);
++}
++
+ errno_t
+ sss_dp_req_recv(TALLOC_CTX *mem_ctx,
+                 struct tevent_req *req,
+diff --git a/src/tests/cwrap/Makefile.am b/src/tests/cwrap/Makefile.am
+index 8ca0026178d79271167a09d295940f7c5f55d98b..09a8b5307dd3ebf9c7f27148097a90eac527a213 100644
+--- a/src/tests/cwrap/Makefile.am
++++ b/src/tests/cwrap/Makefile.am
+@@ -60,6 +60,7 @@ SSSD_CACHE_REQ_OBJ = \
+     ../../../src/responder/common/cache_req/plugins/cache_req_svc_by_name.c \
+     ../../../src/responder/common/cache_req/plugins/cache_req_svc_by_port.c \
+     ../../../src/responder/common/cache_req/plugins/cache_req_netgroup_by_name.c \
++    ../../../src/responder/common/cache_req/plugins/cache_req_host_by_name.c \
+     $(NULL)
+ 
+ SSSD_RESPONDER_OBJ = \
+@@ -68,6 +69,7 @@ SSSD_RESPONDER_OBJ = \
+     ../../../src/responder/common/responder_cmd.c \
+     ../../../src/responder/common/responder_common.c \
+     ../../../src/responder/common/responder_dp.c \
++    ../../../src/responder/common/responder_dp_ssh.c \
+     ../../../src/responder/common/responder_packet.c \
+     ../../../src/responder/common/responder_get_domains.c \
+     ../../../src/responder/common/responder_utils.c \
+-- 
+2.9.3
+

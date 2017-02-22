@@ -1,0 +1,63 @@
+From f70d946f8cde55b6bdc09345e22849842bca4387 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 25 Jan 2017 20:29:43 +0100
+Subject: [PATCH 81/95] LDAP/proxy: tell frontend that Smartcard auth is not
+ supported
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ldap/ldap_auth.c   | 11 ++++++++++-
+ src/providers/proxy/proxy_auth.c |  8 ++++++++
+ 2 files changed, 18 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ldap/ldap_auth.c b/src/providers/ldap/ldap_auth.c
+index 00d38284e428eea42254820fd08ee4fb125235a6..00ddd889b6294e457c13218491547b84f1468266 100644
+--- a/src/providers/ldap/ldap_auth.c
++++ b/src/providers/ldap/ldap_auth.c
+@@ -645,7 +645,13 @@ static struct tevent_req *auth_send(TALLOC_CTX *memctx,
+ 
+     /* The token must be a password token */
+     if (sss_authtok_get_type(authtok) != SSS_AUTHTOK_TYPE_PASSWORD) {
+-        tevent_req_error(req, ERR_AUTH_FAILED);
++        if (sss_authtok_get_type(authtok) == SSS_AUTHTOK_TYPE_SC_PIN
++            || sss_authtok_get_type(authtok) == SSS_AUTHTOK_TYPE_SC_KEYPAD) {
++            /* Tell frontend that we do not support Smartcard authentication */
++            tevent_req_error(req, ERR_SC_AUTH_NOT_SUPPORTED);
++        } else {
++            tevent_req_error(req, ERR_AUTH_FAILED);
++        }
+         return tevent_req_post(req, ev);
+     }
+ 
+@@ -1028,6 +1034,9 @@ static void sdap_pam_auth_handler_done(struct tevent_req *subreq)
+         state->pd->account_locked = true;
+         state->pd->pam_status = PAM_PERM_DENIED;
+         break;
++    case ERR_SC_AUTH_NOT_SUPPORTED:
++        state->pd->pam_status = PAM_BAD_ITEM;
++        break;
+     default:
+         state->pd->pam_status = PAM_SYSTEM_ERR;
+         break;
+diff --git a/src/providers/proxy/proxy_auth.c b/src/providers/proxy/proxy_auth.c
+index 2b3510c38b1cb265e3042425c373f39e524a71eb..e53b38e666343f8530593d5eac21787ce7cb46e1 100644
+--- a/src/providers/proxy/proxy_auth.c
++++ b/src/providers/proxy/proxy_auth.c
+@@ -737,6 +737,14 @@ proxy_pam_handler_send(TALLOC_CTX *mem_ctx,
+     state->auth_ctx = proxy_auth_ctx;
+     state->be_ctx = params->be_ctx;
+ 
++    /* Tell frontend that we do not support Smartcard authentication */
++    if (sss_authtok_get_type(pd->authtok) == SSS_AUTHTOK_TYPE_SC_PIN
++            || sss_authtok_get_type(pd->authtok) == SSS_AUTHTOK_TYPE_SC_KEYPAD) {
++        pd->pam_status = PAM_BAD_ITEM;
++        goto immediately;
++    }
++
++
+     switch (pd->cmd) {
+     case SSS_PAM_AUTHENTICATE:
+     case SSS_PAM_CHAUTHTOK:
+-- 
+2.9.3
+

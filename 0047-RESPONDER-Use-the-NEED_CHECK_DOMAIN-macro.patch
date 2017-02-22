@@ -1,0 +1,50 @@
+From 2c61b6eee24d90b11f3d2cab7b9cd8690df29f34 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 2 Jan 2017 16:41:31 +0100
+Subject: [PATCH 47/79] RESPONDER: Use the NEED_CHECK_DOMAIN macro
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is to avoid a needless round-trip between the responder and the
+back end for domains that do not have a traditional back end such as
+local or files.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/common/responder_dp.c | 12 +++++++++++-
+ 1 file changed, 11 insertions(+), 1 deletion(-)
+
+diff --git a/src/responder/common/responder_dp.c b/src/responder/common/responder_dp.c
+index 11eb47ce1d41027f36998aba7b9fbca5fb4c7910..cfd12569a5068d0ffaa7fee5a35e12fe4512fb50 100644
+--- a/src/responder/common/responder_dp.c
++++ b/src/responder/common/responder_dp.c
+@@ -495,6 +495,12 @@ sss_dp_get_account_send(TALLOC_CTX *mem_ctx,
+         goto error;
+     }
+ 
++    if (NEED_CHECK_PROVIDER(dom->provider) == false) {
++        DEBUG(SSSDBG_TRACE_INTERNAL, "Domain %s does not check DP\n", dom->name);
++        ret = EOK;
++        goto error;
++    }
++
+     info = talloc_zero(state, struct sss_dp_account_info);
+     info->fast_reply = fast_reply;
+     info->type = type;
+@@ -539,7 +545,11 @@ sss_dp_get_account_send(TALLOC_CTX *mem_ctx,
+     return req;
+ 
+ error:
+-    tevent_req_error(req, ret);
++    if (ret == EOK) {
++        tevent_req_done(req);
++    } else {
++        tevent_req_error(req, ret);
++    }
+     tevent_req_post(req, rctx->ev);
+     return req;
+ }
+-- 
+2.9.3
+

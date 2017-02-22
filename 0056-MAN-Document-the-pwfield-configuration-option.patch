@@ -1,0 +1,47 @@
+From 26577ac05dc33c201c15164bcf19f45393beeca5 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 21 Nov 2016 13:12:11 +0100
+Subject: [PATCH 56/79] MAN: Document the pwfield configuration option
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The pwfield was not documented at all previously. In addition, document
+the different defaults for remote provider and the file provider.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/man/sssd.conf.5.xml | 17 +++++++++++++++++
+ 1 file changed, 17 insertions(+)
+
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index cb608cb0ac06185118e3c9f01d785b83236f8abb..782aef7bf62d9bcef3c3dab534a25e01d85c1764 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -936,6 +936,23 @@ fallback_homedir = /home/%u
+                         </para>
+                     </listitem>
+                 </varlistentry>
++                <varlistentry>
++                    <term>pwfield (string)</term>
++                    <listitem>
++                        <para>
++                            The value that NSS operations that return
++                            users or groups will return for the
++                            <quote>password</quote> field.
++                        </para>
++                        <para>
++                            This option can also be set per-domain.
++                        </para>
++                        <para>
++                            Default: <quote>*</quote> (remote domains)
++                            or <quote>x</quote> (the files domain)
++                        </para>
++                    </listitem>
++                </varlistentry>
+             </variablelist>
+         </refsect2>
+         <refsect2 id='PAM'>
+-- 
+2.9.3
+

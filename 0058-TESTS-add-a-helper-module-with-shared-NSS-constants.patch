@@ -1,0 +1,186 @@
+From 1921d739ff7b028baa591272cc8969e330c8f872 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Thu, 17 Nov 2016 15:46:00 +0100
+Subject: [PATCH 58/79] TESTS: add a helper module with shared NSS constants
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Every module that reads the sssd_nss module directly copied around the
+same definition of NSS constants. This commit moves them into a single
+file to avoid code duplication.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/tests/intg/Makefile.am      |  1 +
+ src/tests/intg/sssd_id.py       | 14 ++-----------
+ src/tests/intg/sssd_netgroup.py | 25 ++++------------------
+ src/tests/intg/sssd_nss.py      | 46 +++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 53 insertions(+), 33 deletions(-)
+ create mode 100644 src/tests/intg/sssd_nss.py
+
+diff --git a/src/tests/intg/Makefile.am b/src/tests/intg/Makefile.am
+index 90e0f308043aa89da5afc0fd353f7d373ac6425f..4d364f84a39cd75507c29e8f70d8d8a4881a8063 100644
+--- a/src/tests/intg/Makefile.am
++++ b/src/tests/intg/Makefile.am
+@@ -1,6 +1,7 @@
+ dist_noinst_DATA = \
+     config.py.m4 \
+     util.py \
++    sssd_nss.py \
+     sssd_id.py \
+     sssd_ldb.py \
+     sssd_netgroup.py \
+diff --git a/src/tests/intg/sssd_id.py b/src/tests/intg/sssd_id.py
+index 4f020c3a229c1288935ce120cf1118735e2ae0eb..f4ab9cfb8c0cd3fcf3a0195fd62696ae7d892d61 100644
+--- a/src/tests/intg/sssd_id.py
++++ b/src/tests/intg/sssd_id.py
+@@ -21,15 +21,7 @@ import pwd
+ import grp
+ from ctypes import (cdll, c_int, c_char, c_uint32, c_long, c_char_p,
+                     POINTER, pointer)
+-
+-
+-class NssReturnCode(object):
+-    """ 'enum' class for name service switch return code """
+-    TRYAGAIN = -2,
+-    UNAVAIL = -1
+-    NOTFOUND = 0
+-    SUCCESS = 1
+-    RETURN = 2
++from sssd_nss import NssReturnCode, nss_sss_ctypes_loader
+ 
+ 
+ def call_sssd_initgroups(user, gid):
+@@ -45,10 +37,8 @@ def call_sssd_initgroups(user, gid):
+         gids should contain user group IDs if err is NssReturnCode.SUCCESS
+         otherwise errno will contain non-zero value.
+     """
+-    libnss_sss_path = config.NSS_MODULE_DIR + "/libnss_sss.so.2"
+-    libnss_sss = cdll.LoadLibrary(libnss_sss_path)
++    func = nss_sss_ctypes_loader('_nss_sss_initgroups_dyn')
+ 
+-    func = libnss_sss._nss_sss_initgroups_dyn
+     func.restype = c_int
+     func.argtypes = [POINTER(c_char), c_uint32, POINTER(c_long),
+                      POINTER(c_long), POINTER(POINTER(c_uint32)), c_long,
+diff --git a/src/tests/intg/sssd_netgroup.py b/src/tests/intg/sssd_netgroup.py
+index 0ea3db3cf69be04a1eda6afb455e4d0a3b301f1b..162c5aac86beb2b3625ccb695da7033e6483341e 100644
+--- a/src/tests/intg/sssd_netgroup.py
++++ b/src/tests/intg/sssd_netgroup.py
+@@ -19,6 +19,7 @@
+ from ctypes import (cdll, c_int, c_char, c_char_p, c_size_t, c_void_p, c_ulong,
+                     POINTER, Structure, Union, create_string_buffer, get_errno)
+ import config
++from sssd_nss import NssReturnCode, nss_sss_ctypes_loader
+ 
+ 
+ class NetgroupType(object):
+@@ -50,15 +51,6 @@ NameList._fields_ = [("next", POINTER(NameList)),
+                      ("name", POINTER(c_char))]
+ 
+ 
+-class NssReturnCode(object):
+-    """ 'enum' class for name service switch return code """
+-    TRYAGAIN = -2,
+-    UNAVAIL = -1
+-    NOTFOUND = 0
+-    SUCCESS = 1
+-    RETURN = 2
+-
+-
+ class Netgrent(Structure):
+     _fields_ = [("type", c_int),
+                 ("val", Val),
+@@ -92,10 +84,7 @@ class NetgroupRetriever(object):
+             result_p will contain POINTER(Netgrent) which can be used in
+             _getnetgrent_r or _getnetgrent_r.
+         """
+-        libnss_sss_path = config.NSS_MODULE_DIR + "/libnss_sss.so.2"
+-        libnss_sss = cdll.LoadLibrary(libnss_sss_path)
+-
+-        func = libnss_sss._nss_sss_setnetgrent
++        func = nss_sss_ctypes_loader('_nss_sss_setnetgrent')
+         func.restype = c_int
+         func.argtypes = [c_char_p, POINTER(Netgrent)]
+ 
+@@ -123,10 +112,7 @@ class NetgroupRetriever(object):
+             if err is NssReturnCode.SUCCESS netgroups will contain list of
+             touples. Each touple will consist of 3 elemets either string or
+         """
+-        libnss_sss_path = config.NSS_MODULE_DIR + "/libnss_sss.so.2"
+-        libnss_sss = cdll.LoadLibrary(libnss_sss_path)
+-
+-        func = libnss_sss._nss_sss_getnetgrent_r
++        func = nss_sss_ctypes_loader('_nss_sss_getnetgrent_r')
+         func.restype = c_int
+         func.argtypes = [POINTER(Netgrent), POINTER(c_char), c_size_t,
+                          POINTER(c_int)]
+@@ -148,10 +134,7 @@ class NetgroupRetriever(object):
+ 
+         @return int a constant from class NssReturnCode
+         """
+-        libnss_sss_path = config.NSS_MODULE_DIR + "/libnss_sss.so.2"
+-        libnss_sss = cdll.LoadLibrary(libnss_sss_path)
+-
+-        func = libnss_sss._nss_sss_endnetgrent
++        func = nss_sss_ctypes_loader('_nss_sss_endnetgrent')
+         func.restype = c_int
+         func.argtypes = [POINTER(Netgrent)]
+ 
+diff --git a/src/tests/intg/sssd_nss.py b/src/tests/intg/sssd_nss.py
+new file mode 100644
+index 0000000000000000000000000000000000000000..1e846310bca4dc314c47882cc5e7877002c3d78f
+--- /dev/null
++++ b/src/tests/intg/sssd_nss.py
+@@ -0,0 +1,46 @@
++#
++# Shared module for integration tests that need to access the sssd_nss
++# module directly
++#
++# Copyright (c) 2016 Red Hat, Inc.
++#
++# This is free software; you can redistribute it and/or modify it
++# under the terms of the GNU General Public License as published by
++# the Free Software Foundation; version 2 only
++#
++# This program is distributed in the hope that it will be useful, but
++# WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
++# General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program.  If not, see <http://www.gnu.org/licenses/>.
++#
++import config
++import ctypes
++
++
++class NssReturnCode(object):
++    """ 'enum' class for name service switch return code """
++    TRYAGAIN = -2,
++    UNAVAIL = -1
++    NOTFOUND = 0
++    SUCCESS = 1
++    RETURN = 2
++
++
++class SssdNssError(Exception):
++    """ Raised when one of the NSS operations fail """
++    def __init__(self, errno, nssop):
++        self.errno = errno
++        self.nssop = nssop
++
++    def __str__(self):
++        return "NSS operation %s failed %d" % (nssop, errno)
++
++
++def nss_sss_ctypes_loader(func_name):
++    libnss_sss_path = config.NSS_MODULE_DIR + "/libnss_sss.so.2"
++    libnss_sss = ctypes.cdll.LoadLibrary(libnss_sss_path)
++    func = getattr(libnss_sss, func_name)
++    return func
+-- 
+2.9.3
+

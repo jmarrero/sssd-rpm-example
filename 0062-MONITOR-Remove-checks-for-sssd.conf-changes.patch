@@ -1,0 +1,44 @@
+From f9f1310ba1b87223f8d4d935b30b8238e5c00022 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 22 Nov 2016 17:47:51 +0100
+Subject: [PATCH 62/79] MONITOR: Remove checks for sssd.conf changes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This feature was if-ed out for many years and since it's quite unlikely
+we will re-enable the feature in the foreseeable future, let's just
+remove this code.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/monitor/monitor.c | 13 -------------
+ 1 file changed, 13 deletions(-)
+
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index 1fa3d4baf579f15b9f93355a4b0c8b9d706bbacf..71719917b1b01acfb0eba527c414fe72d1961080 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -2296,19 +2296,6 @@ static int monitor_process_init(struct mt_ctx *ctx,
+     ret = sss_sigchld_init(ctx, ctx->ev, &ctx->sigchld_ctx);
+     if (ret != EOK) return ret;
+ 
+-#if 0
+-    This feature is incomplete and can leave the SSSD in a bad state if the
+-    config file is changed while the SSSD is running.
+-
+-    Uncomment this once the backends are honoring reloadConfig()
+-
+-    /* Watch for changes to the confdb config file */
+-    ret = monitor_config_file(ctx, ctx, config_file, monitor_signal_reconf,
+-                              true);
+-    if (ret != EOK) {
+-        return ret;
+-    }
+-#endif
+     /* Watch for changes to the DNS resolv.conf */
+     ret = monitor_config_file(ctx, ctx, RESOLV_CONF_PATH,
+                               monitor_update_resolv, false);
+-- 
+2.9.3
+

@@ -1,0 +1,111 @@
+From eed5bc53a0c823276523d32e76bc1c264db3837e Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 24 Feb 2017 09:22:20 +0100
+Subject: [PATCH 88/95] DOC: Deprecate README, add README.md
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+To make it easier to display the contents of README on the project
+homepage, this patch converts the README contents to README.md.
+
+The original README is removed so that we don't maintain two different
+sources.
+
+The links to fedorahosted are retained until we migrate the wiki pages.
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ README    | 43 -------------------------------------------
+ README.md | 28 ++++++++++++++++++++++++++++
+ 2 files changed, 28 insertions(+), 43 deletions(-)
+ delete mode 100644 README
+ create mode 100644 README.md
+
+diff --git a/README b/README
+deleted file mode 100644
+index 189f66fe5b20c85728ac2640d734e3b490e23817..0000000000000000000000000000000000000000
+--- a/README
++++ /dev/null
+@@ -1,43 +0,0 @@
+-
+-         SSSD - System Security Services Daemon
+-         --------------------------------------
+-
+-  Introduction
+-  ------------
+-  SSSD provides a set of daemons to manage access to remote directories and
+-  authentication mechanisms such as LDAP, Kerberos or FreeIPA. It provides
+-  an NSS and PAM interface toward the system and a pluggable backend system
+-  to connect to multiple different account sources.
+-
+-  More information about SSSD can be found on its project page -
+-  <http://fedorahosted.org/sssd/>
+-
+-  Building and installation
+-  -------------------------
+-  Please see the file BUILD.txt for details
+-
+-  Documentation
+-  -------------
+-  The most up-to-date documentation can be found at
+-  <http://fedorahosted.org/sssd/wiki/HOWTO_Configure>
+-
+-  Licensing
+-  ---------
+-  Please see the file called COPYING.
+-
+-  Contacts
+-  --------
+-  There are several ways to contact us:
+-
+-     * the sssd-devel mailing list:
+-       Development of the System Security Services Daemon
+-       <https://fedorahosted.org/mailman/listinfo/sssd-devel>
+-
+-     * the sssd-users mailing list:
+-       End-user discussions about the System Security Services Daemon
+-       <https://fedorahosted.org/mailman/listinfo/sssd-users>
+-
+-     * the #sssd and #freeipa IRC channels on freenode:
+-       irc://irc.freenode.net/sssd
+-       irc://irc.freenode.net/freeipa
+-
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000000000000000000000000000000000000..40c88c08070b986a634496ac2d6ffba8643bd8a7
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,28 @@
++# SSSD - System Security Services Daemon
++
++## Introduction
++SSSD provides a set of daemons to manage access to remote directories and
++authentication mechanisms such as LDAP, Kerberos or FreeIPA. It provides
++an NSS and PAM interface toward the system and a pluggable backend system
++to connect to multiple different account sources.
++
++More information about SSSD can be found on its project page -
++https://pagure.io/SSSD/sssd/
++
++## Building and installation
++Please see the file BUILD.txt for details
++
++## Documentation
++The most up-to-date documentation can be found at https://fedorahosted.org/sssd/wiki/Documentation
++
++## Licensing
++Please see the file called COPYING.
++
++## Contacts
++There are several ways to contact us:
++
++* the sssd-devel mailing list: [Development of the System Security Services Daemon](https://fedorahosted.org/mailman/listinfo/sssd-devel)
++* the sssd-users mailing list: [End-user discussions about the System Security Services Daemon](https://fedorahosted.org/mailman/listinfo/sssd-users)
++* the #sssd and #freeipa IRC channels on freenode:
++  * irc://irc.freenode.net/sssd
++  * irc://irc.freenode.net/freeipa
+-- 
+2.9.3
+

@@ -1,0 +1,38 @@
+From ece2ac6889da2b58f5d4027ec0a1d97992056f66 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 21 Nov 2016 12:11:39 +0100
+Subject: [PATCH 55/79] CONFDB: The files domain defaults to "x" as pwfield
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In order to make it possible for files provider users to authenticate
+with pam_unix, default to "x" as the pwfield of users from the files
+domain.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/confdb/confdb.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/confdb/confdb.c b/src/confdb/confdb.c
+index 5112c6d568cbe2d7374b19d4a0850172d6f3f400..c7afd683d7f21b513bb491adbf7f7bbe79786212 100644
+--- a/src/confdb/confdb.c
++++ b/src/confdb/confdb.c
+@@ -966,6 +966,13 @@ static int confdb_get_domain_internal(struct confdb_ctx *cdb,
+         }
+     }
+ 
++    if (strcasecmp(domain->provider, "files") == 0) {
++        /* The password field must be reported as 'x', else pam_unix won't
++         * authenticate this entry. See man pwconv(8) for more details.
++         */
++        domain->pwfield = "x";
++    }
++
+     if (!domain->enumerate) {
+         DEBUG(SSSDBG_TRACE_FUNC, "No enumeration for [%s]!\n", domain->name);
+     }
+-- 
+2.9.3
+

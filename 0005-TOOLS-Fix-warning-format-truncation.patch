@@ -1,0 +1,49 @@
+From c587e9ae55c618c011bd4dde6a94fe5dc60fff01 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 30 Jan 2017 12:55:59 +0100
+Subject: [PATCH 05/79] TOOLS: Fix warning format-truncation
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+src/tools/sss_groupshow.c: In function ‘print_group_info’:
+src/tools/sss_groupshow.c:612:22: error: ‘%d’ directive output truncated
+  writing between 10 and 11 bytes into a region of size 7 [-Werror=format-truncation=]
+     snprintf(fmt, 8, "%%%ds", level*PADDING_SPACES);
+                      ^~~~~~~
+src/tools/sss_groupshow.c:612:22: note: using the range
+  [-2147483648, 2147483647] for directive argument
+src/tools/sss_groupshow.c:612:5: note: ‘snprintf’ output between 13 and 14
+  bytes into a destination of size 8
+     snprintf(fmt, 8, "%%%ds", level*PADDING_SPACES);
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/tools/sss_groupshow.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/tools/sss_groupshow.c b/src/tools/sss_groupshow.c
+index 258d458b0d1a4cb56c8fb61060cb43a1c88c1ed0..ac4c3dc912db3d418c2eace8b5b1f3476768c875 100644
+--- a/src/tools/sss_groupshow.c
++++ b/src/tools/sss_groupshow.c
+@@ -603,7 +603,7 @@ fail:
+ 
+ /*==================The main program=================================== */
+ 
+-static void print_group_info(struct group_info *g, int level)
++static void print_group_info(struct group_info *g, unsigned level)
+ {
+     int i;
+     char padding[512];
+@@ -634,7 +634,7 @@ static void print_group_info(struct group_info *g, int level)
+     printf(_("\n%1$sMember groups: "), padding);
+ }
+ 
+-static void print_recursive(struct group_info **group_members, int level)
++static void print_recursive(struct group_info **group_members, unsigned level)
+ {
+     int i;
+ 
+-- 
+2.9.3
+

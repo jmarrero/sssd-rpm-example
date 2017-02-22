@@ -1,0 +1,31 @@
+From d8c459feab7659a51c23c941fea486867c2b9dae Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 17 Jan 2017 12:00:31 +0100
+Subject: [PATCH 22/79] ssh: fix number of output certificates
+
+SSH responder returned invalid number of certificates when
+original ad pubkey attribute was not empty. Since we always
+return all certificates to the client we should add number
+of results to the output not override it.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/ssh/sshsrv_cmd.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/responder/ssh/sshsrv_cmd.c b/src/responder/ssh/sshsrv_cmd.c
+index 2e64893dfc2018727e6fc5fb80b47bd7eb1fac58..bd6270d0f1b62323ef7d140193351fb8585ce2ec 100644
+--- a/src/responder/ssh/sshsrv_cmd.c
++++ b/src/responder/ssh/sshsrv_cmd.c
+@@ -1012,7 +1012,7 @@ ssh_cmd_build_reply(struct ssh_cmd_ctx *cmd_ctx)
+     el_orig = ldb_msg_find_element(cmd_ctx->result,
+                                   ORIGINALAD_PREFIX SYSDB_SSH_PUBKEY);
+     if (el_orig) {
+-        count = el_orig->num_values;
++        count += el_orig->num_values;
+     }
+ 
+     if (DOM_HAS_VIEWS(cmd_ctx->domain)) {
+-- 
+2.9.3
+

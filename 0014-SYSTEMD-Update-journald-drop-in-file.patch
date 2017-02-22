@@ -1,0 +1,30 @@
+From 7b4704a10958bb7d3390db9eff863875d2b643f7 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 7 Feb 2017 09:52:59 +0100
+Subject: [PATCH 14/79] SYSTEMD: Update journald drop-in file
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We changed type forking into type notify as part of commit
+d4063e9a21a4e203bee7e0a0144fa8cabb14cc46.
+But we forgot to update template drop-in file for logging into journald.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/sysv/systemd/journal.conf.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/sysv/systemd/journal.conf.in b/src/sysv/systemd/journal.conf.in
+index d89325e0872881e3e8485102d9971871101098f3..9ce170b4893629792516aab41573adea1fb741f0 100644
+--- a/src/sysv/systemd/journal.conf.in
++++ b/src/sysv/systemd/journal.conf.in
+@@ -4,4 +4,4 @@
+ # run 'systemctl daemon-reload' and then restart the SSSD service
+ # for this to take effect
+ #ExecStart=
+-#ExecStart=@sbindir@/sssd -D
++#ExecStart=@sbindir@/sssd -i
+-- 
+2.9.3
+

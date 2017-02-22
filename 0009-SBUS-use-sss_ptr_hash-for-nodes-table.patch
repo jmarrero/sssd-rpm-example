@@ -1,0 +1,165 @@
+From ea872f140a04419fba3f2b9722da74d7fd1ca1ee Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 24 Jan 2017 13:47:42 +0100
+Subject: [PATCH 09/79] SBUS: use sss_ptr_hash for nodes table
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This patch reuses sss_ptr_hash module introduced in NSS patches in sbus code.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/sbus/sssd_dbus_connection.c |  4 +--
+ src/sbus/sssd_dbus_interface.c  | 72 +++++++----------------------------------
+ src/sbus/sssd_dbus_private.h    |  6 ++--
+ 3 files changed, 16 insertions(+), 66 deletions(-)
+
+diff --git a/src/sbus/sssd_dbus_connection.c b/src/sbus/sssd_dbus_connection.c
+index 6ca039e8e2a919141bf951ed0203dc2c48b3eb55..5e493fb03e835d5f939a599efdc07f7ab2f9be28 100644
+--- a/src/sbus/sssd_dbus_connection.c
++++ b/src/sbus/sssd_dbus_connection.c
+@@ -170,8 +170,8 @@ int sbus_init_connection(TALLOC_CTX *ctx,
+         return EIO;
+     }
+ 
+-    ret = sbus_nodes_hash_init(conn, conn, &conn->nodes_fns);
+-    if (ret != EOK) {
++    conn->nodes_fns = sbus_nodes_hash_init(conn);
++    if (conn->nodes_fns == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot create node functions hash table\n");
+         talloc_free(conn);
+         return EIO;
+diff --git a/src/sbus/sssd_dbus_interface.c b/src/sbus/sssd_dbus_interface.c
+index e8c8851231fab68024065a13c5f1e2642ba829e9..1a11c6abcf23053e3b8c77f4d469d7c202a88eb8 100644
+--- a/src/sbus/sssd_dbus_interface.c
++++ b/src/sbus/sssd_dbus_interface.c
+@@ -686,13 +686,10 @@ done:
+     return ret;
+ }
+ 
+-errno_t
+-sbus_nodes_hash_init(TALLOC_CTX *mem_ctx,
+-                     struct sbus_connection *conn,
+-                     hash_table_t **_table)
++hash_table_t *
++sbus_nodes_hash_init(TALLOC_CTX *mem_ctx)
+ {
+-    return sss_hash_create_ex(mem_ctx, 10, _table, 0, 0, 0, 0,
+-                              NULL, conn);
++    return sss_ptr_hash_create(mem_ctx, NULL, NULL);
+ }
+ 
+ struct sbus_nodes_data {
+@@ -706,57 +703,24 @@ sbus_nodes_hash_add(hash_table_t *table,
+                     sbus_nodes_fn nodes_fn,
+                     void *handler_data)
+ {
+-    TALLOC_CTX *tmp_ctx;
+     struct sbus_nodes_data *data;
+-    hash_key_t key;
+-    hash_value_t value;
+     errno_t ret;
+-    bool has_key;
+-    int hret;
+ 
+-    tmp_ctx = talloc_new(NULL);
+-    if (tmp_ctx == NULL) {
+-        return ENOMEM;
+-    }
+-
+-    key.type = HASH_KEY_STRING;
+-    key.str = talloc_strdup(tmp_ctx, object_path);
+-    if (key.str == NULL) {
+-        return ENOMEM;
+-    }
+-
+-    has_key = hash_has_key(table, &key);
+-    if (has_key) {
+-        ret = EEXIST;
+-        goto done;
+-    }
+-
+-    data = talloc_zero(tmp_ctx, struct sbus_nodes_data);
++    data = talloc_zero(table, struct sbus_nodes_data);
+     if (data == NULL) {
+-        ret = ENOMEM;
+-        goto done;
++        return ENOMEM;
+     }
+ 
+     data->handler_data = handler_data;
+     data->nodes_fn = nodes_fn;
+ 
+-    value.type = HASH_VALUE_PTR;
+-    value.ptr = data;
+-
+-    hret = hash_enter(table, &key, &value);
+-    if (hret != HASH_SUCCESS) {
+-        ret = EIO;
+-        goto done;
++    ret = sss_ptr_hash_add(table, object_path, data, struct sbus_nodes_data);
++    if (ret != EOK) {
++        talloc_free(data);
++        return ret;
+     }
+ 
+-    talloc_steal(table, key.str);
+-    talloc_steal(table, data);
+-
+-    ret = EOK;
+-
+-done:
+-    talloc_free(tmp_ctx);
+-    return ret;
++    return EOK;
+ }
+ 
+ const char **
+@@ -765,24 +729,12 @@ sbus_nodes_hash_lookup(TALLOC_CTX *mem_ctx,
+                        const char *object_path)
+ {
+     struct sbus_nodes_data *data;
+-    hash_key_t key;
+-    hash_value_t value;
+-    int hret;
+ 
+-    key.type = HASH_KEY_STRING;
+-    key.str = discard_const(object_path);
+-
+-    hret = hash_lookup(table, &key, &value);
+-    if (hret == HASH_ERROR_KEY_NOT_FOUND) {
+-        return NULL;
+-    } else if (hret != HASH_SUCCESS) {
+-        DEBUG(SSSDBG_OP_FAILURE,
+-              "Unable to search hash table: hret=%d\n", hret);
++    data = sss_ptr_hash_lookup(table, object_path, struct sbus_nodes_data);
++    if (data == NULL) {
+         return NULL;
+     }
+ 
+-    data = talloc_get_type(value.ptr, struct sbus_nodes_data);
+-
+     return data->nodes_fn(mem_ctx, object_path, data->handler_data);
+ }
+ 
+diff --git a/src/sbus/sssd_dbus_private.h b/src/sbus/sssd_dbus_private.h
+index c8913d0f0c522147aacf3214000ef9d4855fdb0c..a5a2d47f4bfac99960fcca56aaa48077c36b96e4 100644
+--- a/src/sbus/sssd_dbus_private.h
++++ b/src/sbus/sssd_dbus_private.h
+@@ -136,10 +136,8 @@ sbus_opath_hash_lookup_supported(TALLOC_CTX *mem_ctx,
+                                  const char *object_path,
+                                  struct sbus_interface_list **_list);
+ 
+-errno_t
+-sbus_nodes_hash_init(TALLOC_CTX *mem_ctx,
+-                     struct sbus_connection *conn,
+-                     hash_table_t **_table);
++hash_table_t *
++sbus_nodes_hash_init(TALLOC_CTX *mem_ctx);
+ 
+ const char **
+ sbus_nodes_hash_lookup(TALLOC_CTX *mem_ctx,
+-- 
+2.9.3
+

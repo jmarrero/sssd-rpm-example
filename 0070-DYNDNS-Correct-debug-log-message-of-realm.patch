@@ -1,0 +1,43 @@
+From d694d4fdcc81f24c2f9e3bb5a0dbe0a52498f196 Mon Sep 17 00:00:00 2001
+From: Justin Stephenson <jstephen@redhat.com>
+Date: Mon, 24 Oct 2016 18:04:11 -0400
+Subject: [PATCH 70/79] DYNDNS: Correct debug log message of realm
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If the realm is not added to the nsupdate message, the SSSD Debug log
+message should inform about utilizing autodiscovered realm.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3220
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/providers/be_dyndns.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/be_dyndns.c b/src/providers/be_dyndns.c
+index 07dc3339d2f65874504de60b8d3f2e63a8d7045f..ee264156824d7c5ab27c919ae0c56bbd6c0bc54f 100644
+--- a/src/providers/be_dyndns.c
++++ b/src/providers/be_dyndns.c
+@@ -435,11 +435,15 @@ nsupdate_msg_create_common(TALLOC_CTX *mem_ctx, const char *realm,
+         /* Add the server, realm and headers */
+         update_msg = talloc_asprintf(tmp_ctx, "server %s\n%s",
+                                      servername, realm_directive);
+-    } else {
++    } else if (realm != NULL) {
+         DEBUG(SSSDBG_FUNC_DATA,
+               "Creating update message for realm [%s].\n", realm);
+         /* Add the realm headers */
+         update_msg = talloc_asprintf(tmp_ctx, "%s", realm_directive);
++    } else {
++        DEBUG(SSSDBG_FUNC_DATA,
++              "Creating update message for auto-discovered realm.\n");
++        update_msg = talloc_asprintf(tmp_ctx, "%s", realm_directive);
+     }
+     talloc_free(realm_directive);
+     if (update_msg == NULL) {
+-- 
+2.9.3
+

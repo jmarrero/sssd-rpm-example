@@ -1,13 +1,15 @@
-From 829aa39dffbe35f58b34159b962a2dd8de85fd30 Mon Sep 17 00:00:00 2001
+From c029f707d4847b01ff64bf3bb1fd46c0b5927cdb Mon Sep 17 00:00:00 2001
 From: Lukas Slebodnik <lslebodn@redhat.com>
 Date: Mon, 12 Dec 2016 18:33:48 +0100
-Subject: [PATCH] Partially revert "CONFIG: Use default config when none
+Subject: [PATCH 15/79] Partially revert "CONFIG: Use default config when none
  provided"
 
 This reverts part of commit 59744cff6edb106ae799b2321cb8731edadf409a.
 
 Removed is copying of default configuration into /etc/sssd/sssd.conf
 Sample configurations is still part of installation.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
 ---
  Makefile.am               |  3 ---
  src/confdb/confdb.h       |  1 -
@@ -15,10 +17,10 @@ Sample configurations is still part of installation.
  3 files changed, 4 insertions(+), 40 deletions(-)
 
 diff --git a/Makefile.am b/Makefile.am
-index a15e68f682f6d8af301e11df8dcaef6d7f27e8c0..45d44146e737fc8460a2ed9ffc0171a6bb494b2b 100644
+index 674d328f52929cc2b20d1212af830c3777312bf1..6d21af8e8c455622d8c4c8b4e325789c4c1e34cb 100644
 --- a/Makefile.am
 +++ b/Makefile.am
-@@ -462,7 +462,6 @@ AM_CPPFLAGS = \
+@@ -473,7 +473,6 @@ AM_CPPFLAGS = \
      -DSSSDDATADIR=\"$(sssddatadir)\" \
      -DSSSD_LIBEXEC_PATH=\"$(sssdlibexecdir)\" \
      -DSSSD_CONF_DIR=\"$(sssdconfdir)\" \
@@ -26,7 +28,7 @@ index a15e68f682f6d8af301e11df8dcaef6d7f27e8c0..45d44146e737fc8460a2ed9ffc0171a6
      -DSSS_NSS_MCACHE_DIR=\"$(mcpath)\" \
      -DSSS_NSS_SOCKET_NAME=\"$(pipepath)/nss\" \
      -DSSS_PAM_SOCKET_NAME=\"$(pipepath)/pam\" \
-@@ -1232,8 +1231,6 @@ sssd_SOURCES = \
+@@ -1252,8 +1251,6 @@ sssd_SOURCES = \
      src/confdb/confdb_setup.c \
      src/monitor/monitor_iface_generated.c \
      src/util/nscd.c \
@@ -36,7 +38,7 @@ index a15e68f682f6d8af301e11df8dcaef6d7f27e8c0..45d44146e737fc8460a2ed9ffc0171a6
  sssd_LDADD = \
      $(SSSD_LIBS) \
 diff --git a/src/confdb/confdb.h b/src/confdb/confdb.h
-index 12beaabf8c949bd111abbe16cb98a205490fb08f..4813072bdafb5d6c9ec56a9ccaa5db6a1120112d 100644
+index 9055048865f008a2c3732551730c4a881cb9108c..dd6ac77f5a787b0434b56fccba49aa195b13297a 100644
 --- a/src/confdb/confdb.h
 +++ b/src/confdb/confdb.h
 @@ -40,7 +40,6 @@
@@ -113,5 +115,5 @@ index d6feab9000d54d2c3761de6d8e990053ade7e85f..a71d9dd1202824b3c9a7e69f1d8fa905
  
      ret = sss_ini_config_access_check(init_data);
 -- 
-2.11.0
+2.9.3
 

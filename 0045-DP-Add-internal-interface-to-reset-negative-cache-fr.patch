@@ -1,0 +1,122 @@
+From af28fa659f7ffcd12ecf8bda64e79cf5dd225651 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 16 Nov 2016 17:00:57 +0100
+Subject: [PATCH 45/79] DP: Add internal interface to reset negative cache from
+ DP
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adds a an interface that allows the Data Provider to notify responders
+to drop their negative cache.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/providers/data_provider/dp.h             |  5 +++
+ src/providers/data_provider/dp_resp_client.c | 65 +++++++++++++++++++++++++++-
+ 2 files changed, 69 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/data_provider/dp.h b/src/providers/data_provider/dp.h
+index 68db75521bd9d78eb6e7944746ea2054918e298d..79d02d469c5eb04d5e27b27af48b77f72d132416 100644
+--- a/src/providers/data_provider/dp.h
++++ b/src/providers/data_provider/dp.h
+@@ -166,4 +166,9 @@ void dp_sbus_domain_active(struct data_provider *provider,
+ void dp_sbus_domain_inconsistent(struct data_provider *provider,
+                                  struct sss_domain_info *dom);
+ 
++void dp_sbus_reset_users_ncache(struct data_provider *provider,
++                                struct sss_domain_info *dom);
++void dp_sbus_reset_groups_ncache(struct data_provider *provider,
++                                 struct sss_domain_info *dom);
++
+ #endif /* _DP_H_ */
+diff --git a/src/providers/data_provider/dp_resp_client.c b/src/providers/data_provider/dp_resp_client.c
+index 3d386eac1cd779e2776e23745a18292c5ce835cd..6828610acce3771f2b628c877a1d463c3f635015 100644
+--- a/src/providers/data_provider/dp_resp_client.c
++++ b/src/providers/data_provider/dp_resp_client.c
+@@ -26,7 +26,23 @@
+ #include "providers/data_provider.h"
+ #include "providers/data_provider/dp_private.h"
+ #include "responder/common/iface/responder_iface.h"
+-#include "src/responder/nss/nss_iface.h"
++#include "responder/nss/nss_iface.h"
++
++/* List of DP clients that deal with users or groups */
++/* FIXME - it would be much cleaner to implement sbus signals
++ * and let the responder subscribe to these messages rather than
++ * keep a list here..
++ *  https://fedorahosted.org/sssd/ticket/2233
++ */
++static enum dp_clients user_clients[] = {
++    DPC_NSS,
++    DPC_PAM,
++    DPC_IFP,
++    DPC_PAC,
++    DPC_SUDO,
++
++    DP_CLIENT_SENTINEL
++};
+ 
+ static void send_msg_to_all_clients(struct data_provider *provider,
+                                     struct DBusMessage *msg)
+@@ -42,6 +58,21 @@ static void send_msg_to_all_clients(struct data_provider *provider,
+     }
+ }
+ 
++static void send_msg_to_selected_clients(struct data_provider *provider,
++                                         struct DBusMessage *msg,
++                                         enum dp_clients *clients)
++{
++    struct dp_client *cli;
++    int i;
++
++    for (i = 0; clients[i] != DP_CLIENT_SENTINEL; i++) {
++        cli = provider->clients[clients[i]];
++        if (cli != NULL) {
++            sbus_conn_send_reply(dp_client_conn(cli), msg);
++        }
++    }
++}
++
+ static void dp_sbus_set_domain_state(struct data_provider *provider,
+                                      struct sss_domain_info *dom,
+                                      enum sss_domain_state state)
+@@ -91,3 +122,35 @@ void dp_sbus_domain_inconsistent(struct data_provider *provider,
+ {
+     return dp_sbus_set_domain_state(provider, dom, DOM_INCONSISTENT);
+ }
++
++static void dp_sbus_reset_ncache(struct data_provider *provider,
++                                 struct sss_domain_info *dom,
++                                 const char *method)
++{
++    DBusMessage *msg;
++
++    msg = sbus_create_message(NULL, NULL, RESPONDER_PATH,
++                              IFACE_RESPONDER_NCACHE, method);
++    if (msg == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory?!\n");
++        return;
++    }
++
++    send_msg_to_selected_clients(provider, msg, user_clients);
++    dbus_message_unref(msg);
++    return;
++}
++
++void dp_sbus_reset_users_ncache(struct data_provider *provider,
++                                struct sss_domain_info *dom)
++{
++    return dp_sbus_reset_ncache(provider, dom,
++                                IFACE_RESPONDER_NCACHE_RESETUSERS);
++}
++
++void dp_sbus_reset_groups_ncache(struct data_provider *provider,
++                                 struct sss_domain_info *dom)
++{
++    return dp_sbus_reset_ncache(provider, dom,
++                                IFACE_RESPONDER_NCACHE_RESETGROUPS);
++}
+-- 
+2.9.3
+

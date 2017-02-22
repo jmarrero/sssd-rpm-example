@@ -1,0 +1,44 @@
+From d4757440418c7b73bbecec7e40baf6dfe8cc9460 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 24 Jan 2017 18:04:11 +0100
+Subject: [PATCH 80/95] utils: new error codes
+
+ERR_SC_AUTH_NOT_SUPPORTED can be used by backends to indicate that
+Smartcard authentication is not supported. ERR_NO_AUTH_METHOD_AVAILABLE
+can be used by backends that no authentication method was found.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/util/util_errors.c | 2 ++
+ src/util/util_errors.h | 2 ++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/src/util/util_errors.c b/src/util/util_errors.c
+index 88ebf4e301f7194ccea920767141f838cbd8dc56..17388c997db5315c2491af1021e75aff07632488 100644
+--- a/src/util/util_errors.c
++++ b/src/util/util_errors.c
+@@ -102,6 +102,8 @@ struct err_string error_to_str[] = {
+     { "No proxy server for secrets available"}, /* ERR_SEC_NO_PROXY */
+     { "The maximum number of stored secrets has been reached" }, /* ERR_SEC_INVALID_TOO_MANY_SECRETS */
+     { "The secret payload size is too large" }, /* ERR_SEC_PAYLOAD_SIZE_IS_TOO_LARGE */
++    { "No authentication methode available" }, /* ERR_NO_AUTH_METHOD_AVAILABLE */
++    { "Smartcard authentication not supported" }, /* ERR_SC_AUTH_NOT_SUPPORTED */
+     { "ERR_LAST" } /* ERR_LAST */
+ };
+ 
+diff --git a/src/util/util_errors.h b/src/util/util_errors.h
+index 525983f21cfb7aaa299ed78f672161e6d0664ad0..7aacad26084a3a2af6333988f07db865f6a4d299 100644
+--- a/src/util/util_errors.h
++++ b/src/util/util_errors.h
+@@ -124,6 +124,8 @@ enum sssd_errors {
+     ERR_SEC_NO_PROXY,
+     ERR_SEC_INVALID_TOO_MANY_SECRETS,
+     ERR_SEC_PAYLOAD_SIZE_IS_TOO_LARGE,
++    ERR_NO_AUTH_METHOD_AVAILABLE,
++    ERR_SC_AUTH_NOT_SUPPORTED,
+     ERR_LAST            /* ALWAYS LAST */
+ };
+ 
+-- 
+2.9.3
+

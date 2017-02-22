@@ -1,0 +1,50 @@
+From bf0b4eb335ec1fb4fdd925f5cf80490ec8b8c24e Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 30 Jan 2017 14:36:56 +0100
+Subject: [PATCH 06/79] sssctl: Fix warning may be used uninitialized
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+gcc 7 probably does some new optimisations which might cause few
+wariables to be uninitialized.
+
+src/tools/sssctl/sssctl_cache.c: In function ‘sssctl_print_object’:
+src/tools/sssctl/sssctl_cache.c:523:13: error: ‘dom’ may be used uninitialized
+  in this function [-Werror=maybe-uninitialized]
+         ret = info[i].attr_fn(tmp_ctx, entry, dom, info[i].attr, &value);
+         ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+src/tools/sssctl/sssctl_cache.c:472:15: error: ‘entry’ may be used
+  uninitialized in this function [-Werror=maybe-uninitialized]
+     *_entry = talloc_steal(mem_ctx, entry);
+               ^~~~~~~~~~~~
+src/tools/sssctl/sssctl_cache.c:437:25: note: ‘entry’ was declared here
+     struct sysdb_attrs *entry;
+                         ^~~~~
+
+Another workaround would be to remove static modifier from function
+sssctl_find_object which probably prevents some inlinig + optimisation.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/tools/sssctl/sssctl_cache.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/tools/sssctl/sssctl_cache.c b/src/tools/sssctl/sssctl_cache.c
+index 59c8cb473966d60848908fb8b9adcb7d769c8cd9..8f0fc281b73f38f408c1a2307192b3f207a97b5d 100644
+--- a/src/tools/sssctl/sssctl_cache.c
++++ b/src/tools/sssctl/sssctl_cache.c
+@@ -434,8 +434,8 @@ static errno_t sssctl_fetch_object(TALLOC_CTX *mem_ctx,
+                                    struct sss_domain_info **_dom)
+ {
+     TALLOC_CTX *tmp_ctx;
+-    struct sysdb_attrs *entry;
+-    struct sss_domain_info *dom;
++    struct sysdb_attrs *entry = NULL;
++    struct sss_domain_info *dom = NULL;
+     const char **attrs;
+     char *sanitized;
+     errno_t ret;
+-- 
+2.9.3
+

@@ -1,0 +1,193 @@
+From c3a225d4d735d3a01883125592dda7a030a64e00 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 2 Nov 2016 15:59:37 +0100
+Subject: [PATCH 39/79] NSS: Add sbus interface to clear memory cache
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adds three new NSS interface sbus methods to disable memory caches of
+users, groups and initgroups. It's enough to add this interface to the
+NSS responder because the NSS responder is the only writer to the memory
+cache.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/nss/nss_iface.c           | 40 ++++++++++++++++++++++++++++++++-
+ src/responder/nss/nss_iface.xml         |  6 +++++
+ src/responder/nss/nss_iface_generated.c | 39 ++++++++++++++++++++++++++++++++
+ src/responder/nss/nss_iface_generated.h | 15 +++++++++++++
+ 4 files changed, 99 insertions(+), 1 deletion(-)
+
+diff --git a/src/responder/nss/nss_iface.c b/src/responder/nss/nss_iface.c
+index 58c70c8a01bfcc143eda14c9185672302345ef75..4a38681b54d6c9d0ac9adece69bdebb3d305fcf9 100644
+--- a/src/responder/nss/nss_iface.c
++++ b/src/responder/nss/nss_iface.c
+@@ -144,6 +144,41 @@ done:
+     talloc_free(tmp_ctx);
+ }
+ 
++int nss_memorycache_invalidate_users(struct sbus_request *req, void *data)
++{
++    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
++    struct nss_ctx *nctx = talloc_get_type(rctx->pvt_ctx, struct nss_ctx);
++
++    DEBUG(SSSDBG_TRACE_LIBS, "Invalidating all users in memory cache\n");
++    sss_mmap_cache_reset(nctx->pwd_mc_ctx);
++
++    return iface_nss_memorycache_InvalidateAllUsers_finish(req);
++}
++
++int nss_memorycache_invalidate_groups(struct sbus_request *req, void *data)
++{
++    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
++    struct nss_ctx *nctx = talloc_get_type(rctx->pvt_ctx, struct nss_ctx);
++
++    DEBUG(SSSDBG_TRACE_LIBS, "Invalidating all groups in memory cache\n");
++    sss_mmap_cache_reset(nctx->grp_mc_ctx);
++
++    return iface_nss_memorycache_InvalidateAllGroups_finish(req);
++}
++
++int nss_memorycache_invalidate_initgroups(struct sbus_request *req, void *data)
++{
++    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
++    struct nss_ctx *nctx = talloc_get_type(rctx->pvt_ctx, struct nss_ctx);
++
++    DEBUG(SSSDBG_TRACE_LIBS,
++          "Invalidating all initgroup records in memory cache\n");
++    sss_mmap_cache_reset(nctx->initgr_mc_ctx);
++
++    return iface_nss_memorycache_InvalidateAllInitgrRecords_finish(req);
++}
++
++
+ int nss_memorycache_update_initgroups(struct sbus_request *sbus_req,
+                                       void *data,
+                                       const char *user,
+@@ -164,7 +199,10 @@ int nss_memorycache_update_initgroups(struct sbus_request *sbus_req,
+ 
+ struct iface_nss_memorycache iface_nss_memorycache = {
+     { &iface_nss_memorycache_meta, 0 },
+-    .UpdateInitgroups = nss_memorycache_update_initgroups
++    .UpdateInitgroups = nss_memorycache_update_initgroups,
++    .InvalidateAllUsers = nss_memorycache_invalidate_users,
++    .InvalidateAllGroups = nss_memorycache_invalidate_groups,
++    .InvalidateAllInitgrRecords = nss_memorycache_invalidate_initgroups,
+ };
+ 
+ static struct sbus_iface_map iface_map[] = {
+diff --git a/src/responder/nss/nss_iface.xml b/src/responder/nss/nss_iface.xml
+index b7cc4deb77135a592bad2ca62570f206231129b7..79e42c7424e800601bdc2dbe9ecd3e4a49829d68 100644
+--- a/src/responder/nss/nss_iface.xml
++++ b/src/responder/nss/nss_iface.xml
+@@ -8,5 +8,11 @@
+             <arg name="domain" type="s" direction="in" />
+             <arg name="groups" type="au" direction="in" />
+         </method>
++        <method name="InvalidateAllUsers">
++        </method>
++        <method name="InvalidateAllGroups">
++        </method>
++        <method name="InvalidateAllInitgrRecords">
++        </method>
+     </interface>
+ </node>
+diff --git a/src/responder/nss/nss_iface_generated.c b/src/responder/nss/nss_iface_generated.c
+index 2d0031090e33df9c9e9d9fbf1a18825026509803..4c07080148f62c1d8e18e51e1be62bb261a13566 100644
+--- a/src/responder/nss/nss_iface_generated.c
++++ b/src/responder/nss/nss_iface_generated.c
+@@ -23,6 +23,24 @@ int iface_nss_memorycache_UpdateInitgroups_finish(struct sbus_request *req)
+                                          DBUS_TYPE_INVALID);
+ }
+ 
++int iface_nss_memorycache_InvalidateAllUsers_finish(struct sbus_request *req)
++{
++   return sbus_request_return_and_finish(req,
++                                         DBUS_TYPE_INVALID);
++}
++
++int iface_nss_memorycache_InvalidateAllGroups_finish(struct sbus_request *req)
++{
++   return sbus_request_return_and_finish(req,
++                                         DBUS_TYPE_INVALID);
++}
++
++int iface_nss_memorycache_InvalidateAllInitgrRecords_finish(struct sbus_request *req)
++{
++   return sbus_request_return_and_finish(req,
++                                         DBUS_TYPE_INVALID);
++}
++
+ /* methods for org.freedesktop.sssd.nss.MemoryCache */
+ const struct sbus_method_meta iface_nss_memorycache__methods[] = {
+     {
+@@ -32,6 +50,27 @@ const struct sbus_method_meta iface_nss_memorycache__methods[] = {
+         offsetof(struct iface_nss_memorycache, UpdateInitgroups),
+         invoke_ssau_method,
+     },
++    {
++        "InvalidateAllUsers", /* name */
++        NULL, /* no in_args */
++        NULL, /* no out_args */
++        offsetof(struct iface_nss_memorycache, InvalidateAllUsers),
++        NULL, /* no invoker */
++    },
++    {
++        "InvalidateAllGroups", /* name */
++        NULL, /* no in_args */
++        NULL, /* no out_args */
++        offsetof(struct iface_nss_memorycache, InvalidateAllGroups),
++        NULL, /* no invoker */
++    },
++    {
++        "InvalidateAllInitgrRecords", /* name */
++        NULL, /* no in_args */
++        NULL, /* no out_args */
++        offsetof(struct iface_nss_memorycache, InvalidateAllInitgrRecords),
++        NULL, /* no invoker */
++    },
+     { NULL, }
+ };
+ 
+diff --git a/src/responder/nss/nss_iface_generated.h b/src/responder/nss/nss_iface_generated.h
+index ad902482a9be03a60cbf3663b6f771d0a2020b88..6f4d13a35dc5cbe33182ad8744769b37ce449d50 100644
+--- a/src/responder/nss/nss_iface_generated.h
++++ b/src/responder/nss/nss_iface_generated.h
+@@ -14,6 +14,9 @@
+ /* constants for org.freedesktop.sssd.nss.MemoryCache */
+ #define IFACE_NSS_MEMORYCACHE "org.freedesktop.sssd.nss.MemoryCache"
+ #define IFACE_NSS_MEMORYCACHE_UPDATEINITGROUPS "UpdateInitgroups"
++#define IFACE_NSS_MEMORYCACHE_INVALIDATEALLUSERS "InvalidateAllUsers"
++#define IFACE_NSS_MEMORYCACHE_INVALIDATEALLGROUPS "InvalidateAllGroups"
++#define IFACE_NSS_MEMORYCACHE_INVALIDATEALLINITGRRECORDS "InvalidateAllInitgrRecords"
+ 
+ /* ------------------------------------------------------------------------
+  * DBus handlers
+@@ -37,11 +40,23 @@
+ struct iface_nss_memorycache {
+     struct sbus_vtable vtable; /* derive from sbus_vtable */
+     int (*UpdateInitgroups)(struct sbus_request *req, void *data, const char *arg_user, const char *arg_domain, uint32_t arg_groups[], int len_groups);
++    int (*InvalidateAllUsers)(struct sbus_request *req, void *data);
++    int (*InvalidateAllGroups)(struct sbus_request *req, void *data);
++    int (*InvalidateAllInitgrRecords)(struct sbus_request *req, void *data);
+ };
+ 
+ /* finish function for UpdateInitgroups */
+ int iface_nss_memorycache_UpdateInitgroups_finish(struct sbus_request *req);
+ 
++/* finish function for InvalidateAllUsers */
++int iface_nss_memorycache_InvalidateAllUsers_finish(struct sbus_request *req);
++
++/* finish function for InvalidateAllGroups */
++int iface_nss_memorycache_InvalidateAllGroups_finish(struct sbus_request *req);
++
++/* finish function for InvalidateAllInitgrRecords */
++int iface_nss_memorycache_InvalidateAllInitgrRecords_finish(struct sbus_request *req);
++
+ /* ------------------------------------------------------------------------
+  * DBus Interface Metadata
+  *
+-- 
+2.9.3
+

@@ -1,0 +1,155 @@
+From da95ec568a941c85982e30611398efb86bc884ab Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 7 Dec 2016 14:38:43 +0100
+Subject: [PATCH 64/79] MAN: Add documentation for the files provider
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The new provider needs a man page.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ contrib/sssd.spec.in     |  1 +
+ src/man/Makefile.am      |  4 +++
+ src/man/po/po4a.cfg      |  1 +
+ src/man/sssd-files.5.xml | 88 ++++++++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 94 insertions(+)
+ create mode 100644 src/man/sssd-files.5.xml
+
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index fe51f9998aedbc7c157e8897a0dae67af037cec4..baeb08b124d17d4eb9cb4fdfac4168ec12dc56ad 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -850,6 +850,7 @@ done
+ 
+ # The files provider is intentionally packaged in -common
+ %{_libdir}/%{name}/libsss_files.so
++%{_mandir}/man5/sssd-files.5*
+ 
+ %dir %{sssdstatedir}
+ %dir %{_localstatedir}/cache/krb5rcache
+diff --git a/src/man/Makefile.am b/src/man/Makefile.am
+index 49058bc669eb1a5fb8093a0d64c65609a3164744..760bb7831b5852e1bf3be497ad5babdb4f4318c2 100644
+--- a/src/man/Makefile.am
++++ b/src/man/Makefile.am
+@@ -84,6 +84,10 @@ if BUILD_NFS_IDMAP
+ man_MANS += sss_rpcidmapd.5
+ endif
+ 
++if HAVE_INOTIFY
++man_MANS += sssd-files.5
++endif
++
+ SUFFIXES = .1.xml .1 .3.xml .3 .5.xml .5 .8.xml .8
+ .1.xml.1:
+ 	$(XMLLINT) $(XMLLINT_FLAGS) $<
+diff --git a/src/man/po/po4a.cfg b/src/man/po/po4a.cfg
+index 00fd414428ac20fb97277d6d9225853d6ae6dad1..ffcf9a2793da3c0115bc846744ccb9592a9a68ef 100644
+--- a/src/man/po/po4a.cfg
++++ b/src/man/po/po4a.cfg
+@@ -28,6 +28,7 @@
+ [type:docbook] sss_ssh_knownhostsproxy.1.xml $lang:$(builddir)/$lang/sss_ssh_knownhostsproxy.1.xml
+ [type:docbook] idmap_sss.8.xml $lang:$(builddir)/$lang/idmap_sss.8.xml
+ [type:docbook] sssctl.8.xml $lang:$(builddir)/$lang/sssctl.8.xml
++[type:docbook] sssd-files.5.xml $lang:$(builddir)/$lang/sssd-files.5.xml
+ [type:docbook] sssd-secrets.5.xml $lang:$(builddir)/$lang/sssd-secrets.5.xml
+ [type:docbook] include/service_discovery.xml $lang:$(builddir)/$lang/include/service_discovery.xml opt:"-k 0"
+ [type:docbook] include/upstream.xml $lang:$(builddir)/$lang/include/upstream.xml opt:"-k 0"
+diff --git a/src/man/sssd-files.5.xml b/src/man/sssd-files.5.xml
+new file mode 100644
+index 0000000000000000000000000000000000000000..d44fffc034803f774699ed01f11f0e5ec5cd8042
+--- /dev/null
++++ b/src/man/sssd-files.5.xml
+@@ -0,0 +1,88 @@
++<?xml version="1.0" encoding="UTF-8"?>
++<!DOCTYPE reference PUBLIC "-//OASIS//DTD DocBook V4.4//EN"
++"http://www.oasis-open.org/docbook/xml/4.4/docbookx.dtd">
++<reference>
++<title>SSSD Manual pages</title>
++<refentry>
++    <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="include/upstream.xml" />
++
++    <refmeta>
++        <refentrytitle>sssd-files</refentrytitle>
++        <manvolnum>5</manvolnum>
++        <refmiscinfo class="manual">File Formats and Conventions</refmiscinfo>
++    </refmeta>
++
++    <refnamediv id='name'>
++        <refname>sssd-files</refname>
++        <refpurpose>SSSD files provider</refpurpose>
++    </refnamediv>
++
++    <refsect1 id='description'>
++        <title>DESCRIPTION</title>
++        <para>
++            This manual page describes the files provider
++            for
++            <citerefentry>
++                <refentrytitle>sssd</refentrytitle>
++                <manvolnum>8</manvolnum>
++            </citerefentry>.
++            For a detailed syntax reference, refer to the <quote>FILE FORMAT</quote> section of the
++            <citerefentry>
++                <refentrytitle>sssd.conf</refentrytitle>
++                <manvolnum>5</manvolnum>
++            </citerefentry> manual page.
++        </para>
++        <para>
++            The files provider mirrors the content of the
++            <citerefentry>
++                <refentrytitle>passwd</refentrytitle>
++                <manvolnum>5</manvolnum>
++            </citerefentry>
++            and
++            <citerefentry>
++                <refentrytitle>group</refentrytitle>
++                <manvolnum>5</manvolnum>
++            </citerefentry>
++            files. The purpose of the files provider is to make the users
++            and groups traditionally only accessible with NSS interfaces
++            also available through the SSSD interfaces such as
++            <citerefentry>
++                <refentrytitle>sssd-ifp</refentrytitle>
++                <manvolnum>5</manvolnum>
++            </citerefentry>.
++        </para>
++    </refsect1>
++
++    <refsect1 id='configuration-options'>
++        <title>CONFIGURATION OPTIONS</title>
++        <para>
++            The files provider has no specific options of its own, however,
++            generic SSSD domain options can be set where applicable.
++            Refer to the section <quote>DOMAIN SECTIONS</quote> of the
++            <citerefentry>
++                <refentrytitle>sssd.conf</refentrytitle>
++                <manvolnum>5</manvolnum>
++            </citerefentry> manual page for details on the configuration
++            of an SSSD domain.
++        </para>
++    </refsect1>
++
++    <refsect1 id='example'>
++        <title>EXAMPLE</title>
++        <para>
++            The following example assumes that SSSD is correctly
++            configured and files is one of the domains in the
++            <replaceable>[sssd]</replaceable> section.
++        </para>
++        <para>
++<programlisting>
++[domain/files]
++id_provider = files
++</programlisting>
++        </para>
++    </refsect1>
++
++	<xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="include/seealso.xml" />
++
++</refentry>
++</reference>
+-- 
+2.9.3
+

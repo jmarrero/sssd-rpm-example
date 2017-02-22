@@ -1,0 +1,148 @@
+From b3ee4be9e1794fa823696d70d4958f3b0269939c Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 2 Nov 2016 17:18:07 +0100
+Subject: [PATCH 44/79] DP: Add internal DP interface to set domain state
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adds functions to the interface Data Provider publishes towards back
+ends that allows the back ends to notify responders that a domain has
+been enabled or disabled.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                                  |  1 +
+ src/providers/data_provider/dp.h             |  5 ++
+ src/providers/data_provider/dp_resp_client.c | 93 ++++++++++++++++++++++++++++
+ 3 files changed, 99 insertions(+)
+ create mode 100644 src/providers/data_provider/dp_resp_client.c
+
+diff --git a/Makefile.am b/Makefile.am
+index aa28a27f992f9a42b78d37d6de8fd8271c99afef..5cf496002ff54b8df1c0fdf29179a5b69e4b62c0 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1464,6 +1464,7 @@ sssd_be_SOURCES = \
+     src/providers/data_provider/dp_iface_backend.c \
+     src/providers/data_provider/dp_iface_failover.c \
+     src/providers/data_provider/dp_client.c \
++    src/providers/data_provider/dp_resp_client.c \
+     src/providers/data_provider/dp_iface_generated.c \
+     src/providers/data_provider/dp_request.c \
+     src/providers/data_provider/dp_request_reply.c \
+diff --git a/src/providers/data_provider/dp.h b/src/providers/data_provider/dp.h
+index 5b36baf3489be4cce463dfb42c65a0b7f7ece9ef..68db75521bd9d78eb6e7944746ea2054918e298d 100644
+--- a/src/providers/data_provider/dp.h
++++ b/src/providers/data_provider/dp.h
+@@ -161,4 +161,9 @@ bool dp_method_enabled(struct data_provider *provider,
+ void dp_terminate_domain_requests(struct data_provider *provider,
+                                   const char *domain);
+ 
++void dp_sbus_domain_active(struct data_provider *provider,
++                           struct sss_domain_info *dom);
++void dp_sbus_domain_inconsistent(struct data_provider *provider,
++                                 struct sss_domain_info *dom);
++
+ #endif /* _DP_H_ */
+diff --git a/src/providers/data_provider/dp_resp_client.c b/src/providers/data_provider/dp_resp_client.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..3d386eac1cd779e2776e23745a18292c5ce835cd
+--- /dev/null
++++ b/src/providers/data_provider/dp_resp_client.c
+@@ -0,0 +1,93 @@
++/*
++   SSSD
++
++   Data Provider Responder client - DP calls responder interface
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "config.h"
++#include <talloc.h>
++#include <tevent.h>
++
++#include "confdb/confdb.h"
++#include "sbus/sssd_dbus.h"
++#include "providers/data_provider.h"
++#include "providers/data_provider/dp_private.h"
++#include "responder/common/iface/responder_iface.h"
++#include "src/responder/nss/nss_iface.h"
++
++static void send_msg_to_all_clients(struct data_provider *provider,
++                                    struct DBusMessage *msg)
++{
++    struct dp_client *cli;
++    int i;
++
++    for (i = 0; provider->clients[i] != NULL; i++) {
++        cli = provider->clients[i];
++        if (cli != NULL) {
++           sbus_conn_send_reply(dp_client_conn(cli), msg);
++        }
++    }
++}
++
++static void dp_sbus_set_domain_state(struct data_provider *provider,
++                                     struct sss_domain_info *dom,
++                                     enum sss_domain_state state)
++{
++    DBusMessage *msg;
++    const char *method = NULL;
++
++    switch (state) {
++    case DOM_ACTIVE:
++        DEBUG(SSSDBG_TRACE_FUNC, "Ordering responders to enable domain %s\n",
++              dom->name);
++        method = IFACE_RESPONDER_DOMAIN_SETACTIVE;
++        break;
++    case DOM_INCONSISTENT:
++        DEBUG(SSSDBG_TRACE_FUNC, "Ordering responders to disable domain %s\n",
++              dom->name);
++        method = IFACE_RESPONDER_DOMAIN_SETINCONSISTENT;
++        break;
++    default:
++        /* No other methods provided at the moment */
++        return;
++    }
++
++    sss_domain_set_state(dom, state);
++
++    msg = sbus_create_message(NULL, NULL, RESPONDER_PATH,
++                              IFACE_RESPONDER_DOMAIN, method,
++                              DBUS_TYPE_STRING, &dom->name);
++    if (msg == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory?!\n");
++        return;
++    }
++
++    send_msg_to_all_clients(provider, msg);
++    dbus_message_unref(msg);
++    return;
++}
++
++void dp_sbus_domain_active(struct data_provider *provider,
++                           struct sss_domain_info *dom)
++{
++    return dp_sbus_set_domain_state(provider, dom, DOM_ACTIVE);
++}
++
++void dp_sbus_domain_inconsistent(struct data_provider *provider,
++                                 struct sss_domain_info *dom)
++{
++    return dp_sbus_set_domain_state(provider, dom, DOM_INCONSISTENT);
++}
+-- 
+2.9.3
+

@@ -1,0 +1,28 @@
+From 254f3898cc9fb9d76e12d72a2955906c49748e6d Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 24 Jan 2017 18:18:23 +0100
+Subject: [PATCH 79/95] PAM: use sentinel error code in PAM tests
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/tests/cmocka/test_pam_srv.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/tests/cmocka/test_pam_srv.c b/src/tests/cmocka/test_pam_srv.c
+index 3b8327eb3acbb35cbd3e1a3cd4d8f7dc06b82c9f..e6ed8f509b5b69978f80c158e52bfea738909465 100644
+--- a/src/tests/cmocka/test_pam_srv.c
++++ b/src/tests/cmocka/test_pam_srv.c
+@@ -883,7 +883,9 @@ void test_pam_open_session(void **state)
+     will_return(__wrap_sss_packet_get_cmd, SSS_PAM_OPEN_SESSION);
+     will_return(__wrap_sss_packet_get_body, WRAP_CALL_REAL);
+ 
+-    pam_test_ctx->exp_pam_status = PAM_NO_MODULE_DATA;
++    /* make sure pam_status is not touched by setting it to a value which is
++     * not used by SSSD. */
++    pam_test_ctx->exp_pam_status = _PAM_RETURN_VALUES;
+     set_cmd_cb(test_pam_simple_check);
+     ret = sss_cmd_execute(pam_test_ctx->cctx, SSS_PAM_OPEN_SESSION,
+                           pam_test_ctx->pam_cmds);
+-- 
+2.9.3
+

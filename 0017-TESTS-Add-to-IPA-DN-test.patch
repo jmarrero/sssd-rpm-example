@@ -1,0 +1,36 @@
+From 1404f3aa541849d880cce591584ba1580014cb50 Mon Sep 17 00:00:00 2001
+From: Justin Stephenson <jstephen@redhat.com>
+Date: Wed, 25 Jan 2017 17:05:01 -0500
+Subject: [PATCH 17/79] TESTS: Add to IPA DN test
+
+Add test to ensure conflict entries return ENOENT
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3288
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/tests/cmocka/test_ipa_dn.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/tests/cmocka/test_ipa_dn.c b/src/tests/cmocka/test_ipa_dn.c
+index a6e26ec31ff25519ad895ef934dac0e3a3dd83ae..ff951f28acbb8a567c3d27027a688386ff08b475 100644
+--- a/src/tests/cmocka/test_ipa_dn.c
++++ b/src/tests/cmocka/test_ipa_dn.c
+@@ -169,6 +169,13 @@ static void ipa_get_rdn_test(void **state)
+     ret = ipa_get_rdn(test_ctx, test_ctx->sysdb, "cn=rdn,attr1=value1", &rdn, "cn", "attr1", "value1");
+     assert_int_equal(ret, ENOENT);
+     assert_null(rdn);
++
++    ret = ipa_get_rdn(test_ctx, test_ctx->sysdb,
++                      "cn=rdn+nsuniqueid=9b1e3301-c32611e6-bdcae37a-ef905e7c,"
++                      "attr1=value1,attr2=value2,dc=example,dc=com",
++                      &rdn, "cn", "attr1", "value1", "attr2", "value2");
++    assert_int_equal(ret, ENOENT);
++    assert_null(rdn);
+ }
+ 
+ int main(int argc, const char *argv[])
+-- 
+2.9.3
+

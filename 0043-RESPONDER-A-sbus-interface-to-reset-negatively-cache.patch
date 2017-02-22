@@ -1,0 +1,259 @@
+From 205a0b9e9234327730fa808be95b2e1db7ffee95 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 2 Nov 2016 17:13:32 +0100
+Subject: [PATCH 43/79] RESPONDER: A sbus interface to reset negatively cached
+ users and groups
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adds two new responder sbus interface functions: ResetNegcacheUsers and
+ResetNegcacheGroups. These functions can be called by a Data Provider to
+signal to a responder that it should drop its negative cache.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                                        |  1 +
+ src/responder/common/iface/responder_iface.c       |  7 ++++
+ src/responder/common/iface/responder_iface.h       |  5 +++
+ src/responder/common/iface/responder_iface.xml     |  6 ++++
+ .../common/iface/responder_iface_generated.c       | 40 ++++++++++++++++++++++
+ .../common/iface/responder_iface_generated.h       | 21 ++++++++++++
+ .../{responder_iface.c => responder_ncache.c}      | 31 ++++++++++-------
+ src/tests/cwrap/Makefile.am                        |  2 ++
+ 8 files changed, 100 insertions(+), 13 deletions(-)
+ copy src/responder/common/iface/{responder_iface.c => responder_ncache.c} (55%)
+
+diff --git a/Makefile.am b/Makefile.am
+index 32f62b5b4391e5d6efb7f7dc19e9b29eaa658550..aa28a27f992f9a42b78d37d6de8fd8271c99afef 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -519,6 +519,7 @@ SSSD_CACHE_REQ_OBJ = \
+ SSSD_RESPONDER_IFACE_OBJ = \
+     src/responder/common/iface/responder_iface.c \
+     src/responder/common/iface/responder_domain.c \
++    src/responder/common/iface/responder_ncache.c \
+     src/responder/common/iface/responder_iface_generated.c \
+     $(NULL)
+ 
+diff --git a/src/responder/common/iface/responder_iface.c b/src/responder/common/iface/responder_iface.c
+index f1e618b659af3e7a5ffa1b7307f3d61124180f0c..07fd1ff6276ae9b847ff50b949ce91550fe68296 100644
+--- a/src/responder/common/iface/responder_iface.c
++++ b/src/responder/common/iface/responder_iface.c
+@@ -25,8 +25,15 @@ struct iface_responder_domain iface_responder_domain = {
+     .SetInconsistent = sss_resp_domain_inconsistent,
+ };
+ 
++struct iface_responder_ncache iface_responder_ncache = {
++    { &iface_responder_ncache_meta, 0 },
++    .ResetUsers = sss_resp_reset_ncache_users,
++    .ResetGroups = sss_resp_reset_ncache_groups,
++};
++
+ static struct sbus_iface_map iface_map[] = {
+     { RESPONDER_PATH, &iface_responder_domain.vtable },
++    { RESPONDER_PATH, &iface_responder_ncache.vtable },
+     { NULL, NULL }
+ };
+ 
+diff --git a/src/responder/common/iface/responder_iface.h b/src/responder/common/iface/responder_iface.h
+index abd7c83ce0b0efbc13867ffb56ec871503c92567..5166b624cf9f7278c46f10dfc26c717ac4462408 100644
+--- a/src/responder/common/iface/responder_iface.h
++++ b/src/responder/common/iface/responder_iface.h
+@@ -34,4 +34,9 @@ int sss_resp_domain_inconsistent(struct sbus_request *req,
+                                  void *data,
+                                  const char *domain_name);
+ 
++/* org.freedesktop.sssd.Responder.NegativeCache */
++
++int sss_resp_reset_ncache_users(struct sbus_request *req, void *data);
++int sss_resp_reset_ncache_groups(struct sbus_request *req, void *data);
++
+ #endif /* _RESPONDER_IFACE_H_ */
+diff --git a/src/responder/common/iface/responder_iface.xml b/src/responder/common/iface/responder_iface.xml
+index d3d0ff40ed5a8457492f2f54d551d9ae20cc56c3..9f092e00ffc5354efe98b6c8bde1cdf414ee36d2 100644
+--- a/src/responder/common/iface/responder_iface.xml
++++ b/src/responder/common/iface/responder_iface.xml
+@@ -10,4 +10,10 @@
+             <arg name="name" type="s" direction="in" />
+         </method>
+     </interface>
++
++    <interface name="org.freedesktop.sssd.Responder.NegativeCache">
++        <annotation value="iface_responder_ncache" name="org.freedesktop.DBus.GLib.CSymbol"/>
++        <method name="ResetUsers" />
++        <method name="ResetGroups" />
++    </interface>
+ </node>
+diff --git a/src/responder/common/iface/responder_iface_generated.c b/src/responder/common/iface/responder_iface_generated.c
+index 1d59eafed0eb739fb208c864b5b726cf9883df94..837e67cfd4305494be6ee3de949d56d47179707c 100644
+--- a/src/responder/common/iface/responder_iface_generated.c
++++ b/src/responder/common/iface/responder_iface_generated.c
+@@ -61,6 +61,46 @@ const struct sbus_interface_meta iface_responder_domain_meta = {
+     sbus_invoke_get_all, /* GetAll invoker */
+ };
+ 
++int iface_responder_ncache_ResetUsers_finish(struct sbus_request *req)
++{
++   return sbus_request_return_and_finish(req,
++                                         DBUS_TYPE_INVALID);
++}
++
++int iface_responder_ncache_ResetGroups_finish(struct sbus_request *req)
++{
++   return sbus_request_return_and_finish(req,
++                                         DBUS_TYPE_INVALID);
++}
++
++/* methods for org.freedesktop.sssd.Responder.NegativeCache */
++const struct sbus_method_meta iface_responder_ncache__methods[] = {
++    {
++        "ResetUsers", /* name */
++        NULL, /* no in_args */
++        NULL, /* no out_args */
++        offsetof(struct iface_responder_ncache, ResetUsers),
++        NULL, /* no invoker */
++    },
++    {
++        "ResetGroups", /* name */
++        NULL, /* no in_args */
++        NULL, /* no out_args */
++        offsetof(struct iface_responder_ncache, ResetGroups),
++        NULL, /* no invoker */
++    },
++    { NULL, }
++};
++
++/* interface info for org.freedesktop.sssd.Responder.NegativeCache */
++const struct sbus_interface_meta iface_responder_ncache_meta = {
++    "org.freedesktop.sssd.Responder.NegativeCache", /* name */
++    iface_responder_ncache__methods,
++    NULL, /* no signals */
++    NULL, /* no properties */
++    sbus_invoke_get_all, /* GetAll invoker */
++};
++
+ /* invokes a handler with a 's' DBus signature */
+ static int invoke_s_method(struct sbus_request *dbus_req, void *function_ptr)
+ {
+diff --git a/src/responder/common/iface/responder_iface_generated.h b/src/responder/common/iface/responder_iface_generated.h
+index e7f5c64feb062e13dc04352128cada6883f6f4fa..964f19b732595c261e84f857497678490a113412 100644
+--- a/src/responder/common/iface/responder_iface_generated.h
++++ b/src/responder/common/iface/responder_iface_generated.h
+@@ -16,6 +16,11 @@
+ #define IFACE_RESPONDER_DOMAIN_SETACTIVE "SetActive"
+ #define IFACE_RESPONDER_DOMAIN_SETINCONSISTENT "SetInconsistent"
+ 
++/* constants for org.freedesktop.sssd.Responder.NegativeCache */
++#define IFACE_RESPONDER_NCACHE "org.freedesktop.sssd.Responder.NegativeCache"
++#define IFACE_RESPONDER_NCACHE_RESETUSERS "ResetUsers"
++#define IFACE_RESPONDER_NCACHE_RESETGROUPS "ResetGroups"
++
+ /* ------------------------------------------------------------------------
+  * DBus handlers
+  *
+@@ -47,6 +52,19 @@ int iface_responder_domain_SetActive_finish(struct sbus_request *req);
+ /* finish function for SetInconsistent */
+ int iface_responder_domain_SetInconsistent_finish(struct sbus_request *req);
+ 
++/* vtable for org.freedesktop.sssd.Responder.NegativeCache */
++struct iface_responder_ncache {
++    struct sbus_vtable vtable; /* derive from sbus_vtable */
++    int (*ResetUsers)(struct sbus_request *req, void *data);
++    int (*ResetGroups)(struct sbus_request *req, void *data);
++};
++
++/* finish function for ResetUsers */
++int iface_responder_ncache_ResetUsers_finish(struct sbus_request *req);
++
++/* finish function for ResetGroups */
++int iface_responder_ncache_ResetGroups_finish(struct sbus_request *req);
++
+ /* ------------------------------------------------------------------------
+  * DBus Interface Metadata
+  *
+@@ -60,4 +78,7 @@ int iface_responder_domain_SetInconsistent_finish(struct sbus_request *req);
+ /* interface info for org.freedesktop.sssd.Responder.Domain */
+ extern const struct sbus_interface_meta iface_responder_domain_meta;
+ 
++/* interface info for org.freedesktop.sssd.Responder.NegativeCache */
++extern const struct sbus_interface_meta iface_responder_ncache_meta;
++
+ #endif /* __RESPONDER_IFACE_XML__ */
+diff --git a/src/responder/common/iface/responder_iface.c b/src/responder/common/iface/responder_ncache.c
+similarity index 55%
+copy from src/responder/common/iface/responder_iface.c
+copy to src/responder/common/iface/responder_ncache.c
+index f1e618b659af3e7a5ffa1b7307f3d61124180f0c..c7aa0a3a40f386aa2d2f0d0a00a4fa90a59ffb34 100644
+--- a/src/responder/common/iface/responder_iface.c
++++ b/src/responder/common/iface/responder_ncache.c
+@@ -1,5 +1,8 @@
+ /*
+-    Copyright (C) 2016 Red Hat
++    Authors:
++        Pavel Březina <pbrezina@redhat.com>
++
++    Copyright (C) 2017 Red Hat
+ 
+     This program is free software; you can redistribute it and/or modify
+     it under the terms of the GNU General Public License as published by
+@@ -15,22 +18,24 @@
+     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
++#include "util/util.h"
+ #include "sbus/sssd_dbus.h"
+-#include "responder/common/iface/responder_iface.h"
+ #include "responder/common/responder.h"
++#include "responder/common/negcache.h"
++#include "responder/common/iface/responder_iface.h"
+ 
+-struct iface_responder_domain iface_responder_domain = {
+-    { &iface_responder_domain_meta, 0 },
+-    .SetActive = sss_resp_domain_active,
+-    .SetInconsistent = sss_resp_domain_inconsistent,
+-};
++int sss_resp_reset_ncache_users(struct sbus_request *req, void *data)
++{
++    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
+ 
+-static struct sbus_iface_map iface_map[] = {
+-    { RESPONDER_PATH, &iface_responder_domain.vtable },
+-    { NULL, NULL }
+-};
++    sss_ncache_reset_users(rctx->ncache);
++    return iface_responder_ncache_ResetUsers_finish(req);
++}
+ 
+-struct sbus_iface_map *responder_get_sbus_interface()
++int sss_resp_reset_ncache_groups(struct sbus_request *req, void *data)
+ {
+-    return iface_map;
++    struct resp_ctx *rctx = talloc_get_type(data, struct resp_ctx);
++
++    sss_ncache_reset_groups(rctx->ncache);
++    return iface_responder_ncache_ResetGroups_finish(req);
+ }
+diff --git a/src/tests/cwrap/Makefile.am b/src/tests/cwrap/Makefile.am
+index f50e9aa58fa5f2b0b8aa144582500d925a0a6438..b4bef8fee1830c1d6798dde50f114ecb4608c645 100644
+--- a/src/tests/cwrap/Makefile.am
++++ b/src/tests/cwrap/Makefile.am
+@@ -66,6 +66,7 @@ SSSD_CACHE_REQ_OBJ = \
+ SSSD_RESPONDER_IFACE_OBJ = \
+     ../../../src/responder/common/iface/responder_iface.c \
+     ../../../src/responder/common/iface/responder_domain.c \
++    ../../../src/responder/common/iface/responder_ncache.c \
+     ../../../src/responder/common/iface/responder_iface_generated.c \
+     $(NULL)
+ 
+@@ -167,6 +168,7 @@ responder_common_tests_SOURCES =\
+     test_responder_common.c \
+     ../../../src/responder/common/iface/responder_iface.c \
+     ../../../src/responder/common/iface/responder_domain.c \
++    ../../../src/responder/common/iface/responder_ncache.c \
+     ../../../src/responder/common/iface/responder_iface_generated.c \
+     ../../../src/responder/common/negcache_files.c \
+     ../../../src/responder/common/negcache.c \
+-- 
+2.9.3
+

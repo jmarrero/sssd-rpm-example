@@ -1,0 +1,44 @@
+From 2ddcd5785f10de42bf03dfc36eca94dbc1fc1fb3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 6 Feb 2017 18:58:18 +0000
+Subject: [PATCH 13/79] IFP: Update ifp_iface_generated.c
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+These changes are leftovers from commit 78b4b7e.
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/ifp/ifp_iface_generated.c | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/src/responder/ifp/ifp_iface_generated.c b/src/responder/ifp/ifp_iface_generated.c
+index 90cd4ff9e3a4dff3e8d2e3d904bbf6bde6a748ae..d9df6c623b7f597b8ea9427a58488b340b1934ea 100644
+--- a/src/responder/ifp/ifp_iface_generated.c
++++ b/src/responder/ifp/ifp_iface_generated.c
+@@ -263,11 +263,6 @@ const struct sbus_interface_meta iface_ifp_meta = {
+     sbus_invoke_get_all, /* GetAll invoker */
+ };
+ 
+-/* methods for org.freedesktop.sssd.infopipe.Components */
+-const struct sbus_method_meta iface_ifp_components__methods[] = {
+-    { NULL, }
+-};
+-
+ /* property info for org.freedesktop.sssd.infopipe.Components */
+ const struct sbus_property_meta iface_ifp_components__properties[] = {
+     {
+@@ -321,7 +316,7 @@ const struct sbus_property_meta iface_ifp_components__properties[] = {
+ /* interface info for org.freedesktop.sssd.infopipe.Components */
+ const struct sbus_interface_meta iface_ifp_components_meta = {
+     "org.freedesktop.sssd.infopipe.Components", /* name */
+-    iface_ifp_components__methods,
++    NULL, /* no methods */
+     NULL, /* no signals */
+     iface_ifp_components__properties,
+     sbus_invoke_get_all, /* GetAll invoker */
+-- 
+2.9.3
+

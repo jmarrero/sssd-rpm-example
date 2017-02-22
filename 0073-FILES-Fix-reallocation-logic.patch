@@ -1,0 +1,167 @@
+From fc91d72f32660712f7c9e872e00deb91f188fea3 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 21 Feb 2017 22:14:35 +0100
+Subject: [PATCH 73/79] FILES: Fix reallocation logic
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There were two bugs in the files provider reallocation logic:
+    1) the reallocated array was not NULL-terminated properly
+    2) talloc_get_size was used in place of talloc_array_length
+
+This bug could have resulted in a crash when the passwd or groups file
+contained more than FILES_REALLOC_CHUNK entries.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/providers/files/files_ops.c       |  9 +++--
+ src/tests/intg/test_files_provider.py | 66 ++++++++++++++++++++++++++++++++++-
+ 2 files changed, 72 insertions(+), 3 deletions(-)
+
+diff --git a/src/providers/files/files_ops.c b/src/providers/files/files_ops.c
+index beda47abd75efd1d399ce074cceb9ea9f4b1399f..9ebf3b11bdb6be60c03392a74a0d434c90808782 100644
+--- a/src/providers/files/files_ops.c
++++ b/src/providers/files/files_ops.c
+@@ -27,6 +27,9 @@
+ #include "util/inotify.h"
+ #include "util/util.h"
+ 
++/* When changing this constant, make sure to also adjust the files integration
++ * test for reallocation branch
++ */
+ #define FILES_REALLOC_CHUNK 64
+ 
+ #define PWD_MAXSIZE         1024
+@@ -108,7 +111,7 @@ static errno_t enum_files_users(TALLOC_CTX *mem_ctx,
+             users = talloc_realloc(mem_ctx,
+                                    users,
+                                    struct passwd *,
+-                                   talloc_get_size(users) + FILES_REALLOC_CHUNK);
++                                   talloc_array_length(users) + FILES_REALLOC_CHUNK);
+             if (users == NULL) {
+                 ret = ENOMEM;
+                 goto done;
+@@ -117,6 +120,7 @@ static errno_t enum_files_users(TALLOC_CTX *mem_ctx,
+     }
+ 
+     ret = EOK;
++    users[n_users] = NULL;
+     *_users = users;
+ done:
+     if (ret != EOK) {
+@@ -211,7 +215,7 @@ static errno_t enum_files_groups(TALLOC_CTX *mem_ctx,
+             groups = talloc_realloc(mem_ctx,
+                                     groups,
+                                     struct group *,
+-                                    talloc_get_size(groups) + FILES_REALLOC_CHUNK);
++                                    talloc_array_length(groups) + FILES_REALLOC_CHUNK);
+             if (groups == NULL) {
+                 ret = ENOMEM;
+                 goto done;
+@@ -220,6 +224,7 @@ static errno_t enum_files_groups(TALLOC_CTX *mem_ctx,
+     }
+ 
+     ret = EOK;
++    groups[n_groups] = NULL;
+     *_groups = groups;
+ done:
+     if (ret != EOK) {
+diff --git a/src/tests/intg/test_files_provider.py b/src/tests/intg/test_files_provider.py
+index 0a2e5a7f4da8b27bc410c401baf4f5f226c2a301..528b5e5acc5078cce5bfab9a5f9dab5509e580eb 100644
+--- a/src/tests/intg/test_files_provider.py
++++ b/src/tests/intg/test_files_provider.py
+@@ -34,6 +34,9 @@ from sssd_group import call_sssd_getgrnam
+ from files_ops import passwd_ops_setup, group_ops_setup
+ from util import unindent
+ 
++# Sync this with files_ops.c
++FILES_REALLOC_CHUNK = 64
++
+ CANARY = dict(name='canary', passwd='x', uid=100001, gid=200001,
+               gecos='Used to check if passwd is resolvable',
+               dir='/home/canary',
+@@ -204,7 +207,7 @@ def sssd_id_sync(name):
+ # Helper functions
+ def user_generator(seqnum):
+     return dict(name='user%d' % seqnum,
+-                passwd='*',
++                passwd='x',
+                 uid=10000 + seqnum,
+                 gid=20000 + seqnum,
+                 gecos='User for tests',
+@@ -221,6 +224,12 @@ def check_user(exp_user, delay=1.0):
+     assert found_user == exp_user
+ 
+ 
++def group_generator(seqnum):
++    return dict(name='group%d' % seqnum,
++                gid=30000 + seqnum,
++                mem=[])
++
++
+ def check_group(exp_group, delay=1.0):
+     if delay > 0:
+         time.sleep(delay)
+@@ -690,3 +699,58 @@ def test_getgrnam_add_remove_ghosts(setup_pw_with_canary,
+     assert res == sssd_id.NssReturnCode.SUCCESS
+     assert len(groups) == 2
+     assert 'group_nomem' in groups
++
++
++def realloc_users(pwd_ops, num):
++    # Intentionally not including the the last one because
++    # canary is added first
++    for i in range(1, num):
++        user = user_generator(i)
++        pwd_ops.useradd(**user)
++
++    user = user_generator(num-1)
++    check_user(user)
++
++
++def test_realloc_users_exact(setup_pw_with_canary, files_domain_only):
++    """
++    Test that returning exactly FILES_REALLOC_CHUNK users (see files_ops.c)
++    works fine to test reallocation logic. Test exact number of users to
++    check for off-by-one errors.
++    """
++    realloc_users(setup_pw_with_canary, FILES_REALLOC_CHUNK)
++
++
++def test_realloc_users(setup_pw_with_canary, files_domain_only):
++    """
++    Test that returning exactly FILES_REALLOC_CHUNK users (see files_ops.c)
++    works fine to test reallocation logic.
++    """
++    realloc_users(setup_pw_with_canary, FILES_REALLOC_CHUNK*3)
++
++
++def realloc_groups(grp_ops, num):
++    for i in range(1, num):
++        group = group_generator(i)
++        grp_ops.groupadd(**group)
++
++    group = group_generator(num-1)
++    check_group(group)
++
++
++def test_realloc_groups_exact(setup_gr_with_canary, files_domain_only):
++    """
++    Test that returning exactly FILES_REALLOC_CHUNK groups (see files_ops.c)
++    works fine to test reallocation logic. Test exact number of groups to
++    check for off-by-one errors.
++    """
++    realloc_groups(setup_gr_with_canary, FILES_REALLOC_CHUNK*3)
++
++
++def test_realloc_groups(setup_gr_with_canary, files_domain_only):
++    """
++    Test that returning exactly FILES_REALLOC_CHUNK groups (see files_ops.c)
++    works fine to test reallocation logic. Test exact number of groups to
++    check for off-by-one errors.
++    """
++    realloc_groups(setup_gr_with_canary, FILES_REALLOC_CHUNK*3)
+-- 
+2.9.3
+

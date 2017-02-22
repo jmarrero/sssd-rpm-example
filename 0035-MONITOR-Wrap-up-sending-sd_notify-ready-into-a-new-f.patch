@@ -1,0 +1,74 @@
+From 040ade7b2e11fecf615aedf58592cc7245900e86 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Sun, 5 Feb 2017 01:48:35 +0100
+Subject: [PATCH 35/79] MONITOR: Wrap up sending sd_notify "ready" into a new
+ function
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This new function will be used later on in this series as we also will
+need to notify systemd that we're up in at least one more scenario (for
+now).
+
+Related:
+https://fedorahosted.org/sssd/ticket/3299
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/monitor/monitor.c | 30 +++++++++++++++++++++---------
+ 1 file changed, 21 insertions(+), 9 deletions(-)
+
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index b82c6e5fb651796e977085a1fcb87330632fbf3b..f55a89edc38900c3eaaf2a294fb26125e571cf82 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -487,6 +487,26 @@ static void svc_child_info(struct mt_svc *svc, int wait_status)
+     }
+ }
+ 
++static int notify_startup(void)
++{
++#ifdef HAVE_SYSTEMD
++    int ret;
++
++    DEBUG(SSSDBG_TRACE_FUNC, "Sending startup notification to systemd\n");
++    ret = sd_notify(0, "READY=1");
++    if (ret < 0) {
++        ret = -ret;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++                "Error sending notification to systemd %d: %s\n",
++                ret, sss_strerror(ret));
++
++       return ret;
++    }
++#endif
++
++    return EOK;
++}
++
+ static int mark_service_as_started(struct mt_svc *svc)
+ {
+     struct mt_ctx *ctx = svc->mt_ctx;
+@@ -557,15 +577,7 @@ static int mark_service_as_started(struct mt_svc *svc)
+ 
+         ctx->pid_file_created = true;
+ 
+-#ifdef HAVE_SYSTEMD
+-        DEBUG(SSSDBG_TRACE_FUNC, "Sending startup notification to systemd\n");
+-        ret = sd_notify(0, "READY=1");
+-        if (ret < 0) {
+-            DEBUG(SSSDBG_CRIT_FAILURE,
+-                  "Error sending notification to systemd %d: %s\n",
+-                  -ret, strerror(-ret));
+-        }
+-#endif
++        notify_startup();
+ 
+         /* Initialization is complete, terminate parent process if in daemon
+          * mode. Make sure we send the signal to the right process */
+-- 
+2.9.3
+

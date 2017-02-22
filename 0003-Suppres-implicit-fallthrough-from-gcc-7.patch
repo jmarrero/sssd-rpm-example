@@ -1,0 +1,201 @@
+From 2e505786d6d9d537f5b6631099862f6b93e2e687 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 30 Jan 2017 12:17:25 +0100
+Subject: [PATCH 03/79] Suppres implicit-fallthrough from gcc 7
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Some kind of comments are recognized by gcc7 but they are ignored with
+-Wimplicit-fallthrough=5 and only attributes disable the warning.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ configure.ac                        | 24 ++++++++++++++++++++++++
+ src/db/sysdb_ops.c                  |  1 +
+ src/providers/ad/ad_id.c            |  1 +
+ src/providers/fail_over.c           |  4 ++++
+ src/providers/krb5/krb5_auth.c      |  1 +
+ src/providers/ldap/sdap_idmap.c     |  1 +
+ src/providers/proxy/proxy_id.c      |  1 +
+ src/python/pyhbac.c                 |  1 +
+ src/responder/common/responder_dp.c |  1 +
+ src/util/murmurhash3.c              |  3 +++
+ 10 files changed, 38 insertions(+)
+
+diff --git a/configure.ac b/configure.ac
+index 291504652bf02e38c7edfd0cc4eefbe4ceaf09e6..d264abf3ebebbc1f3a96d1a450993e0933a5d789 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -418,6 +418,30 @@ if test x"$sss_cv_attribute_warn_unused_result" = xyes ; then
+              [whether compiler supports __attribute__((warn_unused_result))])
+ fi
+ 
++SAFE_CFLAGS=$CFLAGS
++CFLAGS="-Werror"
++AC_CACHE_CHECK(
++    [whether compiler supports __attribute__((fallthrough))],
++    [sss_cv_attribute_fallthrough],
++    [AC_COMPILE_IFELSE(
++         [AC_LANG_SOURCE(
++             [ __attribute__ ((fallthrough)); ])
++         ],[
++             sss_cv_attribute_fallthrough=yes
++             sss_cv_attribute_fallthrough_val="__attribute__ ((fallthrough))"
++         ],[
++             sss_cv_attribute_fallthrough=no
++             sss_cv_attribute_fallthrough_val=
++         ])
++    ])
++CFLAGS=$SAFE_CFLAGS
++
++AC_DEFINE_UNQUOTED(
++    [SSS_ATTRIBUTE_FALLTHROUGH],
++    [$sss_cv_attribute_fallthrough_val],
++    [__attribute__((fallthrough)) if supported])
++
++
+ PKG_CHECK_MODULES([CHECK], [check >= 0.9.5], [have_check=1], [have_check=])
+ if test x$have_check = x; then
+     AC_MSG_WARN([Without the 'CHECK' libraries, you will be unable to run all tests in the 'make check' suite])
+diff --git a/src/db/sysdb_ops.c b/src/db/sysdb_ops.c
+index 77e4c1a699eded07d2b266b08d2f4c177e6181a6..7f6c127d4fa3ef7655d5eb931210d0248352e159 100644
+--- a/src/db/sysdb_ops.c
++++ b/src/db/sysdb_ops.c
+@@ -116,6 +116,7 @@ static int sysdb_delete_cache_entry(struct ldb_context *ldb,
+             return EOK;
+         }
+         /* fall through */
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     default:
+         DEBUG(SSSDBG_CRIT_FAILURE, "LDB Error: %s(%d)\nError Message: [%s]\n",
+                   ldb_strerror(ret), ret, ldb_errstring(ldb));
+diff --git a/src/providers/ad/ad_id.c b/src/providers/ad/ad_id.c
+index 46a41a37b96bb7734f61226e72e75b56f9deccf1..8f26cb8744d2372c6180342c0d1bca025b16f52c 100644
+--- a/src/providers/ad/ad_id.c
++++ b/src/providers/ad/ad_id.c
+@@ -337,6 +337,7 @@ static bool ad_account_can_shortcut(struct be_ctx *be_ctx,
+             goto done;
+         }
+         /* fall through */
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     case BE_FILTER_SECID:
+         csid = sid == NULL ? filter_value : sid;
+ 
+diff --git a/src/providers/fail_over.c b/src/providers/fail_over.c
+index 77084098831a312bc8629513ccfc2a91165241ba..5d3c26d4a690769637f2fa4f41a76627cbdba77a 100644
+--- a/src/providers/fail_over.c
++++ b/src/providers/fail_over.c
+@@ -1145,6 +1145,7 @@ fo_resolve_service_server(struct tevent_req *req)
+                                 state->server->common);
+         fo_set_server_status(state->server, SERVER_RESOLVING_NAME);
+         /* FALLTHROUGH */
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     case SERVER_RESOLVING_NAME:
+         /* Name resolution is already under way. Just add ourselves into the
+          * waiting queue so we get notified after the operation is finished. */
+@@ -1284,6 +1285,7 @@ resolve_srv_send(TALLOC_CTX *mem_ctx, struct tevent_context *ev,
+          * "server" might be invalid now if the SRV
+          * query collapsed
+          * */
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     case SRV_NEUTRAL: /* Request SRV lookup */
+         if (server != NULL && server != state->meta) {
+             /* A server created by expansion of meta server was marked as
+@@ -1443,9 +1445,11 @@ resolve_srv_done(struct tevent_req *subreq)
+         break;
+     case ERR_SRV_NOT_FOUND:
+         /* fall through */
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     case ERR_SRV_LOOKUP_ERROR:
+         fo_set_port_status(state->meta, PORT_NOT_WORKING);
+         /* fall through */
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     default:
+         DEBUG(SSSDBG_OP_FAILURE, "Unable to resolve SRV [%d]: %s\n",
+                                   ret, sss_strerror(ret));
+diff --git a/src/providers/krb5/krb5_auth.c b/src/providers/krb5/krb5_auth.c
+index bdd8e24111b077bfb91f19987d2ed289d803b334..0e685618ec2de1f923ffd9d78bf2a9d8816019e1 100644
+--- a/src/providers/krb5/krb5_auth.c
++++ b/src/providers/krb5/krb5_auth.c
+@@ -965,6 +965,7 @@ static void krb5_auth_done(struct tevent_req *subreq)
+             DEBUG(SSSDBG_CRIT_FAILURE, "krb5_delete_ccname failed.\n");
+         }
+         /* FALLTHROUGH */
++        SSS_ATTRIBUTE_FALLTHROUGH;
+ 
+     case ERR_CREDS_EXPIRED:
+         /* If the password is expired we can safely remove the ccache from the
+diff --git a/src/providers/ldap/sdap_idmap.c b/src/providers/ldap/sdap_idmap.c
+index b5dfc6cefe3ceed4971042a5326dd2b9c7f5eec8..0fda815224b5ce278e6fae4a5264f82cd1ea4a9d 100644
+--- a/src/providers/ldap/sdap_idmap.c
++++ b/src/providers/ldap/sdap_idmap.c
+@@ -516,6 +516,7 @@ sdap_idmap_sid_to_unix(struct sdap_idmap_ctx *idmap_ctx,
+               "sssd-ad(5) for an explanation of how to resolve this issue.\n",
+               sid_str);
+         /* Fall through intentionally */
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     default:
+         DEBUG(SSSDBG_MINOR_FAILURE,
+               "Could not convert objectSID [%s] to a UNIX ID\n",
+diff --git a/src/providers/proxy/proxy_id.c b/src/providers/proxy/proxy_id.c
+index 3d272897bda5622fa1e56e6b84448df7c3cefa2b..9b83f7a3cc942560186815b680e8b5f98508f18a 100644
+--- a/src/providers/proxy/proxy_id.c
++++ b/src/providers/proxy/proxy_id.c
+@@ -1403,6 +1403,7 @@ static int get_initgr_groups_process(TALLOC_CTX *memctx,
+                                  "Assume the user is only member of its "
+                                  "primary group (%"SPRIgid")\n", pwd->pw_gid);
+         /* fall through */
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     case NSS_STATUS_SUCCESS:
+         DEBUG(SSSDBG_CONF_SETTINGS, "User [%s] appears to be member of %lu "
+               "groups\n", pwd->pw_name, num_gids);
+diff --git a/src/python/pyhbac.c b/src/python/pyhbac.c
+index 09d308a0f3c932c4077dfdc92b3a46fe3238b69b..f7633ee02c5f113fad64c5ee41736d8f63a1914a 100644
+--- a/src/python/pyhbac.c
++++ b/src/python/pyhbac.c
+@@ -1621,6 +1621,7 @@ py_hbac_evaluate(HbacRequest *self, PyObject *args)
+             goto fail;
+         }
+         /* FALLTHROUGH */
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     case HBAC_EVAL_DENY:
+         ret = PYNUMBER_FROMLONG(eres);
+         break;
+diff --git a/src/responder/common/responder_dp.c b/src/responder/common/responder_dp.c
+index da67676675284db14fe7f6fcf8cb47e9f2baa7f9..11eb47ce1d41027f36998aba7b9fbca5fb4c7910 100644
+--- a/src/responder/common/responder_dp.c
++++ b/src/responder/common/responder_dp.c
+@@ -221,6 +221,7 @@ static int sss_dp_get_reply(DBusPendingCall *pending,
+         DEBUG(SSSDBG_FATAL_FAILURE,"The Data Provider returned an error [%s]\n",
+                  dbus_message_get_error_name(reply));
+         /* Falling through to default intentionally*/
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     default:
+         /*
+          * Timeout or other error occurred or something
+diff --git a/src/util/murmurhash3.c b/src/util/murmurhash3.c
+index 03d10ff6ae360350dcc96e3e40ece0a0ce3d6b58..061e64e990aa4d91d4a300e116d2fb1193e33392 100644
+--- a/src/util/murmurhash3.c
++++ b/src/util/murmurhash3.c
+@@ -90,14 +90,17 @@ uint32_t murmurhash3(const char *key, int len, uint32_t seed)
+     switch (len & 3) {
+     case 3:
+         k1 ^= tail[2] << 16;
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     case 2:
+         k1 ^= tail[1] << 8;
++        SSS_ATTRIBUTE_FALLTHROUGH;
+     case 1:
+         k1 ^= tail[0];
+         k1 *= c1;
+         k1 = rotl(k1, 15);
+         k1 *= c2;
+         h1 ^= k1;
++        break;
+     default:
+         break;
+     }
+-- 
+2.9.3
+
