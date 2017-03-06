@@ -25,110 +25,16 @@
 %endif
 
 Name: sssd
-Version: 1.15.0
-Release: 4%{?dist}
+Version: 1.15.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
-URL: http://fedorahosted.org/sssd/
-Source0: https://fedorahosted.org/released/sssd/%{name}-%{version}.tar.gz
+URL: https://pagure.io/SSSD/sssd/
+Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-Updating-the-version-to-track-the-1.15.1-release.patch
-Patch0002: 0002-BUILD-Fix-linking-of-test_wbc_calls.patch
-Patch0003: 0003-Suppres-implicit-fallthrough-from-gcc-7.patch
-Patch0004: 0004-pam_sss-Suppress-warning-format-truncation.patch
-Patch0005: 0005-TOOLS-Fix-warning-format-truncation.patch
-Patch0006: 0006-sssctl-Fix-warning-may-be-used-uninitialized.patch
-Patch0007: 0007-SBUS-remove-unused-symbols.patch
-Patch0008: 0008-SBUS-use-sss_ptr_hash-for-opath-table.patch
-Patch0009: 0009-SBUS-use-sss_ptr_hash-for-nodes-table.patch
-Patch0010: 0010-SBUS-use-sss_ptr_hash-for-signals-table.patch
-Patch0011: 0011-ldap_child-Fix-use-after-free.patch
-Patch0012: 0012-FAILOVER-Improve-port-status-log-messages.patch
-Patch0013: 0013-IFP-Update-ifp_iface_generated.c.patch
-Patch0014: 0014-SYSTEMD-Update-journald-drop-in-file.patch
-Patch0015: 0015-Partially-revert-CONFIG-Use-default-config-when-none.patch
-Patch0016: 0016-SUDO-Add-skip_entry-boolean-to-sudo-conversions.patch
-Patch0017: 0017-TESTS-Add-to-IPA-DN-test.patch
-Patch0018: 0018-LDAP-Better-logging-message.patch
-Patch0019: 0019-SYSDB-Removing-of-sysdb_try_to_find_expected_dn.patch
-Patch0020: 0020-TEST-create_multidom_test_ctx-extending.patch
-Patch0021: 0021-TESTS-Tests-for-sdap_search_initgr_user_in_batch.patch
-Patch0022: 0022-ssh-fix-number-of-output-certificates.patch
-Patch0023: 0023-ssh-do-not-create-again-fq-name.patch
-Patch0024: 0024-sss_parse_inp_send-provide-default_domain-as-paramet.patch
-Patch0025: 0025-cache_req-add-ability-to-not-use-default-domain-suff.patch
-Patch0026: 0026-cache_req-search-user-by-name-with-attrs.patch
-Patch0027: 0027-cache_req-add-api-to-create-ldb_result-from-message.patch
-Patch0028: 0028-cache_req-move-dp-request-to-plugin.patch
-Patch0029: 0029-cache_req-add-host-by-name-search.patch
-Patch0030: 0030-ssh-rewrite-ssh-responder-to-use-cache_req.patch
-Patch0031: 0031-AD-Use-ad_domain-to-match-forest-root-domain-not-the.patch
-Patch0032: 0032-BUILD-Fix-linking-of-test_sdap_initgr.patch
-Patch0033: 0033-ssh-fix-typo.patch
-Patch0034: 0034-cache_req-always-go-to-dp-first-when-looking-up-host.patch
-Patch0035: 0035-MONITOR-Wrap-up-sending-sd_notify-ready-into-a-new-f.patch
-Patch0036: 0036-MONITOR-Don-t-timeout-if-using-local-provider-socket.patch
-Patch0037: 0037-SUDO-Only-store-lowercased-attribute-value-once.patch
-Patch0038: 0038-NEGCACHE-Add-API-to-reset-all-users-and-groups.patch
-Patch0039: 0039-NSS-Add-sbus-interface-to-clear-memory-cache.patch
-Patch0040: 0040-NSS-Rename-the-interface-to-invalidate-memory-cache-.patch
-Patch0041: 0041-UTIL-Add-a-new-domain-state-called-DOM_INCONSISTENT.patch
-Patch0042: 0042-RESPONDER-Add-a-responder-sbus-interface-to-set-doma.patch
-Patch0043: 0043-RESPONDER-A-sbus-interface-to-reset-negatively-cache.patch
-Patch0044: 0044-DP-Add-internal-DP-interface-to-set-domain-state.patch
-Patch0045: 0045-DP-Add-internal-interface-to-reset-negative-cache-fr.patch
-Patch0046: 0046-DP-Add-internal-interface-to-invalidate-memory-cache.patch
-Patch0047: 0047-RESPONDER-Use-the-NEED_CHECK_DOMAIN-macro.patch
-Patch0048: 0048-RESPONDER-Include-the-files-provider-in-NEEDS_CHECK_.patch
-Patch0049: 0049-RESPONDER-Contact-inconsistent-domains.patch
-Patch0050: 0050-UTIL-Add-a-generic-inotify-module.patch
-Patch0051: 0051-CONFDB-Re-enable-the-files-provider.patch
-Patch0052: 0052-FILES-Add-the-files-provider.patch
-Patch0053: 0053-CONFDB-The-files-provider-always-enumerates.patch
-Patch0054: 0054-CONFDB-Make-pwfield-configurable-per-domain.patch
-Patch0055: 0055-CONFDB-The-files-domain-defaults-to-x-as-pwfield.patch
-Patch0056: 0056-MAN-Document-the-pwfield-configuration-option.patch
-Patch0057: 0057-TESTS-move-helper-fixtures-to-back-up-and-restore-a-.patch
-Patch0058: 0058-TESTS-add-a-helper-module-with-shared-NSS-constants.patch
-Patch0059: 0059-TESTS-Add-a-module-to-call-nss_sss-s-getpw-from-test.patch
-Patch0060: 0060-TESTS-Add-a-module-to-call-nss_sss-s-getgr-from-test.patch
-Patch0061: 0061-TESTS-Add-files-provider-integration-tests.patch
-Patch0062: 0062-MONITOR-Remove-checks-for-sssd.conf-changes.patch
-Patch0063: 0063-MONITOR-Use-the-common-inotify-code-to-watch-resolv..patch
-Patch0064: 0064-MAN-Add-documentation-for-the-files-provider.patch
-Patch0065: 0065-EXAMPLES-Do-not-point-to-id_provider-local.patch
-Patch0066: 0066-SBUS-Document-how-to-free-the-result-of-sbus_create_.patch
-Patch0067: 0067-IPA_SUDO-Unused-value-fix.patch
-Patch0068: 0068-intg-Fix-python3-issues.patch
-Patch0069: 0069-DYNDNS-Update-PTR-record-after-non-fatal-error.patch
-Patch0070: 0070-DYNDNS-Correct-debug-log-message-of-realm.patch
-Patch0071: 0071-sdap_extend_map-make-sure-memory-can-be-freed.patch
-Patch0072: 0072-check_duplicate-check-name-member-before-using-it.patch
-Patch0073: 0073-FILES-Fix-reallocation-logic.patch
-Patch0074: 0074-pam_sss-check-conversation-callback.patch
-Patch0075: 0075-MONITOR-Don-t-return-an-error-in-case-we-fail-to-reg.patch
-Patch0076: 0076-FILES-Remove-unnecessary-check.patch
-Patch0077: 0077-PAM-store-user-object-in-the-preq-context.patch
-Patch0078: 0078-PAM-fix-memory-leak-in-pam_sss.patch
-Patch0079: 0079-PAM-use-sentinel-error-code-in-PAM-tests.patch
-Patch0080: 0080-utils-new-error-codes.patch
-Patch0081: 0081-LDAP-proxy-tell-frontend-that-Smartcard-auth-is-not-.patch
-Patch0082: 0082-authtok-enhance-support-for-Smartcard-auth-blobs.patch
-Patch0083: 0083-PAM-forward-Smartcard-credentials-to-backends.patch
-Patch0084: 0084-p11-return-name-of-PKCS-11-module-and-key-id-to-pam_.patch
-Patch0085: 0085-pam-enhance-Smartcard-authentication-token.patch
-Patch0086: 0086-KRB5-allow-pkinit-pre-authentication.patch
-Patch0087: 0087-TESTS-Remove-unused-import.patch
-Patch0088: 0088-DOC-Deprecate-README-add-README.md.patch
-Patch0089: 0089-MONITOR-Enable-an-implicit-files-domain-if-one-is-no.patch
-Patch0090: 0090-TESTS-Enable-the-files-domain-for-all-integration-te.patch
-Patch0091: 0091-TESTS-Test-the-files-domain-autoconfiguration.patch
-Patch0092: 0092-CONFDB-Refactor-reading-the-config-file.patch
-Patch0093: 0093-CONFDB-If-no-configuration-file-is-provided-create-a.patch
-Patch0094: 0094-authtok-fix-tests-on-big-endian.patch
 
 Patch0502:  0502-SYSTEMD-Use-capabilities.patch
 
@@ -1219,6 +1125,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Mar 06 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.1-1
+- New upstream release 1.15.1
+- https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_15_1.html
+
 * Wed Feb 22 2017 Jakub Hrozek <jhrozek@redhat.com> - 1.15.0-4
 - Cherry-pick patches from upstream that enable the files provider
 - Enable the files domain
