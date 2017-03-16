@@ -2,6 +2,10 @@
 
 # we don't want to provide private python extension libs
 %define __provides_exclude_from %{python2_sitearch}/.*\.so$|%{python3_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
+
+# Allow the lang file to be empty
+%define _empty_manifest_terminate_build 0
+
 %define _hardened_build 1
 
     %global enable_polkit_rules_option --disable-polkit-rules-path
@@ -25,7 +29,7 @@
 %endif
 
 Name: sssd
-Version: 1.15.1
+Version: 1.15.2
 Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
@@ -635,11 +639,11 @@ do
     echo %{python3_sitelib}/`basename $file` >> python3_sssdconfig.lang
 done
 
-touch sssd_tools.lang
-touch sssd_client.lang
-for provider in ldap krb5 ipa ad proxy
+touch sssd.lang
+for subpackage in ldap krb5 ipa ad proxy tools client dbus nfs_idmap \
+                  winbind_idmap
 do
-    touch sssd_$provider.lang
+    touch sssd_$subpackage.lang
 done
 
 for man in `find $RPM_BUILD_ROOT/%{_mandir}/??/man?/ -type f | sed -e "s#$RPM_BUILD_ROOT/%{_mandir}/##"`
@@ -649,7 +653,16 @@ do
         sss_cache*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd.lang
             ;;
+        sss_ssh*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd.lang
+            ;;
+        sss_rpcidmapd*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_nfs_idmap.lang
+            ;;
         sss_*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_tools.lang
+            ;;
+        sssctl*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_tools.lang
             ;;
         sssd_krb5_*)
@@ -673,6 +686,12 @@ do
         sssd-proxy*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_proxy.lang
             ;;
+        sssd-ifp*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_dbus.lang
+            ;;
+        idmap_sss*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_winbind_idmap.lang
+            ;;
         *)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd.lang
             ;;
@@ -683,16 +702,17 @@ done
 echo "sssd.lang:"
 cat sssd.lang
 
-echo "sssd_client.lang:"
-cat sssd_client.lang
+echo "python2_sssdconfig.lang:"
+cat python2_sssdconfig.lang
 
-echo "sssd_tools.lang:"
-cat sssd_tools.lang
+echo "python3_sssdconfig.lang:"
+cat python3_sssdconfig.lang
 
-for provider in ldap krb5 ipa ad proxy
+for subpackage in ldap krb5 ipa ad proxy tools client dbus nfs_idmap \
+                  winbind_idmap
 do
-    echo "sssd_$provider.lang:"
-    cat sssd_$provider.lang
+    echo "sssd_$subpackage.lang:"
+    cat sssd_$subpackage.lang
 done
 
 %files
@@ -707,7 +727,6 @@ done
 %{_unitdir}/sssd.service
 %{_unitdir}/sssd-autofs.socket
 %{_unitdir}/sssd-autofs.service
-%{_unitdir}/sssd-ifp.service
 %{_unitdir}/sssd-nss.socket
 %{_unitdir}/sssd-nss.service
 %{_unitdir}/sssd-pac.socket
@@ -734,8 +753,9 @@ done
 %{_libexecdir}/%{servicename}/sssd_check_socket_activated_responders
 
 %dir %{_libdir}/%{name}
-%{_libdir}/%{name}/libsss_simple.so
+# The files provider is intentionally packaged in -common
 %{_libdir}/%{name}/libsss_files.so
+%{_libdir}/%{name}/libsss_simple.so
 
 #Internal shared libraries
 %{_libdir}/%{name}/libsss_child.so
@@ -785,11 +805,10 @@ done
 %{_mandir}/man1/sss_ssh_authorizedkeys.1*
 %{_mandir}/man1/sss_ssh_knownhostsproxy.1*
 %{_mandir}/man5/sssd.conf.5*
-%{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man5/sssd-files.5*
+%{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man5/sssd-sudo.5*
 %{_mandir}/man5/sssd-secrets.5*
-%{_mandir}/man5/sss_rpcidmapd.5*
 %{_mandir}/man8/sssd.8*
 %{_mandir}/man8/sss_cache.8*
 %dir %{_datadir}/sssd/systemtap
@@ -846,11 +865,12 @@ done
 %{_libexecdir}/%{servicename}/proxy_child
 %{_libdir}/%{name}/libsss_proxy.so
 
-%files dbus
+%files dbus -f sssd_dbus.lang
 %defattr(-,root,root,-)
 %license COPYING
 %{_libexecdir}/%{servicename}/sssd_ifp
 %{_mandir}/man5/sssd-ifp.5*
+%{_unitdir}/sssd-ifp.service
 # InfoPipe DBus plumbing
 %{_sysconfdir}/dbus-1/system.d/org.freedesktop.sssd.infopipe.conf
 %{_datadir}/dbus-1/system-services/org.freedesktop.sssd.infopipe.service
@@ -1019,12 +1039,13 @@ done
 %{_libdir}/%{name}/modules/libwbclient.so
 %{_libdir}/pkgconfig/wbclient_sssd.pc
 
-%files winbind-idmap
+%files winbind-idmap -f sssd_winbind_idmap.lang
 %dir %{_libdir}/samba/idmap
 %{_libdir}/samba/idmap/sss.so
 %{_mandir}/man8/idmap_sss.8*
 
-%files nfs-idmap
+%files nfs-idmap -f sssd_nfs_idmap.lang
+%{_mandir}/man5/sss_rpcidmapd.5*
 %{_libdir}/libnfsidmap/sss.so
 
 %post common
@@ -1066,6 +1087,15 @@ done
 %systemd_postun_with_restart sssd-ssh.service
 %systemd_postun_with_restart sssd-sudo.socket
 %systemd_postun_with_restart sssd-sudo.service
+
+%post dbus
+%systemd_post sssd-ifp.service
+
+%preun dbus
+%systemd_preun sssd-ifp.service
+
+%postun dbus
+%systemd_postun_with_restart sssd-ifp.service
 
 %if (0%{?with_cifs_utils_plugin} == 1)
 %post client
@@ -1126,6 +1156,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Mar 16 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.2-1
+- New upstream release 1.15.2
+- https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_15_2.html
+
 * Mon Mar 06 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.1-1
 - New upstream release 1.15.1
 - https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_15_1.html
