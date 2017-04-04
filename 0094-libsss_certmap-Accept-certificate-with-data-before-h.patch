@@ -1,0 +1,87 @@
+From 5231ba679402eeb0705a3ecd41f97fdd67d42a69 Mon Sep 17 00:00:00 2001
+From: David Kupka <dkupka@redhat.com>
+Date: Fri, 31 Mar 2017 21:31:23 +0200
+Subject: [PATCH 94/97] libsss_certmap: Accept certificate with data before
+ header
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+According to RFC 7468 parser must not fail when some data are present
+before the encapsulation boundary. sss_cert_pem_to_der didn't respect
+this and refused valid input. Changing it's code to first locate
+the certificate header fixes the issue.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3354
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/tests/cmocka/test_cert_utils.c | 16 ++++++++++++++++
+ src/util/cert/nss/cert.c           |  9 +++++----
+ 2 files changed, 21 insertions(+), 4 deletions(-)
+
+diff --git a/src/tests/cmocka/test_cert_utils.c b/src/tests/cmocka/test_cert_utils.c
+index 5830131754e4cf318273151b586ef36d6a349829..8003d8daa7063773cf8b37c46ac8759e3a38736f 100644
+--- a/src/tests/cmocka/test_cert_utils.c
++++ b/src/tests/cmocka/test_cert_utils.c
+@@ -128,6 +128,13 @@ const uint8_t test_cert_der[] = {
+ "lBPDhfTVcWXQwN385uycW/ARtSzzSME2jKKWSIQ=\n" \
+ "-----END CERTIFICATE-----\n"
+ 
++#define TEST_CERT_PEM_WITH_METADATA "Bag Attributes\n" \
++"    friendlyName: ipa-devel\n" \
++"    localKeyID: 8E 0D 04 1F BC 13 73 54 00 8F 65 57 D7 A8 AF 34 0C 18 B3 99\n" \
++"subject= /O=IPA.DEVEL/CN=ipa-devel.ipa.devel\n" \
++"issuer= /O=IPA.DEVEL/CN=Certificate Authority\n" \
++TEST_CERT_PEM
++
+ #define TEST_CERT_DERB64 \
+ "MIIECTCCAvGgAwIBAgIBCTANBgkqhkiG9w0BAQsFADA0MRIwEAYDVQQKDAlJUEEu" \
+ "REVWRUwxHjAcBgNVBAMMFUNlcnRpZmljYXRlIEF1dGhvcml0eTAeFw0xNTA0Mjgx" \
+@@ -219,6 +226,15 @@ void test_sss_cert_pem_to_der(void **state)
+     assert_memory_equal(der, test_cert_der, der_size);
+ 
+     talloc_free(der);
++
++    /* https://pagure.io/SSSD/sssd/issue/3354
++       https://tools.ietf.org/html/rfc7468#section-2 */
++    ret = sss_cert_pem_to_der(ts, TEST_CERT_PEM_WITH_METADATA, &der, &der_size);
++    assert_int_equal(ret, EOK);
++    assert_int_equal(sizeof(test_cert_der), der_size);
++    assert_memory_equal(der, test_cert_der, der_size);
++
++    talloc_free(der);
+ }
+ 
+ void test_sss_cert_derb64_to_pem(void **state)
+diff --git a/src/util/cert/nss/cert.c b/src/util/cert/nss/cert.c
+index 9d31cfe9b584aa4f87a60ffec03dcf391fe43067..93d4e04220be71ce5823b077525d9f6676e5b763 100644
+--- a/src/util/cert/nss/cert.c
++++ b/src/util/cert/nss/cert.c
+@@ -147,16 +147,17 @@ errno_t sss_cert_pem_to_der(TALLOC_CTX *mem_ctx, const char *pem,
+         return EINVAL;
+     }
+ 
++    if ((pem = strstr(pem, NS_CERT_HEADER)) == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Missing PEM header.");
++        return EINVAL;
++    }
++
+     pem_len = strlen(pem);
+     if (pem_len <= NS_CERT_HEADER_LEN + NS_CERT_TRAILER_LEN) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "PEM data too short.\n");
+         return EINVAL;
+     }
+ 
+-    if (strncmp(pem, NS_CERT_HEADER, NS_CERT_HEADER_LEN) != 0) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Wrong PEM header.\n");
+-        return EINVAL;
+-    }
+     if (pem[NS_CERT_HEADER_LEN] != '\n') {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Missing newline in PEM data.\n");
+         return EINVAL;
+-- 
+2.12.2
+

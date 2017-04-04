@@ -1,0 +1,68 @@
+From 05c2c3047912fca1c1a35ab1c8d3157b05383495 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Mon, 3 Apr 2017 12:56:01 +0200
+Subject: [PATCH 96/97] responders: do not leak selinux context on clients
+ destruction
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The SELinux context created in get_client_cred is not talloc bound and
+we were leaking it if available with each client's destruction.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3360
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/responder/common/responder_common.c | 20 +++++++++++++++++++-
+ 1 file changed, 19 insertions(+), 1 deletion(-)
+
+diff --git a/src/responder/common/responder_common.c b/src/responder/common/responder_common.c
+index 154d7dc7718c437d10e152fcba98161e2034fb14..67e1deefdfde19c95a68029b11099579d851513f 100644
+--- a/src/responder/common/responder_common.c
++++ b/src/responder/common/responder_common.c
+@@ -97,7 +97,7 @@ static errno_t get_client_cred(struct cli_ctx *cctx)
+     SEC_CTX secctx;
+     int ret;
+ 
+-    cctx->creds = talloc(cctx, struct cli_creds);
++    cctx->creds = talloc_zero(cctx, struct cli_creds);
+     if (!cctx->creds) return ENOMEM;
+ 
+ #ifdef HAVE_UCRED
+@@ -464,6 +464,22 @@ static void client_fd_handler(struct tevent_context *ev,
+ 
+ static errno_t setup_client_idle_timer(struct cli_ctx *cctx);
+ 
++static int cli_ctx_destructor(struct cli_ctx *cctx)
++{
++    if (cctx->creds == NULL) {
++        return 0;
++    }
++
++    if (cctx->creds->selinux_ctx == NULL) {
++        return 0;
++    }
++
++    SELINUX_context_free(cctx->creds->selinux_ctx);
++    cctx->creds->selinux_ctx = NULL;
++
++    return 0;
++}
++
+ struct accept_fd_ctx {
+     struct resp_ctx *rctx;
+     bool is_private;
+@@ -520,6 +536,8 @@ static void accept_fd_handler(struct tevent_context *ev,
+         return;
+     }
+ 
++    talloc_set_destructor(cctx, cli_ctx_destructor);
++
+     len = sizeof(cctx->addr);
+     cctx->cfd = accept(fd, (struct sockaddr *)&cctx->addr, &len);
+     if (cctx->cfd == -1) {
+-- 
+2.12.2
+

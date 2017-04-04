@@ -1,0 +1,36 @@
+From 901396366075dc3e3fcc0894345af1b51052ac69 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 28 Mar 2017 14:49:31 +0200
+Subject: [PATCH 72/97] SYSDB: Only generate new UID in local domain
+
+To avoid issues where a user with no UID but without the posix=false
+flag was passed to sysdb, we only allow generating the new ID in the
+local domain. This might prevent bugs where non-POSIX users would get a
+UID created by sysdb which might allow accessing resources owned by that
+UID.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/db/sysdb_ops.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/src/db/sysdb_ops.c b/src/db/sysdb_ops.c
+index 3cf9d903f25b9ccd506d7957c94040bdc7d658a3..4d7b2abd8026c90aaf4e7be687102e459cf3690e 100644
+--- a/src/db/sysdb_ops.c
++++ b/src/db/sysdb_ops.c
+@@ -1422,6 +1422,12 @@ int sysdb_get_new_id(struct sss_domain_info *domain,
+         return ENOMEM;
+     }
+ 
++    if (strcasecmp(domain->provider, "local") != 0) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Generating new ID is only supported in the local domain!\n");
++        return ENOTSUP;
++    }
++
+     base_dn = sysdb_domain_dn(tmp_ctx, domain);
+     if (!base_dn) {
+         talloc_zfree(tmp_ctx);
+-- 
+2.12.2
+

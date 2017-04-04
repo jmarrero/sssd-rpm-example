@@ -1,0 +1,70 @@
+From a0b1bfa76073d3ce3208e67e6d72bb92088edac5 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 28 Feb 2017 14:19:53 +0100
+Subject: [PATCH 15/97] nss: allow larger buffer for certificate based requests
+
+To make sure larger certificates can be processed as well the maximal
+buffer size is increased for requests by certificate.
+
+Related to https://pagure.io/SSSD/sssd/issue/3050
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/common/responder_packet.c | 21 ++++++++++++++++++++-
+ src/responder/common/responder_packet.h |  1 +
+ 2 files changed, 21 insertions(+), 1 deletion(-)
+
+diff --git a/src/responder/common/responder_packet.c b/src/responder/common/responder_packet.c
+index 4f5e110837eb76609d31a77c62a00e00530ffc90..cc4d66995965cca4c86a80c31d2afd4c9ac3e0e4 100644
+--- a/src/responder/common/responder_packet.c
++++ b/src/responder/common/responder_packet.c
+@@ -179,6 +179,8 @@ int sss_packet_recv(struct sss_packet *packet, int fd)
+     size_t rb;
+     size_t len;
+     void *buf;
++    size_t new_len;
++    int ret;
+ 
+     buf = (uint8_t *)packet->buffer + packet->iop;
+     if (packet->iop > 4) len = sss_packet_get_len(packet) - packet->iop;
+@@ -205,7 +207,24 @@ int sss_packet_recv(struct sss_packet *packet, int fd)
+     }
+ 
+     if (sss_packet_get_len(packet) > packet->memsize) {
+-        return EINVAL;
++        /* Allow certificate based requests to use larger buffer but not
++         * larger than SSS_CERT_PACKET_MAX_RECV_SIZE. Due to the way
++         * sss_packet_grow() works the packet len must be set to '0' first and
++         * then grow to the expected size. */
++        if ((sss_packet_get_cmd(packet) == SSS_NSS_GETNAMEBYCERT
++                    || sss_packet_get_cmd(packet) == SSS_NSS_GETLISTBYCERT)
++                && packet->memsize < SSS_CERT_PACKET_MAX_RECV_SIZE
++                && (new_len = sss_packet_get_len(packet))
++                                   < SSS_CERT_PACKET_MAX_RECV_SIZE) {
++            new_len = sss_packet_get_len(packet);
++            sss_packet_set_len(packet, 0);
++            ret = sss_packet_grow(packet, new_len);
++            if (ret != EOK) {
++                return ret;
++            }
++        } else {
++            return EINVAL;
++        }
+     }
+ 
+     packet->iop += rb;
+diff --git a/src/responder/common/responder_packet.h b/src/responder/common/responder_packet.h
+index 3ad0eee28477e446c9e4996617beb55f32923d47..afceb4aaefa40fd86bdfde820c92c09b65cd8702 100644
+--- a/src/responder/common/responder_packet.h
++++ b/src/responder/common/responder_packet.h
+@@ -25,6 +25,7 @@
+ #include "sss_client/sss_cli.h"
+ 
+ #define SSS_PACKET_MAX_RECV_SIZE 1024
++#define SSS_CERT_PACKET_MAX_RECV_SIZE ( 10 * SSS_PACKET_MAX_RECV_SIZE )
+ 
+ struct sss_packet;
+ 
+-- 
+2.12.2
+

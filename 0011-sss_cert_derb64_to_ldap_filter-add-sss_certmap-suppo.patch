@@ -1,0 +1,235 @@
+From b341ee51cffd98b642b9c68a417f8a7504e303a1 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 2 Feb 2017 16:34:32 +0100
+Subject: [PATCH 11/97] sss_cert_derb64_to_ldap_filter: add sss_certmap support
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Use certificate mapping library if available to lookup a user by
+certificate in LDAP.
+
+Related to https://pagure.io/SSSD/sssd/issue/3050
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ Makefile.am                        |  1 +
+ src/db/sysdb_ops.c                 |  2 +-
+ src/db/sysdb_views.c               |  4 +-
+ src/providers/ipa/ipa_views.c      |  2 +-
+ src/providers/ldap/ldap_id.c       |  2 +-
+ src/tests/cmocka/test_cert_utils.c |  4 +-
+ src/util/cert.h                    |  3 ++
+ src/util/cert/cert_common.c        | 76 ++++++++++++++++++++++++++++++++------
+ 8 files changed, 76 insertions(+), 18 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 7947b7a5fbe3ca1034baac1c13c53300994b1bf8..f262cc24832358910dbb92ccd46f93c9eda8a295 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -952,6 +952,7 @@ libsss_cert_la_LIBADD = \
+     $(TALLOC_LIBS) \
+     libsss_crypt.la \
+     libsss_debug.la \
++    libsss_certmap.la \
+     $(NULL)
+ libsss_cert_la_LDFLAGS = \
+     -avoid-version \
+diff --git a/src/db/sysdb_ops.c b/src/db/sysdb_ops.c
+index 8ae25764478e522255b177f9e8de1d3ca1ad43fd..919f22370ff87eff2bf0bb569ca90f1ee699a61e 100644
+--- a/src/db/sysdb_ops.c
++++ b/src/db/sysdb_ops.c
+@@ -4661,7 +4661,7 @@ errno_t sysdb_search_object_by_cert(TALLOC_CTX *mem_ctx,
+     char *user_filter;
+ 
+     ret = sss_cert_derb64_to_ldap_filter(mem_ctx, cert, SYSDB_USER_MAPPED_CERT,
+-                                         &user_filter);
++                                         NULL, NULL, &user_filter);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "sss_cert_derb64_to_ldap_filter failed.\n");
+         return ret;
+diff --git a/src/db/sysdb_views.c b/src/db/sysdb_views.c
+index 9dc48f5b6c414bbc7c64bcd1fe73553f388588bd..1c416dd14049237e9f35d52f154035e3ff861469 100644
+--- a/src/db/sysdb_views.c
++++ b/src/db/sysdb_views.c
+@@ -862,8 +862,8 @@ errno_t sysdb_search_override_by_cert(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    ret = sss_cert_derb64_to_ldap_filter(tmp_ctx, cert, SYSDB_USER_CERT,
+-                                         &cert_filter);
++    ret = sss_cert_derb64_to_ldap_filter(tmp_ctx, cert, SYSDB_USER_CERT, NULL,
++                                         NULL, &cert_filter);
+ 
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "sss_cert_derb64_to_ldap_filter failed.\n");
+diff --git a/src/providers/ipa/ipa_views.c b/src/providers/ipa/ipa_views.c
+index 29f589ec1fd05f59175dcc4592e6395941e6e034..5b6fcbc9b7c6f2ea7dbeecb01a5a3fd11b8a6854 100644
+--- a/src/providers/ipa/ipa_views.c
++++ b/src/providers/ipa/ipa_views.c
+@@ -156,7 +156,7 @@ static errno_t dp_id_data_to_override_filter(TALLOC_CTX *mem_ctx,
+         if ((ar->entry_type & BE_REQ_TYPE_MASK) == BE_REQ_BY_CERT) {
+             ret = sss_cert_derb64_to_ldap_filter(mem_ctx, ar->filter_value,
+                          ipa_opts->override_map[IPA_AT_OVERRIDE_USER_CERT].name,
+-                         &cert_filter);
++                         NULL, NULL, &cert_filter);
+             if (ret != EOK) {
+                 DEBUG(SSSDBG_OP_FAILURE,
+                       "sss_cert_derb64_to_ldap_filter failed.\n");
+diff --git a/src/providers/ldap/ldap_id.c b/src/providers/ldap/ldap_id.c
+index a8b4bc2cfc6e9d4e0d74b0e3e036afbcbf7eb26e..8e60769d09383ac8ebe33e5f64fd4fd9788e82cd 100644
+--- a/src/providers/ldap/ldap_id.c
++++ b/src/providers/ldap/ldap_id.c
+@@ -247,7 +247,7 @@ struct tevent_req *users_get_send(TALLOC_CTX *memctx,
+         }
+ 
+         ret = sss_cert_derb64_to_ldap_filter(state, filter_value, attr_name,
+-                                             &user_filter);
++                                             NULL, NULL, &user_filter);
+         if (ret != EOK) {
+             DEBUG(SSSDBG_OP_FAILURE,
+                   "sss_cert_derb64_to_ldap_filter failed.\n");
+diff --git a/src/tests/cmocka/test_cert_utils.c b/src/tests/cmocka/test_cert_utils.c
+index 35e8cb7513968079861048a7e8b0631229f202c0..5830131754e4cf318273151b586ef36d6a349829 100644
+--- a/src/tests/cmocka/test_cert_utils.c
++++ b/src/tests/cmocka/test_cert_utils.c
+@@ -297,11 +297,11 @@ void test_sss_cert_derb64_to_ldap_filter(void **state)
+     struct test_state *ts = talloc_get_type_abort(*state, struct test_state);
+     assert_non_null(ts);
+ 
+-    ret = sss_cert_derb64_to_ldap_filter(ts, NULL, NULL, NULL);
++    ret = sss_cert_derb64_to_ldap_filter(ts, NULL, NULL, NULL, NULL, NULL);
+     assert_int_equal(ret, EINVAL);
+ 
+     ret = sss_cert_derb64_to_ldap_filter(ts, "AAECAwQFBgcICQ==", "attrName",
+-                                         &filter);
++                                         NULL, NULL, &filter);
+     assert_int_equal(ret, EOK);
+     assert_string_equal(filter,
+                         "(attrName=\\00\\01\\02\\03\\04\\05\\06\\07\\08\\09)");
+diff --git a/src/util/cert.h b/src/util/cert.h
+index bb64d0d7a0a48207df60f6e6e554da5e16a16b03..4598aa8df0cd860fed71d9cd2e4beec7f1910578 100644
+--- a/src/util/cert.h
++++ b/src/util/cert.h
+@@ -21,6 +21,7 @@
+ #include <talloc.h>
+ 
+ #include "util/util.h"
++#include "lib/certmap/sss_certmap.h"
+ 
+ #ifndef __CERT_H__
+ #define __CERT_H__
+@@ -39,6 +40,8 @@ errno_t sss_cert_pem_to_derb64(TALLOC_CTX *mem_ctx, const char *pem,
+ 
+ errno_t sss_cert_derb64_to_ldap_filter(TALLOC_CTX *mem_ctx, const char *derb64,
+                                        const char *attr_name,
++                                       struct sss_certmap_ctx *certmap_ctx,
++                                       struct sss_domain_info *dom,
+                                        char **ldap_filter);
+ 
+ errno_t bin_to_ldap_filter_value(TALLOC_CTX *mem_ctx,
+diff --git a/src/util/cert/cert_common.c b/src/util/cert/cert_common.c
+index a29696ed3cd9f2168f47323fac97d44e9b49f921..766877089429ff1c01000a3986316c74583e3fa4 100644
+--- a/src/util/cert/cert_common.c
++++ b/src/util/cert/cert_common.c
+@@ -72,12 +72,17 @@ errno_t sss_cert_pem_to_derb64(TALLOC_CTX *mem_ctx, const char *pem,
+ 
+ errno_t sss_cert_derb64_to_ldap_filter(TALLOC_CTX *mem_ctx, const char *derb64,
+                                        const char *attr_name,
++                                       struct sss_certmap_ctx *certmap_ctx,
++                                       struct sss_domain_info *dom,
+                                        char **ldap_filter)
+ {
+     int ret;
+     unsigned char *der;
+     size_t der_size;
+     char *val;
++    char *filter = NULL;
++    char **domains = NULL;
++    size_t c;
+ 
+     if (derb64 == NULL || attr_name == NULL) {
+         return EINVAL;
+@@ -89,18 +94,67 @@ errno_t sss_cert_derb64_to_ldap_filter(TALLOC_CTX *mem_ctx, const char *derb64,
+         return EINVAL;
+     }
+ 
+-    ret = bin_to_ldap_filter_value(mem_ctx, der, der_size, &val);
+-    talloc_free(der);
+-    if (ret != EOK) {
+-            DEBUG(SSSDBG_OP_FAILURE, "bin_to_ldap_filter_value failed.\n");
+-            return ret;
+-    }
++    if (certmap_ctx == NULL) {
++        ret = bin_to_ldap_filter_value(mem_ctx, der, der_size, &val);
++        talloc_free(der);
++        if (ret != EOK) {
++                DEBUG(SSSDBG_OP_FAILURE, "bin_to_ldap_filter_value failed.\n");
++                return ret;
++        }
+ 
+-    *ldap_filter = talloc_asprintf(mem_ctx, "(%s=%s)", attr_name, val);
+-    talloc_free(val);
+-    if (*ldap_filter == NULL) {
+-            DEBUG(SSSDBG_OP_FAILURE, "talloc_asprintf failed.\n");
+-            return ENOMEM;
++        *ldap_filter = talloc_asprintf(mem_ctx, "(%s=%s)", attr_name, val);
++        talloc_free(val);
++        if (*ldap_filter == NULL) {
++                DEBUG(SSSDBG_OP_FAILURE, "talloc_asprintf failed.\n");
++                return ENOMEM;
++        }
++    } else {
++        ret = sss_certmap_get_search_filter(certmap_ctx, der, der_size,
++                                            &filter, &domains);
++        talloc_free(der);
++        if (ret != 0) {
++            if (ret == ENOENT) {
++                DEBUG(SSSDBG_OP_FAILURE,
++                      "Certificate does not match matching-rules.\n");
++            } else {
++                DEBUG(SSSDBG_OP_FAILURE,
++                      "sss_certmap_get_search_filter failed.\n");
++            }
++        } else {
++            if (domains == NULL) {
++                if (IS_SUBDOMAIN(dom)) {
++                    DEBUG(SSSDBG_TRACE_FUNC,
++                          "Rule applies only to local domain.\n");
++                    ret = ENOENT;
++                }
++            } else {
++                for (c = 0; domains[c] != NULL; c++) {
++                    if (strcasecmp(dom->name, domains[c]) == 0) {
++                        DEBUG(SSSDBG_TRACE_FUNC,
++                              "Rule applies to current domain [%s].\n",
++                              dom->name);
++                        ret = EOK;
++                        break;
++                    }
++                }
++                if (domains[c] == NULL) {
++                        DEBUG(SSSDBG_TRACE_FUNC,
++                              "Rule does not apply to current domain [%s].\n",
++                              dom->name);
++                    ret = ENOENT;
++                }
++            }
++        }
++
++        if (ret == EOK) {
++            *ldap_filter = talloc_strdup(mem_ctx, filter);
++            if (*ldap_filter == NULL) {
++                DEBUG(SSSDBG_OP_FAILURE, "talloc_strdup failed.\n");
++                ret = ENOMEM;
++            }
++        }
++        sss_certmap_free_filter_and_domains(filter, domains);
++        return ret;
+     }
+ 
+     return EOK;
+-- 
+2.12.2
+

@@ -1,0 +1,205 @@
+From 16385568547351b5d2c562f3081f35f3341f695b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Sun, 26 Mar 2017 03:00:14 +0200
+Subject: [PATCH 57/97] Add domain_resolution_order config option
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is the local equivalent of option of ipaDomainResolutionOrder and
+has precedence over the ones set on IPA side making the precedence order
+to be like: Local > View > Globally.
+
+As done for the IPA side configurations, the domains which were not
+explicitly set up will be apennded to the final of the
+domain_resolution_order list in the very same order they're presented in
+the "domains" option of [sssd] section in the config file. There's no
+guarantee of order for the subdomains though.
+
+It's also important to mention that no expansion magic is performed on
+our side. It means that if 'example.com' is set it does *not* stand for
+all its subdomains DNS wise (like 'foo.example.com', 'bar.example.com',
+etc).
+
+Related:
+https://pagure.io/SSSD/sssd/issue/3001
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/confdb/confdb.h                     |  1 +
+ src/config/SSSDConfig/__init__.py.in    |  1 +
+ src/config/SSSDConfigTest.py            |  7 ++++++-
+ src/config/cfg_rules.ini                |  1 +
+ src/config/etc/sssd.api.conf            |  1 +
+ src/man/sssd.conf.5.xml                 | 20 ++++++++++++++++++++
+ src/responder/common/responder.h        |  1 +
+ src/responder/common/responder_common.c | 27 +++++++++++++++++++++++++++
+ 8 files changed, 58 insertions(+), 1 deletion(-)
+
+diff --git a/src/confdb/confdb.h b/src/confdb/confdb.h
+index fb60675ca8beb2c2a157bf021ed9cad362742988..56a603652d6c8256735e7f8b125300ff7b254645 100644
+--- a/src/confdb/confdb.h
++++ b/src/confdb/confdb.h
+@@ -74,6 +74,7 @@
+ #define CONFDB_MONITOR_CERT_VERIFICATION "certificate_verification"
+ #define CONFDB_MONITOR_DISABLE_NETLINK "disable_netlink"
+ #define CONFDB_MONITOR_ENABLE_FILES_DOM "enable_files_domain"
++#define CONFDB_MONITOR_DOMAIN_RESOLUTION_ORDER "domain_resolution_order"
+ 
+ /* Both monitor and domains */
+ #define CONFDB_NAME_REGEX   "re_expression"
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index 29e9b4fae6835db4ccb9937fd93457d462e4a15d..0edc3ea84a1e8fb0f797546b4c223e22e22f70e9 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -66,6 +66,7 @@ option_strings = {
+     'override_space': _('All spaces in group or user names will be replaced with this character'),
+     'disable_netlink' : _('Tune sssd to honor or ignore netlink state changes'),
+     'enable_files_domain' : _('Enable or disable the implicit files domain'),
++    'domain_resolution_order': _('A specific order of the domains to be looked up'),
+ 
+     # [nss]
+     'enum_cache_timeout' : _('Enumeration cache timeout length (seconds)'),
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index 457a6f0a09e7139a05f29f8bef7e475fe3b58ec2..6899bf8ae04bf210546c8cbdba8235f094e23dc0 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -94,6 +94,10 @@ class SSSDConfigTestValid(unittest.TestCase):
+         self.assertTrue('default_domain_suffix' in new_options)
+         self.assertEquals(new_options['default_domain_suffix'][0], str)
+ 
++        self.assertTrue('domain_resolution_order' in new_options)
++        self.assertEquals(new_options['domain_resolution_order'][0], list)
++        self.assertEquals(new_options['domain_resolution_order'][1], str)
++
+         del sssdconfig
+ 
+     def testDomains(self):
+@@ -314,7 +318,8 @@ class SSSDConfigTestSSSDService(unittest.TestCase):
+             'certificate_verification',
+             'override_space',
+             'disable_netlink',
+-            'enable_files_domain']
++            'enable_files_domain',
++            'domain_resolution_order']
+ 
+         self.assertTrue(type(options) == dict,
+                         "Options should be a dictionary")
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index 933ebccd828189d923d2186753dfbc0b5c0814ce..41efcea552a82c5492a0d21a8d0797ee42cdc8c7 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -43,6 +43,7 @@ option = override_space
+ option = config_file_version
+ option = disable_netlink
+ option = enable_files_domain
++option = domain_resolution_order
+ 
+ [rule/allowed_nss_options]
+ validator = ini_allowed_options
+diff --git a/src/config/etc/sssd.api.conf b/src/config/etc/sssd.api.conf
+index 08cecf00367aaaab3794a48bd1e728421a996e49..6965028e1ca748f8b6677d9fc1faa66d5c307a0c 100644
+--- a/src/config/etc/sssd.api.conf
++++ b/src/config/etc/sssd.api.conf
+@@ -32,6 +32,7 @@ certificate_verification = str, None, false
+ override_space = str, None, false
+ disable_netlink = bool, None, false
+ enable_files_domain = str, None, false
++domain_resolution_order = list, str, false
+ 
+ [nss]
+ # Name service
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index 1c27742cf0c1b6ffad23ab5b044bf4a168ed8f69..4fe13b85d511fb6a2ccc9b4de956710b05bc898c 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -542,6 +542,26 @@
+                             </para>
+                         </listitem>
+                     </varlistentry>
++                    <varlistentry>
++                        <term>domain_resolution_order</term>
++                        <listitem>
++                            <para>
++                                Comma separated list of domains and subdomains
++                                representing the lookup order that will be
++                                followed.
++                                The list doesn't have to include all possible
++                                domains as the missing domains will be looked
++                                up based on the order they're presented in the
++                                <quote>domains</quote> configuration option.
++                                The subdomains which are not listed as part of
++                                <quote>lookup_order</quote> will be looked up
++                                in a random order for each parent domain.
++                            </para>
++                            <para>
++                                Default: Not set
++                            </para>
++                        </listitem>
++                    </varlistentry>
+                 </variablelist>
+             </para>
+         </refsect2>
+diff --git a/src/responder/common/responder.h b/src/responder/common/responder.h
+index 29e3f95caf484f43307c9c28d4abd3f50f360a95..4210307489fe25829a1674f254ecc7d185029698 100644
+--- a/src/responder/common/responder.h
++++ b/src/responder/common/responder.h
+@@ -115,6 +115,7 @@ struct resp_ctx {
+     int client_idle_timeout;
+ 
+     struct cache_req_domain *cr_domains;
++    const char *domain_resolution_order;
+ 
+     time_t last_request_time;
+     int idle_timeout;
+diff --git a/src/responder/common/responder_common.c b/src/responder/common/responder_common.c
+index 1792a4c3771fa326c7cca31e1981dce315c03758..154d7dc7718c437d10e152fcba98161e2034fb14 100644
+--- a/src/responder/common/responder_common.c
++++ b/src/responder/common/responder_common.c
+@@ -1163,6 +1163,19 @@ int sss_process_init(TALLOC_CTX *mem_ctx,
+         rctx->override_space = tmp[0];
+     }
+ 
++    ret = confdb_get_string(rctx->cdb, rctx,
++                            CONFDB_MONITOR_CONF_ENTRY,
++                            CONFDB_MONITOR_DOMAIN_RESOLUTION_ORDER, NULL,
++                            &tmp);
++    if (ret == EOK) {
++        rctx->domain_resolution_order = sss_replace_char(rctx, tmp, ',', ':');
++    } else {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "Cannot get the \"domain_resolution_order\" option.\n"
++              "The set up lookup_order won't be followed [%d]: %s.\n",
++              ret, sss_strerror(ret));
++    }
++
+     ret = sss_monitor_init(rctx, rctx->ev, monitor_intf,
+                            svc_name, svc_version, MT_SVC_SERVICE,
+                            rctx, &rctx->last_request_time,
+@@ -1546,6 +1559,20 @@ errno_t sss_resp_populate_cr_domains(struct resp_ctx *rctx)
+     struct sss_domain_info *dom;
+     errno_t ret;
+ 
++    if (rctx->domain_resolution_order != NULL) {
++        cr_domains = cache_req_domain_new_list_from_domain_resolution_order(
++                            rctx, rctx->domains, rctx->domain_resolution_order);
++
++        if (cr_domains == NULL) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  "Failed to use domain_resolution_order set in the config file.\n"
++                  "Trying to fallback to use ipaDomainOrderResolution setup by "
++                  "IPA.\n");
++        } else {
++            goto done;
++        }
++    }
++
+     for (dom = rctx->domains; dom != NULL; dom = dom->next) {
+         if (dom->provider != NULL && strcmp(dom->provider, "ipa") == 0) {
+             break;
+-- 
+2.12.2
+

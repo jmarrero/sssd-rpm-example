@@ -1,0 +1,48 @@
+From 84fecc2fd535030bc56b5046ba2a1ba95c46bc34 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 24 Mar 2017 10:37:50 +0100
+Subject: [PATCH 95/97] BUILD: Fix compilation of libsss_certmap with libcrypto
+
+  CC       src/lib/certmap/libsss_certmap_la-sss_cert_content_nss.lo
+           src/lib/certmap/sss_cert_content_nss.c:25:18:
+            fatal error: cert.h: No such file or directory
+ #include <cert.h>
+                  ^
+compilation terminated.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ Makefile.am | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 4a414f77df999b8b1d81f663fcc18dbd2d6d2dc4..5264183cd199be464e5e99d2ab31ba4fcd77c5ec 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1787,7 +1787,6 @@ libsss_certmap_la_DEPENDENCIES = src/lib/certmap/sss_certmap.exports
+ libsss_certmap_la_SOURCES = \
+     src/lib/certmap/sss_certmap.c \
+     src/lib/certmap/sss_certmap_attr_names.c \
+-    src/lib/certmap/sss_cert_content_nss.c \
+     src/lib/certmap/sss_certmap_krb5_match.c \
+     src/lib/certmap/sss_certmap_ldap_mapping.c \
+     src/util/util_ext.c \
+@@ -1806,6 +1805,7 @@ libsss_certmap_la_LDFLAGS = \
+ 
+ if HAVE_NSS
+ libsss_certmap_la_SOURCES += \
++    src/lib/certmap/sss_cert_content_nss.c \
+     src/util/crypto/nss/nss_base64.c \
+     src/util/cert/nss/cert.c \
+     src/util/crypto/nss/nss_util.c \
+@@ -1814,6 +1814,7 @@ libsss_certmap_la_CFLAGS += $(NSS_CFLAGS)
+ libsss_certmap_la_LIBADD += $(NSS_LIBS)
+ else
+ libsss_certmap_la_SOURCES += \
++    src/lib/certmap/sss_cert_content_crypto.c \
+     src/util/crypto/libcrypto/crypto_base64.c \
+     src/util/cert/libcrypto/cert.c \
+     $(NULL)
+-- 
+2.12.2
+

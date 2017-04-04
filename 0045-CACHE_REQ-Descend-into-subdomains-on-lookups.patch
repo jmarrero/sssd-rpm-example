@@ -1,0 +1,172 @@
+From dcc52d9c6411528bab815351d1e6145d211a4765 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Wed, 1 Mar 2017 08:34:57 +0000
+Subject: [PATCH 45/97] CACHE_REQ: Descend into subdomains on lookups
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Let's make all plugins, but the "host_by_name", to descend into the
+subdomains on lookups.
+
+This patch basically prepares the field for the coming up patches that
+will allow group/user resolution in all domains (or a subset of the
+domains) to be possible by only using the short names without the domain
+component.
+
+The "host_by_name" plugin was not changed as it's a specific IPA plugin
+and won't find anything on its subdomains.
+
+Related:
+https://pagure.io/SSSD/sssd/issue/3001
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/responder/common/cache_req/plugins/cache_req_enum_svc.c           | 2 +-
+ src/responder/common/cache_req/plugins/cache_req_group_by_filter.c    | 2 +-
+ src/responder/common/cache_req/plugins/cache_req_group_by_name.c      | 2 +-
+ src/responder/common/cache_req/plugins/cache_req_initgroups_by_name.c | 2 +-
+ src/responder/common/cache_req/plugins/cache_req_netgroup_by_name.c   | 2 +-
+ src/responder/common/cache_req/plugins/cache_req_object_by_name.c     | 2 +-
+ src/responder/common/cache_req/plugins/cache_req_svc_by_name.c        | 2 +-
+ src/responder/common/cache_req/plugins/cache_req_svc_by_port.c        | 2 +-
+ src/responder/common/cache_req/plugins/cache_req_user_by_filter.c     | 2 +-
+ src/responder/common/cache_req/plugins/cache_req_user_by_name.c       | 2 +-
+ 10 files changed, 10 insertions(+), 10 deletions(-)
+
+diff --git a/src/responder/common/cache_req/plugins/cache_req_enum_svc.c b/src/responder/common/cache_req/plugins/cache_req_enum_svc.c
+index 2c4917cde750c9063d898c16d3a58ca8c179bc70..28dea33c601f500b9c7af0de3eb9e1c342f03522 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_enum_svc.c
++++ b/src/responder/common/cache_req/plugins/cache_req_enum_svc.c
+@@ -68,7 +68,7 @@ const struct cache_req_plugin cache_req_enum_svc = {
+     .allow_missing_fqn = true,
+     .allow_switch_to_upn = false,
+     .upn_equivalent = CACHE_REQ_SENTINEL,
+-    .get_next_domain_flags = 0,
++    .get_next_domain_flags = SSS_GND_DESCEND,
+ 
+     .is_well_known_fn = NULL,
+     .prepare_domain_data_fn = NULL,
+diff --git a/src/responder/common/cache_req/plugins/cache_req_group_by_filter.c b/src/responder/common/cache_req/plugins/cache_req_group_by_filter.c
+index 88e1137a3976308aaf404b684c6d88cc43708bca..6ce6ae0d63967ac50b813a47ac938251619948da 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_group_by_filter.c
++++ b/src/responder/common/cache_req/plugins/cache_req_group_by_filter.c
+@@ -123,7 +123,7 @@ const struct cache_req_plugin cache_req_group_by_filter = {
+     .allow_missing_fqn = false,
+     .allow_switch_to_upn = false,
+     .upn_equivalent = CACHE_REQ_SENTINEL,
+-    .get_next_domain_flags = 0,
++    .get_next_domain_flags = SSS_GND_DESCEND,
+ 
+     .is_well_known_fn = NULL,
+     .prepare_domain_data_fn = cache_req_group_by_filter_prepare_domain_data,
+diff --git a/src/responder/common/cache_req/plugins/cache_req_group_by_name.c b/src/responder/common/cache_req/plugins/cache_req_group_by_name.c
+index be1eb9bd8552156d777e934b0be397b0e66df7cc..af6f23ccfd68f952027462ba3e74ed7219d04651 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_group_by_name.c
++++ b/src/responder/common/cache_req/plugins/cache_req_group_by_name.c
+@@ -186,7 +186,7 @@ const struct cache_req_plugin cache_req_group_by_name = {
+     .allow_missing_fqn = false,
+     .allow_switch_to_upn = false,
+     .upn_equivalent = CACHE_REQ_SENTINEL,
+-    .get_next_domain_flags = 0,
++    .get_next_domain_flags = SSS_GND_DESCEND,
+ 
+     .is_well_known_fn = NULL,
+     .prepare_domain_data_fn = cache_req_group_by_name_prepare_domain_data,
+diff --git a/src/responder/common/cache_req/plugins/cache_req_initgroups_by_name.c b/src/responder/common/cache_req/plugins/cache_req_initgroups_by_name.c
+index 10fb67cbf6e78cfae33bc7208585cb80ea6a9bc4..307b65a24282838b99c472b50a71f06865aed3f0 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_initgroups_by_name.c
++++ b/src/responder/common/cache_req/plugins/cache_req_initgroups_by_name.c
+@@ -201,7 +201,7 @@ const struct cache_req_plugin cache_req_initgroups_by_name = {
+     .allow_missing_fqn = false,
+     .allow_switch_to_upn = true,
+     .upn_equivalent = CACHE_REQ_INITGROUPS_BY_UPN,
+-    .get_next_domain_flags = 0,
++    .get_next_domain_flags = SSS_GND_DESCEND,
+ 
+     .is_well_known_fn = NULL,
+     .prepare_domain_data_fn = cache_req_initgroups_by_name_prepare_domain_data,
+diff --git a/src/responder/common/cache_req/plugins/cache_req_netgroup_by_name.c b/src/responder/common/cache_req/plugins/cache_req_netgroup_by_name.c
+index bc6fc9a8f476f97cc4bc5004bc19ba35258a2b6d..e49d6d84a41ce8dabf18c87373826f8e7b684bda 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_netgroup_by_name.c
++++ b/src/responder/common/cache_req/plugins/cache_req_netgroup_by_name.c
+@@ -120,7 +120,7 @@ const struct cache_req_plugin cache_req_netgroup_by_name = {
+     .allow_missing_fqn = true,
+     .allow_switch_to_upn = false,
+     .upn_equivalent = CACHE_REQ_SENTINEL,
+-    .get_next_domain_flags = 0,
++    .get_next_domain_flags = SSS_GND_DESCEND,
+ 
+     .is_well_known_fn = NULL,
+     .prepare_domain_data_fn = cache_req_netgroup_by_name_prepare_domain_data,
+diff --git a/src/responder/common/cache_req/plugins/cache_req_object_by_name.c b/src/responder/common/cache_req/plugins/cache_req_object_by_name.c
+index 2b2caeea172b23b1b1b226def5d926e26c5c0090..74d2b3dea287e890b38e4d5bb176ad2dc6337b7e 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_object_by_name.c
++++ b/src/responder/common/cache_req/plugins/cache_req_object_by_name.c
+@@ -196,7 +196,7 @@ const struct cache_req_plugin cache_req_object_by_name = {
+     .allow_missing_fqn = false,
+     .allow_switch_to_upn = true,
+     .upn_equivalent = CACHE_REQ_USER_BY_UPN,
+-    .get_next_domain_flags = 0,
++    .get_next_domain_flags = SSS_GND_DESCEND,
+ 
+     .is_well_known_fn = cache_req_object_by_name_well_known,
+     .prepare_domain_data_fn = cache_req_object_by_name_prepare_domain_data,
+diff --git a/src/responder/common/cache_req/plugins/cache_req_svc_by_name.c b/src/responder/common/cache_req/plugins/cache_req_svc_by_name.c
+index cbb186df04c7ca7c02dceb98bd5700c984285a4d..ef13f097a8ae78ec9db5b7f6e14924b511578b34 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_svc_by_name.c
++++ b/src/responder/common/cache_req/plugins/cache_req_svc_by_name.c
+@@ -144,7 +144,7 @@ const struct cache_req_plugin cache_req_svc_by_name = {
+     .allow_missing_fqn = false,
+     .allow_switch_to_upn = false,
+     .upn_equivalent = CACHE_REQ_SENTINEL,
+-    .get_next_domain_flags = 0,
++    .get_next_domain_flags = SSS_GND_DESCEND,
+ 
+     .is_well_known_fn = NULL,
+     .prepare_domain_data_fn = cache_req_svc_by_name_prepare_domain_data,
+diff --git a/src/responder/common/cache_req/plugins/cache_req_svc_by_port.c b/src/responder/common/cache_req/plugins/cache_req_svc_by_port.c
+index 1da23d4505a1dad3b2425a996134f8298c03518a..afa2eeeda12794de26e798aee4b88900bc87ed93 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_svc_by_port.c
++++ b/src/responder/common/cache_req/plugins/cache_req_svc_by_port.c
+@@ -117,7 +117,7 @@ const struct cache_req_plugin cache_req_svc_by_port = {
+     .allow_missing_fqn = false,
+     .allow_switch_to_upn = false,
+     .upn_equivalent = CACHE_REQ_SENTINEL,
+-    .get_next_domain_flags = 0,
++    .get_next_domain_flags = SSS_GND_DESCEND,
+ 
+     .is_well_known_fn = NULL,
+     .prepare_domain_data_fn = cache_req_svc_by_port_prepare_domain_data,
+diff --git a/src/responder/common/cache_req/plugins/cache_req_user_by_filter.c b/src/responder/common/cache_req/plugins/cache_req_user_by_filter.c
+index ee7e69399e318b9835f1623bddc635bf09aa7a1c..eb71b42dad3a805298df0c8425409d571befb31b 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_user_by_filter.c
++++ b/src/responder/common/cache_req/plugins/cache_req_user_by_filter.c
+@@ -123,7 +123,7 @@ const struct cache_req_plugin cache_req_user_by_filter = {
+     .allow_missing_fqn = false,
+     .allow_switch_to_upn = false,
+     .upn_equivalent = CACHE_REQ_SENTINEL,
+-    .get_next_domain_flags = 0,
++    .get_next_domain_flags = SSS_GND_DESCEND,
+ 
+     .is_well_known_fn = NULL,
+     .prepare_domain_data_fn = cache_req_user_by_filter_prepare_domain_data,
+diff --git a/src/responder/common/cache_req/plugins/cache_req_user_by_name.c b/src/responder/common/cache_req/plugins/cache_req_user_by_name.c
+index 4289f5fd4c79f0e512f0249abe4422589fa800a0..0670febdce2d51e0373045570dd07f56255db7bc 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_user_by_name.c
++++ b/src/responder/common/cache_req/plugins/cache_req_user_by_name.c
+@@ -191,7 +191,7 @@ const struct cache_req_plugin cache_req_user_by_name = {
+     .allow_missing_fqn = false,
+     .allow_switch_to_upn = true,
+     .upn_equivalent = CACHE_REQ_USER_BY_UPN,
+-    .get_next_domain_flags = 0,
++    .get_next_domain_flags = SSS_GND_DESCEND,
+ 
+     .is_well_known_fn = NULL,
+     .prepare_domain_data_fn = cache_req_user_by_name_prepare_domain_data,
+-- 
+2.12.2
+

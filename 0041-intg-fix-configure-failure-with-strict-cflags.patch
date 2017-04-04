@@ -1,0 +1,52 @@
+From 8e785c7478e1a79179842106a62f3f85118b6690 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 28 Mar 2017 12:18:13 +0200
+Subject: [PATCH 41/97] intg: fix configure failure with strict cflags
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The warning -Wstrict-prototypes is a part of AM_CFLAGS which was appended
+for CFLAGS in make target intgcheck-prepare. And combination with
+strict CFLAGS in environment variable (e.g. -Werror) caused failures.
+
+sh$ CFLAGS="-Werror" make intgcheck-prepare
+
+checking for gcc... gcc
+checking whether the C compiler works... no
+configure: error: in `/home/build/sssd/ci-build-debug/intg/bld':
+configure: error: C compiler cannot create executables
+
+configure:3719: checking whether the C compiler works
+configure:3741: gcc -g3 -O2 -Werror -D_FILE_OFFSET_BITS=64
+                -D_LARGEFILE_SOURCE -Wall -Wshadow -Wstrict-prototypes
+                -Wpointer-arith -Wcast-qual -Wcast-align -Wwrite-strings
+                -Wundef -Werror-implicit-function-declaration
+                -Winit-self -Wmissing-include-dirs -fno-strict-aliasing
+                -std=gnu99 -DKCM_PEER_UID=1000   conftest.c  >&5
+conftest.c:11:1: error: function declaration isn't a prototype [-Werror=strict-prototypes]
+ main ()
+ ^~~~
+cc1: all warnings being treated as errors
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 91afdd669aa11a3cc316588d3b51d7e8e9c91cb8..359feddef298b0013c726409b7ba8b86504abf09 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -3486,7 +3486,7 @@ intgcheck-prepare:
+ 	    --without-semanage \
+ 	    --enable-files-domain \
+ 	    $(INTGCHECK_CONFIGURE_FLAGS) \
+-	    CFLAGS="$$CFLAGS $(AM_CFLAGS) -DKCM_PEER_UID=$$(id -u)"; \
++	    CFLAGS="$$CFLAGS -DKCM_PEER_UID=$$(id -u)"; \
+ 	$(MAKE) $(AM_MAKEFLAGS) ; \
+ 	: Force single-thread install to workaround concurrency issues; \
+ 	$(MAKE) $(AM_MAKEFLAGS) -j1 install; \
+-- 
+2.12.2
+

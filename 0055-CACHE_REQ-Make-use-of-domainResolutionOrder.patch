@@ -1,0 +1,795 @@
+From 66c8e92eb5a4985bb7f64c349a53b08030a000cf Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Sun, 26 Mar 2017 00:27:50 +0100
+Subject: [PATCH 55/97] CACHE_REQ: Make use of domainResolutionOrder
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+domainResolutionOrder has been introduced in the previous commits and
+allows the admin to set up a specific order which the domains will be
+resolved during a lookup and with this patch we can take advantage of
+this.
+
+In order to have it working a new structure has been added
+(struct domain_resolution_order) to the responder context and will be
+used by the cache_req to perform the lookups based on this list.
+
+As the ipaDomainResolutionOrder may be set globally on IPA or per View,
+SSSD does respect the following precedence order: View > Globally.
+
+The way the list is built is quite simple, basically having the domains
+present on ipaDomainResolutionOrder as the first domains (in that
+specific order) and then appending the remaining domains to this list.
+The final result is a completely flat list with all the domains
+respecting the specified order (it's important to remember that the
+domains not specified won't follow any specific order, they're just
+"random" based on the domains list present in the responder context.
+
+Related:
+https://pagure.io/SSSD/sssd/issue/3001
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                                       |   3 +
+ src/responder/common/cache_req/cache_req.c        |  89 +++++++-----
+ src/responder/common/cache_req/cache_req_domain.c | 166 ++++++++++++++++++++++
+ src/responder/common/cache_req/cache_req_domain.h |  46 ++++++
+ src/responder/common/responder.h                  |   5 +
+ src/responder/common/responder_common.c           | 153 ++++++++++++++++++++
+ src/responder/common/responder_get_domains.c      |  14 ++
+ src/tests/cmocka/common_mock_resp.c               |   6 +
+ src/tests/cmocka/common_mock_resp_dp.c            |   7 +
+ src/tests/cmocka/test_nss_srv.c                   |   4 +
+ src/tests/cwrap/Makefile.am                       |   1 +
+ 11 files changed, 457 insertions(+), 37 deletions(-)
+ create mode 100644 src/responder/common/cache_req/cache_req_domain.c
+ create mode 100644 src/responder/common/cache_req/cache_req_domain.h
+
+diff --git a/Makefile.am b/Makefile.am
+index 450785bf4c482cce1e1440f1336879150537888e..573b37c52fdeab1add4ea057e1e1844ea4d348a5 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -528,6 +528,7 @@ SSSD_CACHE_REQ_OBJ = \
+ 	src/responder/common/cache_req/cache_req_result.c \
+ 	src/responder/common/cache_req/cache_req_search.c \
+ 	src/responder/common/cache_req/cache_req_data.c \
++	src/responder/common/cache_req/cache_req_domain.c \
+ 	src/responder/common/cache_req/plugins/cache_req_common.c \
+ 	src/responder/common/cache_req/plugins/cache_req_enum_users.c \
+ 	src/responder/common/cache_req/plugins/cache_req_enum_groups.c \
+@@ -689,6 +690,7 @@ dist_noinst_HEADERS = \
+     src/responder/common/iface/responder_iface.h \
+     src/responder/common/iface/responder_iface_generated.h \
+     src/responder/common/cache_req/cache_req.h \
++    src/responder/common/cache_req/cache_req_domain.h \
+     src/responder/common/cache_req/cache_req_plugin.h \
+     src/responder/common/cache_req/cache_req_private.h \
+     src/responder/common/data_provider/rdp.h \
+@@ -2199,6 +2201,7 @@ responder_socket_access_tests_SOURCES = \
+     src/responder/common/responder_common.c \
+     src/responder/common/responder_packet.c \
+     src/responder/common/responder_cmd.c \
++    src/responder/common/cache_req/cache_req_domain.c \
+     src/responder/common/data_provider/rdp_message.c \
+     src/responder/common/data_provider/rdp_client.c \
+     $(SSSD_RESPONDER_IFACE_OBJ) \
+diff --git a/src/responder/common/cache_req/cache_req.c b/src/responder/common/cache_req/cache_req.c
+index aca150d69b398ceb1a52e5cd6a87d35dbc87020b..483126396f8addbad744ae03bfc739801cd0c18b 100644
+--- a/src/responder/common/cache_req/cache_req.c
++++ b/src/responder/common/cache_req/cache_req.c
+@@ -24,6 +24,7 @@
+ #include <errno.h>
+ 
+ #include "util/util.h"
++#include "responder/common/responder.h"
+ #include "responder/common/cache_req/cache_req_private.h"
+ #include "responder/common/cache_req/cache_req_plugin.h"
+ 
+@@ -316,7 +317,7 @@ struct cache_req_search_domains_state {
+     struct cache_req *cr;
+ 
+     /* work data */
+-    struct sss_domain_info *domain;
++    struct cache_req_domain *cr_domain;
+     struct sss_domain_info *selected_domain;
+     struct cache_req_result **results;
+     size_t num_results;
+@@ -330,13 +331,14 @@ static errno_t cache_req_search_domains_next(struct tevent_req *req);
+ 
+ static void cache_req_search_domains_done(struct tevent_req *subreq);
+ 
+-struct tevent_req *cache_req_search_domains_send(TALLOC_CTX *mem_ctx,
+-                                                 struct tevent_context *ev,
+-                                                 struct cache_req *cr,
+-                                                 struct sss_domain_info *domain,
+-                                                 bool check_next,
+-                                                 bool bypass_cache,
+-                                                 bool bypass_dp)
++struct tevent_req *
++cache_req_search_domains_send(TALLOC_CTX *mem_ctx,
++                              struct tevent_context *ev,
++                              struct cache_req *cr,
++                              struct cache_req_domain *cr_domain,
++                              bool check_next,
++                              bool bypass_cache,
++                              bool bypass_dp)
+ {
+     struct tevent_req *req;
+     struct cache_req_search_domains_state *state = NULL;
+@@ -352,7 +354,7 @@ struct tevent_req *cache_req_search_domains_send(TALLOC_CTX *mem_ctx,
+     state->ev = ev;
+     state->cr = cr;
+ 
+-    state->domain = domain;
++    state->cr_domain = cr_domain;
+     state->check_next = check_next;
+     state->dp_success = true;
+     state->bypass_cache = bypass_cache;
+@@ -378,6 +380,7 @@ static errno_t cache_req_search_domains_next(struct tevent_req *req)
+     struct cache_req_search_domains_state *state;
+     struct tevent_req *subreq;
+     struct cache_req *cr;
++    struct sss_domain_info *domain;
+     uint32_t next_domain_flag;
+     bool is_domain_valid;
+     bool allow_no_fqn;
+@@ -389,11 +392,21 @@ static errno_t cache_req_search_domains_next(struct tevent_req *req)
+     next_domain_flag = cr->plugin->get_next_domain_flags;
+     allow_no_fqn = cr->plugin->allow_missing_fqn;
+ 
+-    while (state->domain != NULL) {
++    while (state->cr_domain != NULL) {
++        domain = state->cr_domain->domain;
++        /* As the cr_domain list is a flatten version of the domains
++         * list, we have to ensure to only go through the subdomains in
++         * case it's specified in the plugin to do so.
++         */
++        if (next_domain_flag == 0 && IS_SUBDOMAIN(domain)) {
++            state->cr_domain = state->cr_domain->next;
++            continue;
++        }
++
+         /* Check if this domain is valid for this request. */
+-        is_domain_valid = cache_req_validate_domain(cr, state->domain);
++        is_domain_valid = cache_req_validate_domain(cr, domain);
+         if (!is_domain_valid) {
+-            state->domain = get_next_domain(state->domain, next_domain_flag);
++            state->cr_domain = state->cr_domain->next;
+             continue;
+         }
+ 
+@@ -401,18 +414,18 @@ static errno_t cache_req_search_domains_next(struct tevent_req *req)
+          * qualified names on domain less search. We do not descend into
+          * subdomains here since those are implicitly qualified.
+          */
+-        if (state->check_next && !allow_no_fqn && state->domain->fqnames) {
+-            state->domain = get_next_domain(state->domain, 0);
++        if (state->check_next && !allow_no_fqn && domain->fqnames) {
++            state->cr_domain = state->cr_domain->next;
+             continue;
+         }
+ 
+-        state->selected_domain = state->domain;
++        state->selected_domain = domain;
+ 
+-        if (state->domain == NULL) {
++        if (domain == NULL) {
+             break;
+         }
+ 
+-        ret = cache_req_set_domain(cr, state->domain);
++        ret = cache_req_set_domain(cr, domain);
+         if (ret != EOK) {
+             return ret;
+         }
+@@ -427,8 +440,7 @@ static errno_t cache_req_search_domains_next(struct tevent_req *req)
+ 
+         /* we will continue with the following domain the next time */
+         if (state->check_next) {
+-            state->domain = get_next_domain(state->domain,
+-                                            cr->plugin->get_next_domain_flags);
++            state->cr_domain = state->cr_domain->next;
+         }
+ 
+         return EAGAIN;
+@@ -625,11 +637,12 @@ static void cache_req_input_parsed(struct tevent_req *subreq);
+ static errno_t cache_req_select_domains(struct tevent_req *req,
+                                         const char *domain_name);
+ 
+-static errno_t cache_req_search_domains(struct tevent_req *req,
+-                                        struct sss_domain_info *domain,
+-                                        bool check_next,
+-                                        bool bypass_cache,
+-                                        bool bypass_dp);
++static errno_t
++cache_req_search_domains(struct tevent_req *req,
++                         struct cache_req_domain *oredered_domain,
++                         bool check_next,
++                         bool bypass_cache,
++                         bool bypass_dp);
+ 
+ static void cache_req_done(struct tevent_req *subreq);
+ 
+@@ -778,7 +791,7 @@ static errno_t cache_req_select_domains(struct tevent_req *req,
+                                         const char *domain_name)
+ {
+     struct cache_req_state *state = NULL;
+-    struct sss_domain_info *domain;
++    struct cache_req_domain *cr_domain;
+     bool check_next;
+     bool bypass_cache;
+     bool bypass_dp;
+@@ -798,29 +811,30 @@ static errno_t cache_req_select_domains(struct tevent_req *req,
+         CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr,
+                         "Performing a single domain search\n");
+ 
+-        domain = responder_get_domain(state->cr->rctx, domain_name);
+-        if (domain == NULL) {
++        cr_domain = cache_req_domain_get_domain_by_name(
++                                    state->cr->rctx->cr_domains, domain_name);
++        if (cr_domain == NULL) {
+             return ERR_DOMAIN_NOT_FOUND;
+         }
+-
+         check_next = false;
+     } else {
+         CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr,
+                         "Performing a multi-domain search\n");
+ 
+-        domain = state->cr->rctx->domains;
++        cr_domain = state->cr->rctx->cr_domains;
+         check_next = true;
+     }
+ 
+-    return cache_req_search_domains(req, domain, check_next,
++    return cache_req_search_domains(req, cr_domain, check_next,
+                                     bypass_cache, bypass_dp);
+ }
+ 
+-static errno_t cache_req_search_domains(struct tevent_req *req,
+-                                        struct sss_domain_info *domain,
+-                                        bool check_next,
+-                                        bool bypass_cache,
+-                                        bool bypass_dp)
++static errno_t
++cache_req_search_domains(struct tevent_req *req,
++                         struct cache_req_domain *cr_domain,
++                         bool check_next,
++                         bool bypass_cache,
++                         bool bypass_dp)
+ {
+     struct tevent_req *subreq;
+     struct cache_req_state *state = NULL;
+@@ -832,8 +846,9 @@ static errno_t cache_req_search_domains(struct tevent_req *req,
+                     bypass_cache ? "bypass" : "check",
+                     bypass_dp ? "bypass" : "check");
+ 
+-    subreq = cache_req_search_domains_send(state, state->ev, state->cr, domain,
+-                                           check_next, bypass_cache, bypass_dp);
++    subreq = cache_req_search_domains_send(state, state->ev, state->cr,
++                                           cr_domain, check_next,
++                                           bypass_cache, bypass_dp);
+     if (subreq == NULL) {
+         return ENOMEM;
+     }
+diff --git a/src/responder/common/cache_req/cache_req_domain.c b/src/responder/common/cache_req/cache_req_domain.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..bbabd695f1c6b6c29b7e61f571382ab9adfb0ea2
+--- /dev/null
++++ b/src/responder/common/cache_req/cache_req_domain.c
+@@ -0,0 +1,166 @@
++/*
++    Authors:
++        Fabiano Fidêncio <fidencio@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "responder/common/cache_req/cache_req_domain.h"
++
++struct cache_req_domain *
++cache_req_domain_get_domain_by_name(struct cache_req_domain *domains,
++                                    const char *name)
++{
++    struct cache_req_domain *dom;
++    struct cache_req_domain *ret = NULL;
++
++    DLIST_FOR_EACH(dom, domains) {
++        if (sss_domain_get_state(dom->domain) == DOM_DISABLED) {
++            continue;
++        }
++
++        if (strcasecmp(dom->domain->name, name) == 0 ||
++            (dom->domain->flat_name != NULL &&
++             strcasecmp(dom->domain->flat_name, name) == 0)) {
++            ret = dom;
++            break;
++        }
++    }
++
++    if (ret == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, "Unknown domains [%s].\n", name);
++    }
++
++    return ret;
++}
++
++void cache_req_domain_list_zfree(struct cache_req_domain **cr_domains)
++{
++    struct cache_req_domain *p, *q, *r;
++
++    DLIST_FOR_EACH_SAFE(p, q, *cr_domains) {
++        r = p;
++        DLIST_REMOVE(*cr_domains, p);
++        talloc_zfree(r);
++    }
++
++    *cr_domains = NULL;
++}
++
++static struct cache_req_domain *
++cache_req_domain_new_list_from_string_list(TALLOC_CTX *mem_ctx,
++                                           struct sss_domain_info *domains,
++                                           char **resolution_order)
++{
++    struct cache_req_domain *cr_domains = NULL;
++    struct cache_req_domain *cr_domain;
++    struct sss_domain_info *dom;
++    char *name;
++    int flag = SSS_GND_ALL_DOMAINS;
++    int i;
++    errno_t ret;
++
++    if (resolution_order != NULL) {
++        for (i = 0; resolution_order[i] != NULL; i++) {
++            name = resolution_order[i];
++            for (dom = domains; dom; dom = get_next_domain(dom, flag)) {
++                if (strcasecmp(name, dom->name) != 0) {
++                    continue;
++                }
++
++                cr_domain = talloc_zero(mem_ctx, struct cache_req_domain);
++                if (cr_domain == NULL) {
++                    ret = ENOMEM;
++                    goto done;
++                }
++                cr_domain->domain = dom;
++
++                DLIST_ADD_END(cr_domains, cr_domain,
++                              struct cache_req_domain *);
++                break;
++            }
++        }
++    }
++
++    for (dom = domains; dom; dom = get_next_domain(dom, flag)) {
++        if (string_in_list(dom->name, resolution_order, false)) {
++            continue;
++        }
++
++        cr_domain = talloc_zero(mem_ctx, struct cache_req_domain);
++        if (cr_domain == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++        cr_domain->domain = dom;
++
++        DLIST_ADD_END(cr_domains, cr_domain, struct cache_req_domain *);
++    }
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        cache_req_domain_list_zfree(&cr_domains);
++    }
++
++    return cr_domains;
++}
++
++struct cache_req_domain *
++cache_req_domain_new_list_from_domain_resolution_order(
++                                        TALLOC_CTX *mem_ctx,
++                                        struct sss_domain_info *domains,
++                                        const char *domain_resolution_order)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct cache_req_domain *cr_domains = NULL;
++    char **list = NULL;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return NULL;
++    }
++
++    if (domain_resolution_order != NULL) {
++        if (strcmp(domain_resolution_order, ":") != 0) {
++            ret = split_on_separator(tmp_ctx, domain_resolution_order, ':',
++                                     true, true, &list, NULL);
++            if (ret != EOK) {
++                DEBUG(SSSDBG_MINOR_FAILURE,
++                        "split_on_separator() failed [%d]: [%s].\n",
++                        ret, sss_strerror(ret));
++                goto done;
++            }
++        }
++    }
++
++    cr_domains = cache_req_domain_new_list_from_string_list(mem_ctx, domains,
++                                                            list);
++    if (cr_domains == NULL) {
++        ret = ENOMEM;
++        DEBUG(SSSDBG_OP_FAILURE,
++              "cache_req_domain_new_list_from_domain_resolution_order() "
++              "failed [%d]: [%s].\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++done:
++    talloc_free(tmp_ctx);
++    return cr_domains;
++}
+diff --git a/src/responder/common/cache_req/cache_req_domain.h b/src/responder/common/cache_req/cache_req_domain.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..41c50e8c293d7b032cb2f05482c40e93e4f723dc
+--- /dev/null
++++ b/src/responder/common/cache_req/cache_req_domain.h
+@@ -0,0 +1,46 @@
++/*
++    Authors:
++        Fabiano Fidêncio <fidencio@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef _CACHE_REQ_DOMAIN_H_
++#define _CACHE_REQ_DOMAIN_H_
++
++#include "responder/common/responder.h"
++
++struct cache_req_domain {
++    struct sss_domain_info *domain;
++
++    struct cache_req_domain *prev;
++    struct cache_req_domain *next;
++};
++
++struct cache_req_domain *
++cache_req_domain_get_domain_by_name(struct cache_req_domain *domains,
++                                    const char *name);
++
++struct cache_req_domain *
++cache_req_domain_new_list_from_domain_resolution_order(
++                                        TALLOC_CTX *mem_ctx,
++                                        struct sss_domain_info *domains,
++                                        const char *domain_resolution_order);
++
++void cache_req_domain_list_zfree(struct cache_req_domain **cr_domains);
++
++
++#endif /* _CACHE_REQ_DOMAIN_H_ */
+diff --git a/src/responder/common/responder.h b/src/responder/common/responder.h
+index 4d1048a1e0c9be2cad91317d51baf670ecb3307e..29e3f95caf484f43307c9c28d4abd3f50f360a95 100644
+--- a/src/responder/common/responder.h
++++ b/src/responder/common/responder.h
+@@ -37,6 +37,7 @@
+ #include "sbus/sssd_dbus.h"
+ #include "responder/common/negcache.h"
+ #include "sss_client/sss_cli.h"
++#include "responder/common/cache_req/cache_req_domain.h"
+ 
+ extern hash_table_t *dp_requests;
+ 
+@@ -113,6 +114,8 @@ struct resp_ctx {
+     int domains_timeout;
+     int client_idle_timeout;
+ 
++    struct cache_req_domain *cr_domains;
++
+     time_t last_request_time;
+     int idle_timeout;
+     struct tevent_timer *idle;
+@@ -387,4 +390,6 @@ char *sss_resp_create_fqname(TALLOC_CTX *mem_ctx,
+                              bool name_is_upn,
+                              const char *orig_name);
+ 
++errno_t sss_resp_populate_cr_domains(struct resp_ctx *rctx);
++
+ #endif /* __SSS_RESPONDER_H__ */
+diff --git a/src/responder/common/responder_common.c b/src/responder/common/responder_common.c
+index 76f43609651217e537ffa515aaf5b5caa98a2e90..1792a4c3771fa326c7cca31e1981dce315c03758 100644
+--- a/src/responder/common/responder_common.c
++++ b/src/responder/common/responder_common.c
+@@ -1453,3 +1453,156 @@ fail:
+     return ret;
+ 
+ }
++
++/* ====== Helper functions for the domain resolution order ======= */
++static struct cache_req_domain *
++sss_resp_new_cr_domains_from_ipa_id_view(TALLOC_CTX *mem_ctx,
++                                         struct sss_domain_info *domains,
++                                         struct sysdb_ctx *sysdb)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct cache_req_domain *cr_domains = NULL;
++    const char *domain_resolution_order = NULL;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return NULL;
++    }
++
++    ret = sysdb_get_view_domain_resolution_order(tmp_ctx, sysdb,
++                                                 &domain_resolution_order);
++    if (ret != EOK && ret != ENOENT) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "sysdb_get_view_cache_req_domain() failed [%d]: [%s].\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    /* Using mem_ctx (which is rctx) directly here to avoid copying
++     * this memory around. */
++    cr_domains = cache_req_domain_new_list_from_domain_resolution_order(
++                                    mem_ctx, domains, domain_resolution_order);
++    if (cr_domains == NULL) {
++        ret = ENOMEM;
++        DEBUG(SSSDBG_DEFAULT,
++              "cache_req_domain_new_list_from_domain_resolution_order() "
++              "failed [%d]: [%s].\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++done:
++    talloc_free(tmp_ctx);
++    return cr_domains;
++}
++
++static struct cache_req_domain *
++sss_resp_new_cr_domains_from_ipa_config(TALLOC_CTX *mem_ctx,
++                                        struct sss_domain_info *domains,
++                                        struct sysdb_ctx *sysdb,
++                                        const char *domain)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct cache_req_domain *cr_domains = NULL;
++    const char *domain_resolution_order = NULL;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return NULL;
++    }
++
++    ret = sysdb_domain_get_domain_resolution_order(tmp_ctx, sysdb, domain,
++                                                   &domain_resolution_order);
++
++    if (ret != EOK && ret != ENOENT) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "sysdb_domain_get_cache_req_domain() failed [%d]: [%s].\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    /* Using mem_ctx (which is rctx) directly here to avoid copying
++     * this memory around. */
++    cr_domains = cache_req_domain_new_list_from_domain_resolution_order(
++                                    mem_ctx, domains, domain_resolution_order);
++    if (cr_domains == NULL) {
++        DEBUG(SSSDBG_DEFAULT,
++              "cache_req_domain_new_list_from_domain_resolution_order() "
++              "failed [%d]: [%s].\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++done:
++    talloc_free(tmp_ctx);
++    return cr_domains;
++}
++
++errno_t sss_resp_populate_cr_domains(struct resp_ctx *rctx)
++{
++    struct cache_req_domain *cr_domains = NULL;
++    struct sss_domain_info *dom;
++    errno_t ret;
++
++    for (dom = rctx->domains; dom != NULL; dom = dom->next) {
++        if (dom->provider != NULL && strcmp(dom->provider, "ipa") == 0) {
++            break;
++        }
++    }
++
++    if (dom == NULL) {
++        cr_domains = cache_req_domain_new_list_from_domain_resolution_order(
++                                                    rctx, rctx->domains, NULL);
++        if (cr_domains == NULL) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "Failed to flatten the list of domains.\n");
++        }
++        goto done;
++    }
++
++    if (dom->has_views) {
++        cr_domains = sss_resp_new_cr_domains_from_ipa_id_view(rctx,
++                                                              rctx->domains,
++                                                              dom->sysdb);
++        if (cr_domains == NULL) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  "Failed to use ipaDomainResolutionOrder set for the "
++                  "view \"%s\".\n"
++                  "Trying to fallback to use ipaDomainOrderResolution "
++                  "set in ipaConfig for the domain: %s.\n",
++                  dom->view_name, dom->name);
++        } else {
++            goto done;
++        }
++    }
++
++    cr_domains = sss_resp_new_cr_domains_from_ipa_config(rctx, rctx->domains,
++                                                         dom->sysdb,
++                                                         dom->name);
++    if (cr_domains == NULL) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "Failed to use ipaDomainResolutionOrder set in ipaConfig "
++              "for the domain: \"%s\".\n"
++              "No ipaDomainResolutionOrder will be followed.\n",
++              dom->name);
++    } else {
++        goto done;
++    }
++
++    cr_domains = cache_req_domain_new_list_from_domain_resolution_order(
++                                                    rctx, rctx->domains, NULL);
++    if (cr_domains == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to flatten the list of domains.\n");
++        goto done;
++    }
++
++done:
++    ret = cr_domains != NULL ? EOK : ENOMEM;
++
++    cache_req_domain_list_zfree(&rctx->cr_domains);
++    rctx->cr_domains = cr_domains;
++
++    return ret;
++}
+diff --git a/src/responder/common/responder_get_domains.c b/src/responder/common/responder_get_domains.c
+index 0f9c01214631200f9687635f6302fa5c07e8a1fe..8c90b7773e248e1dd6d846c5050e1931fc50c786 100644
+--- a/src/responder/common/responder_get_domains.c
++++ b/src/responder/common/responder_get_domains.c
+@@ -192,6 +192,13 @@ struct tevent_req *sss_dp_get_domains_send(TALLOC_CTX *mem_ctx,
+ 
+     if (state->dom == NULL) {
+         /* All domains were local */
++        ret = sss_resp_populate_cr_domains(state->rctx);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "sss_resp_populate_cr_domains() failed [%d]: [%s]\n",
++                  ret, sss_strerror(ret));
++            goto immediately;
++        }
+         ret = EOK;
+         goto immediately;
+     }
+@@ -253,6 +260,13 @@ sss_dp_get_domains_process(struct tevent_req *subreq)
+     if (state->dom == NULL) {
+         /* All domains were local */
+         set_time_of_last_request(state->rctx);
++        ret = sss_resp_populate_cr_domains(state->rctx);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "sss_resp_populate_cr_domains() failed [%d]: [%s]\n",
++                  ret, sss_strerror(ret));
++            goto fail;
++        }
+         tevent_req_done(req);
+         return;
+     }
+diff --git a/src/tests/cmocka/common_mock_resp.c b/src/tests/cmocka/common_mock_resp.c
+index 88808b1b9394b7a9ee7e58b30b4fbd9d467493d3..175101fc51fd395d792b1fccaecdb327caef2b64 100644
+--- a/src/tests/cmocka/common_mock_resp.c
++++ b/src/tests/cmocka/common_mock_resp.c
+@@ -51,6 +51,12 @@ mock_rctx(TALLOC_CTX *mem_ctx,
+     rctx->ev = ev;
+     rctx->domains = domains;
+     rctx->pvt_ctx = pvt_ctx;
++    if (domains != NULL) {
++        ret = sss_resp_populate_cr_domains(rctx);
++        if (ret != EOK) {
++            return NULL;
++        }
++    }
+     return rctx;
+ }
+ 
+diff --git a/src/tests/cmocka/common_mock_resp_dp.c b/src/tests/cmocka/common_mock_resp_dp.c
+index 5db5255ab61231870982c4b78a39504ae8954bcd..4b38a38e6f53499132f9fe14a0ec0af157cf85ca 100644
+--- a/src/tests/cmocka/common_mock_resp_dp.c
++++ b/src/tests/cmocka/common_mock_resp_dp.c
+@@ -21,6 +21,7 @@
+ */
+ 
+ #include "util/util.h"
++#include "responder/common/responder.h"
+ #include "tests/cmocka/common_mock_resp.h"
+ 
+ /* Mock DP requests that finish immediatelly and return
+@@ -165,6 +166,12 @@ sss_dp_get_domains_send(TALLOC_CTX *mem_ctx,
+                         bool force,
+                         const char *hint)
+ {
++    errno_t ret;
++    ret = sss_resp_populate_cr_domains(rctx);
++    if (ret != EOK) {
++        return NULL;
++    }
++
+     return test_req_succeed_send(mem_ctx, rctx->ev);
+ }
+ 
+diff --git a/src/tests/cmocka/test_nss_srv.c b/src/tests/cmocka/test_nss_srv.c
+index ede72b341b60842ad470df2794aa90ea9797e999..2f526660cbbbf2443dbae4e213c1336feb6c661e 100644
+--- a/src/tests/cmocka/test_nss_srv.c
++++ b/src/tests/cmocka/test_nss_srv.c
+@@ -3440,6 +3440,10 @@ static int nss_subdom_test_setup(void **state)
+                                   nss_test_ctx->tctx->confdb);
+     assert_int_equal(ret, EOK);
+ 
++    ret = sss_resp_populate_cr_domains(nss_test_ctx->rctx);
++    assert_int_equal(ret, EOK);
++    assert_non_null(nss_test_ctx->rctx->cr_domains);
++
+     nss_test_ctx->subdom = nss_test_ctx->tctx->dom->subdomains;
+ 
+     ret = store_group(nss_test_ctx, nss_test_ctx->subdom,
+diff --git a/src/tests/cwrap/Makefile.am b/src/tests/cwrap/Makefile.am
+index 4a4090df9296aadde308249f533e7ba246e92f93..c99ebde5f0fc18d1283392cbb307434579d5d811 100644
+--- a/src/tests/cwrap/Makefile.am
++++ b/src/tests/cwrap/Makefile.am
+@@ -41,6 +41,7 @@ SSSD_CACHE_REQ_OBJ = \
+     ../../../src/responder/common/cache_req/cache_req_result.c \
+     ../../../src/responder/common/cache_req/cache_req_search.c \
+     ../../../src/responder/common/cache_req/cache_req_data.c \
++    ../../../src/responder/common/cache_req/cache_req_domain.c \
+     ../../../src/responder/common/cache_req/plugins/cache_req_common.c \
+     ../../../src/responder/common/cache_req/plugins/cache_req_enum_users.c \
+     ../../../src/responder/common/cache_req/plugins/cache_req_enum_groups.c \
+-- 
+2.12.2
+

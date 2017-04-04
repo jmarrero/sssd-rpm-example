@@ -1,0 +1,909 @@
+From 2b5518eeaacc6245cfa77ee4a7086f16208060fc Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 21 Mar 2017 13:25:11 +0100
+Subject: [PATCH 37/97] KCM: Queue requests by the same UID
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In order to avoid race conditions, we queue requests towards the KCM
+responder coming from the same client UID.
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+Reviewed-by: Simo Sorce <simo@redhat.com>
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ Makefile.am                         |  21 ++-
+ src/responder/kcm/kcm.c             |   7 +
+ src/responder/kcm/kcmsrv_cmd.c      |  10 +-
+ src/responder/kcm/kcmsrv_op_queue.c | 264 ++++++++++++++++++++++++++
+ src/responder/kcm/kcmsrv_ops.c      |  44 ++++-
+ src/responder/kcm/kcmsrv_ops.h      |   1 +
+ src/responder/kcm/kcmsrv_pvt.h      |  20 ++
+ src/tests/cmocka/test_kcm_queue.c   | 365 ++++++++++++++++++++++++++++++++++++
+ 8 files changed, 721 insertions(+), 11 deletions(-)
+ create mode 100644 src/responder/kcm/kcmsrv_op_queue.c
+ create mode 100644 src/tests/cmocka/test_kcm_queue.c
+
+diff --git a/Makefile.am b/Makefile.am
+index e9eaa312c91e3aee40bcf13c90a0ad8c683045d5..91afdd669aa11a3cc316588d3b51d7e8e9c91cb8 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -304,7 +304,10 @@ non_interactive_cmocka_based_tests += test_inotify
+ endif   # HAVE_INOTIFY
+ 
+ if BUILD_KCM
+-non_interactive_cmocka_based_tests += test_kcm_json
++non_interactive_cmocka_based_tests += \
++	test_kcm_json \
++	test_kcm_queue \
++        $(NULL)
+ endif   # BUILD_KCM
+ 
+ if BUILD_SAMBA
+@@ -1501,6 +1504,7 @@ sssd_kcm_SOURCES = \
+     src/responder/kcm/kcmsrv_ccache_json.c \
+     src/responder/kcm/kcmsrv_ccache_secrets.c \
+     src/responder/kcm/kcmsrv_ops.c \
++    src/responder/kcm/kcmsrv_op_queue.c \
+     src/util/sss_sockets.c \
+     src/util/sss_krb5.c \
+     src/util/sss_iobuf.c \
+@@ -3402,6 +3406,21 @@ test_kcm_json_LDADD = \
+     $(SSSD_INTERNAL_LTLIBS) \
+     libsss_test_common.la \
+     $(NULL)
++
++test_kcm_queue_SOURCES = \
++    src/tests/cmocka/test_kcm_queue.c \
++    src/responder/kcm/kcmsrv_op_queue.c \
++    $(NULL)
++test_kcm_queue_CFLAGS = \
++    $(AM_CFLAGS) \
++    $(NULL)
++test_kcm_queue_LDADD = \
++    $(CMOCKA_LIBS) \
++    $(SSSD_LIBS) \
++    $(SSSD_INTERNAL_LTLIBS) \
++    libsss_test_common.la \
++    $(NULL)
++
+ endif # BUILD_KCM
+ 
+ endif # HAVE_CMOCKA
+diff --git a/src/responder/kcm/kcm.c b/src/responder/kcm/kcm.c
+index 063c27b915b4b92f6259496feee891aa94a498b6..3ee978066c589a5cc38b0ae358f741d389d00e7a 100644
+--- a/src/responder/kcm/kcm.c
++++ b/src/responder/kcm/kcm.c
+@@ -133,6 +133,13 @@ static int kcm_get_config(struct kcm_ctx *kctx)
+         goto done;
+     }
+ 
++    kctx->qctx = kcm_ops_queue_create(kctx);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Cannot create KCM request queue [%d]: %s\n",
++               ret, strerror(ret));
++        goto done;
++    }
+     ret = EOK;
+ done:
+     return ret;
+diff --git a/src/responder/kcm/kcmsrv_cmd.c b/src/responder/kcm/kcmsrv_cmd.c
+index 537e88953fd1a190a9a73bcdd430d8e0db8f9291..81015de4a91617de3dca444cde95b636c8d5c0d1 100644
+--- a/src/responder/kcm/kcmsrv_cmd.c
++++ b/src/responder/kcm/kcmsrv_cmd.c
+@@ -353,14 +353,18 @@ struct kcm_req_ctx {
+ 
+ static void kcm_cmd_request_done(struct tevent_req *req);
+ 
+-static errno_t kcm_cmd_dispatch(struct kcm_req_ctx *req_ctx)
++static errno_t kcm_cmd_dispatch(struct kcm_ctx *kctx,
++                                struct kcm_req_ctx *req_ctx)
+ {
+     struct tevent_req *req;
+     struct cli_ctx *cctx;
+ 
+     cctx = req_ctx->cctx;
+ 
+-    req = kcm_cmd_send(req_ctx, cctx->ev, req_ctx->kctx->kcm_data,
++    req = kcm_cmd_send(req_ctx,
++                       cctx->ev,
++                       kctx->qctx,
++                       req_ctx->kctx->kcm_data,
+                        req_ctx->cctx->creds,
+                        &req_ctx->op_io.request,
+                        req_ctx->op_io.op);
+@@ -505,7 +509,7 @@ static void kcm_recv(struct cli_ctx *cctx)
+     /* do not read anymore, client is done sending */
+     TEVENT_FD_NOT_READABLE(cctx->cfde);
+ 
+-    ret = kcm_cmd_dispatch(req);
++    ret = kcm_cmd_dispatch(kctx, req);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_FATAL_FAILURE,
+               "Failed to dispatch KCM operation [%d]: %s\n",
+diff --git a/src/responder/kcm/kcmsrv_op_queue.c b/src/responder/kcm/kcmsrv_op_queue.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..f6c425dd5b64877c8b7401e488dd6565157fc9b5
+--- /dev/null
++++ b/src/responder/kcm/kcmsrv_op_queue.c
+@@ -0,0 +1,264 @@
++/*
++   SSSD
++
++   KCM Server - the KCM operations wait queue
++
++   Copyright (C) Red Hat, 2017
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "util/util.h"
++#include "util/util_creds.h"
++#include "responder/kcm/kcmsrv_pvt.h"
++
++#define QUEUE_HASH_SIZE      32
++
++struct kcm_ops_queue_entry {
++    struct tevent_req *req;
++    uid_t uid;
++
++    hash_table_t *wait_queue_hash;
++
++    struct kcm_ops_queue_entry *head;
++    struct kcm_ops_queue_entry *next;
++    struct kcm_ops_queue_entry *prev;
++};
++
++struct kcm_ops_queue_ctx {
++    /* UID: dlist of kcm_ops_queue_entry */
++    hash_table_t *wait_queue_hash;
++};
++
++/*
++ * Per-UID wait queue
++ *
++ * They key in the hash table is the UID of the peer. The value of each
++ * hash table entry is a linked list of kcm_ops_queue_entry structures
++ * which primarily hold the tevent request being queued.
++ */
++struct kcm_ops_queue_ctx *kcm_ops_queue_create(TALLOC_CTX *mem_ctx)
++{
++    errno_t ret;
++    struct kcm_ops_queue_ctx *queue_ctx;
++
++    queue_ctx = talloc_zero(mem_ctx, struct kcm_ops_queue_ctx);
++    if (queue_ctx == NULL) {
++        return NULL;
++    }
++
++    ret = sss_hash_create_ex(mem_ctx, QUEUE_HASH_SIZE,
++                             &queue_ctx->wait_queue_hash, 0, 0, 0, 0,
++                             NULL, NULL);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "sss_hash_create failed [%d]: %s\n", ret, sss_strerror(ret));
++        talloc_free(queue_ctx);
++        return NULL;
++    }
++
++    return queue_ctx;
++}
++
++static int kcm_op_queue_entry_destructor(struct kcm_ops_queue_entry *entry)
++{
++    int ret;
++    struct kcm_ops_queue_entry *next_entry;
++    hash_key_t key;
++
++    if (entry == NULL) {
++        return 1;
++    }
++
++    /* Take the next entry from the queue */
++    next_entry = entry->next;
++
++    /* Remove the current entry from the queue */
++    DLIST_REMOVE(entry->head, entry);
++
++    if (next_entry == NULL) {
++        key.type = HASH_KEY_ULONG;
++        key.ul = entry->uid;
++
++        /* If this was the last entry, remove the key (the UID) from the
++         * hash table to signal the queue is empty
++         */
++        ret = hash_delete(entry->wait_queue_hash, &key);
++        if (ret != HASH_SUCCESS) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "Failed to remove wait queue for user %"SPRIuid"\n",
++                  entry->uid);
++            return 1;
++        }
++        return 0;
++    }
++
++    /* Otherwise, mark the current head as done to run the next request */
++    tevent_req_done(next_entry->req);
++    return 0;
++}
++
++static errno_t kcm_op_queue_add(hash_table_t *wait_queue_hash,
++                                struct kcm_ops_queue_entry *entry,
++                                uid_t uid)
++{
++    errno_t ret;
++    hash_key_t key;
++    hash_value_t value;
++    struct kcm_ops_queue_entry *head = NULL;
++
++    key.type = HASH_KEY_ULONG;
++    key.ul = uid;
++
++    ret = hash_lookup(wait_queue_hash, &key, &value);
++    switch (ret) {
++    case HASH_SUCCESS:
++        /* The key with this UID already exists. Its value is request queue
++         * for the UID, so let's just add the current request to the end
++         * of the queue and wait for the previous requests to finish
++         */
++        if (value.type != HASH_VALUE_PTR) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unexpected hash value type.\n");
++            return EINVAL;
++        }
++
++        head = talloc_get_type(value.ptr, struct kcm_ops_queue_entry);
++        if (head == NULL) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Invalid queue pointer\n");
++            return EINVAL;
++        }
++
++        entry->head = head;
++        DLIST_ADD_END(head, entry, struct kcm_ops_queue_entry *);
++
++        DEBUG(SSSDBG_TRACE_LIBS, "Waiting in queue\n");
++        ret = EAGAIN;
++        break;
++
++    case HASH_ERROR_KEY_NOT_FOUND:
++        /* No request for this UID yet. Enqueue this request in case
++         * another one comes in and return EOK to run the current request
++         * immediatelly
++         */
++        entry->head = entry;
++
++        value.type = HASH_VALUE_PTR;
++        value.ptr = entry;
++
++        ret = hash_enter(wait_queue_hash, &key, &value);
++        if (ret != HASH_SUCCESS) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "hash_enter failed.\n");
++            return EIO;
++        }
++
++        DEBUG(SSSDBG_TRACE_LIBS,
++              "Added a first request to the queue, running immediately\n");
++        ret = EOK;
++        break;
++
++    default:
++        DEBUG(SSSDBG_CRIT_FAILURE, "hash_lookup failed.\n");
++        return EIO;
++    }
++
++    talloc_steal(wait_queue_hash, entry);
++    talloc_set_destructor(entry, kcm_op_queue_entry_destructor);
++    return ret;
++}
++
++struct kcm_op_queue_state {
++    struct kcm_ops_queue_entry *entry;
++};
++
++/*
++ * Enqueue a request.
++ *
++ * If the request queue /for the given ID/ is empty, that is, if this
++ * request is the first one in the queue, run the request immediatelly.
++ *
++ * Otherwise just add it to the queue and wait until the previous request
++ * finishes and only at that point mark the current request as done, which
++ * will trigger calling the recv function and allow the request to continue.
++ */
++struct tevent_req *kcm_op_queue_send(TALLOC_CTX *mem_ctx,
++                                     struct tevent_context *ev,
++                                     struct kcm_ops_queue_ctx *qctx,
++                                     struct cli_creds *client)
++{
++    errno_t ret;
++    struct tevent_req *req;
++    struct kcm_op_queue_state *state;
++    uid_t uid;
++
++    uid = cli_creds_get_uid(client);
++
++    req = tevent_req_create(mem_ctx, &state, struct kcm_op_queue_state);
++    if (req == NULL) {
++        return NULL;
++    }
++
++    state->entry = talloc_zero(state, struct kcm_ops_queue_entry);
++    if (state->entry == NULL) {
++        ret = ENOMEM;
++        goto immediate;
++    }
++    state->entry->req = req;
++    state->entry->uid = uid;
++    state->entry->wait_queue_hash = qctx->wait_queue_hash;
++
++    DEBUG(SSSDBG_FUNC_DATA,
++          "Adding request by %"SPRIuid" to the wait queue\n", uid);
++
++    ret = kcm_op_queue_add(qctx->wait_queue_hash, state->entry, uid);
++    if (ret == EOK) {
++        DEBUG(SSSDBG_TRACE_LIBS,
++              "Wait queue was empty, running immediately\n");
++        goto immediate;
++    } else if (ret != EAGAIN) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Cannot enqueue request [%d]: %s\n", ret, sss_strerror(ret));
++        goto immediate;
++    }
++
++    DEBUG(SSSDBG_TRACE_LIBS, "Waiting our turn in the queue\n");
++    return req;
++
++immediate:
++    if (ret == EOK) {
++        tevent_req_done(req);
++    } else {
++        tevent_req_error(req, ret);
++    }
++    tevent_req_post(req, ev);
++    return req;
++}
++
++/*
++ * The queue recv function is called when this request is 'activated'. The queue
++ * entry should be allocated on the same memory context as the enqueued request
++ * to trigger freeing the kcm_ops_queue_entry structure destructor when the
++ * parent request is done and its tevent_req freed. This would in turn unblock
++ * the next request in the queue
++ */
++errno_t kcm_op_queue_recv(struct tevent_req *req,
++                          TALLOC_CTX *mem_ctx,
++                          struct kcm_ops_queue_entry **_entry)
++{
++    struct kcm_op_queue_state *state = tevent_req_data(req,
++                                                struct kcm_op_queue_state);
++
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++    *_entry = talloc_steal(mem_ctx, state->entry);
++    return EOK;
++}
+diff --git a/src/responder/kcm/kcmsrv_ops.c b/src/responder/kcm/kcmsrv_ops.c
+index 50e8cc635424e15d53e3c8d122c5525044f59c8a..2feaf51f227ce9d90f706229ce7ac201b282dc6f 100644
+--- a/src/responder/kcm/kcmsrv_ops.c
++++ b/src/responder/kcm/kcmsrv_ops.c
+@@ -67,17 +67,21 @@ struct kcm_op {
+ 
+ struct kcm_cmd_state {
+     struct kcm_op *op;
++    struct tevent_context *ev;
+ 
++    struct kcm_ops_queue_entry *queue_entry;
+     struct kcm_op_ctx *op_ctx;
+     struct sss_iobuf *reply;
+ 
+     uint32_t op_ret;
+ };
+ 
++static void kcm_cmd_queue_done(struct tevent_req *subreq);
+ static void kcm_cmd_done(struct tevent_req *subreq);
+ 
+ struct tevent_req *kcm_cmd_send(TALLOC_CTX *mem_ctx,
+                                 struct tevent_context *ev,
++                                struct kcm_ops_queue_ctx *qctx,
+                                 struct kcm_resp_ctx *kcm_data,
+                                 struct cli_creds *client,
+                                 struct kcm_data *input,
+@@ -93,6 +97,7 @@ struct tevent_req *kcm_cmd_send(TALLOC_CTX *mem_ctx,
+         return NULL;
+     }
+     state->op = op;
++    state->ev = ev;
+ 
+     if (op == NULL) {
+         ret = EINVAL;
+@@ -154,18 +159,43 @@ struct tevent_req *kcm_cmd_send(TALLOC_CTX *mem_ctx,
+         goto immediate;
+     }
+ 
+-    subreq = op->fn_send(state, ev, state->op_ctx);
++    subreq = kcm_op_queue_send(state, ev, qctx, client);
+     if (subreq == NULL) {
+         ret = ENOMEM;
+         goto immediate;
+     }
++    tevent_req_set_callback(subreq, kcm_cmd_queue_done, req);
++    return req;
++
++immediate:
++    tevent_req_error(req, ret);
++    tevent_req_post(req, ev);
++    return req;
++}
++
++static void kcm_cmd_queue_done(struct tevent_req *subreq)
++{
++    struct tevent_req *req = tevent_req_callback_data(subreq, struct tevent_req);
++    struct kcm_cmd_state *state = tevent_req_data(req, struct kcm_cmd_state);
++    errno_t ret;
++
++    /* When this request finishes, it frees the queue_entry which unblocks
++     * other requests by the same UID
++     */
++    ret = kcm_op_queue_recv(subreq, state, &state->queue_entry);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot acquire queue slot\n");
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    subreq = state->op->fn_send(state, state->ev, state->op_ctx);
++    if (subreq == NULL) {
++        tevent_req_error(req, ENOMEM);
++        return;
++    }
+     tevent_req_set_callback(subreq, kcm_cmd_done, req);
+-    return req;
+-
+-immediate:
+-    tevent_req_error(req, ret);
+-    tevent_req_post(req, ev);
+-    return req;
+ }
+ 
+ static void kcm_cmd_done(struct tevent_req *subreq)
+diff --git a/src/responder/kcm/kcmsrv_ops.h b/src/responder/kcm/kcmsrv_ops.h
+index 8e6feaf56a10b73c8b6375aea9ef26c392b5b492..67d9f86026bf949548471f2280c130ebefd2f865 100644
+--- a/src/responder/kcm/kcmsrv_ops.h
++++ b/src/responder/kcm/kcmsrv_ops.h
+@@ -34,6 +34,7 @@ const char *kcm_opt_name(struct kcm_op *op);
+ 
+ struct tevent_req *kcm_cmd_send(TALLOC_CTX *mem_ctx,
+                                 struct tevent_context *ev,
++                                struct kcm_ops_queue_ctx *qctx,
+                                 struct kcm_resp_ctx *kcm_data,
+                                 struct cli_creds *client,
+                                 struct kcm_data *input,
+diff --git a/src/responder/kcm/kcmsrv_pvt.h b/src/responder/kcm/kcmsrv_pvt.h
+index 74f30c00014105ed533744779b02c5d42523722d..f081a6bf0c6e40d2f8a83b07f9bbc2abacff359d 100644
+--- a/src/responder/kcm/kcmsrv_pvt.h
++++ b/src/responder/kcm/kcmsrv_pvt.h
+@@ -25,6 +25,7 @@
+ #include "config.h"
+ 
+ #include <sys/types.h>
++#include <krb5/krb5.h>
+ #include "responder/common/responder.h"
+ 
+ /*
+@@ -65,6 +66,7 @@ struct kcm_ctx {
+     int fd_limit;
+     char *socket_path;
+     enum kcm_ccdb_be cc_be;
++    struct kcm_ops_queue_ctx *qctx;
+ 
+     struct kcm_resp_ctx *kcm_data;
+ };
+@@ -78,4 +80,22 @@ int kcm_connection_setup(struct cli_ctx *cctx);
+  */
+ krb5_error_code sss2krb5_error(errno_t err);
+ 
++/* We enqueue all requests by the same UID to avoid concurrency issues
++ * especially when performing multiple round-trips to sssd-secrets. In
++ * future, we should relax the queue to allow multiple read-only operations
++ * if no write operations are in progress.
++ */
++struct kcm_ops_queue_entry;
++
++struct kcm_ops_queue_ctx *kcm_ops_queue_create(TALLOC_CTX *mem_ctx);
++
++struct tevent_req *kcm_op_queue_send(TALLOC_CTX *mem_ctx,
++                                     struct tevent_context *ev,
++                                     struct kcm_ops_queue_ctx *qctx,
++                                     struct cli_creds *client);
++
++errno_t kcm_op_queue_recv(struct tevent_req *req,
++                          TALLOC_CTX *mem_ctx,
++                          struct kcm_ops_queue_entry **_entry);
++
+ #endif /* __KCMSRV_PVT_H__ */
+diff --git a/src/tests/cmocka/test_kcm_queue.c b/src/tests/cmocka/test_kcm_queue.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..ba0d2405629960df5c623848f3207b7c80fa948d
+--- /dev/null
++++ b/src/tests/cmocka/test_kcm_queue.c
+@@ -0,0 +1,365 @@
++/*
++    Copyright (C) 2017 Red Hat
++
++    SSSD tests: Test KCM wait queue
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "config.h"
++
++#include <stdio.h>
++#include <popt.h>
++
++#include "util/util.h"
++#include "util/util_creds.h"
++#include "tests/cmocka/common_mock.h"
++#include "responder/kcm/kcmsrv_pvt.h"
++
++#define INVALID_ID      -1
++#define FAST_REQ_ID     0
++#define SLOW_REQ_ID     1
++
++#define FAST_REQ_DELAY  1
++#define SLOW_REQ_DELAY  2
++
++struct timed_request_state {
++    struct tevent_context *ev;
++    struct kcm_ops_queue_ctx *qctx;
++    struct cli_creds *client;
++    int delay;
++    int req_id;
++
++    struct kcm_ops_queue_entry *queue_entry;
++};
++
++static void timed_request_start(struct tevent_req *subreq);
++static void timed_request_done(struct tevent_context *ev,
++                               struct tevent_timer *te,
++                               struct timeval current_time,
++                               void *pvt);
++
++static struct tevent_req *timed_request_send(TALLOC_CTX *mem_ctx,
++                                             struct tevent_context *ev,
++                                             struct kcm_ops_queue_ctx *qctx,
++                                             struct cli_creds *client,
++                                             int delay,
++                                             int req_id)
++{
++    struct tevent_req *req;
++    struct tevent_req *subreq;
++    struct timed_request_state *state;
++
++    req = tevent_req_create(mem_ctx, &state, struct timed_request_state);
++    if (req == NULL) {
++        return NULL;
++    }
++    state->ev = ev;
++    state->qctx = qctx;
++    state->client = client;
++    state->delay = delay;
++    state->req_id = req_id;
++
++    DEBUG(SSSDBG_TRACE_ALL, "Request %p with delay %d\n", req, delay);
++
++    subreq = kcm_op_queue_send(state, ev, qctx, client);
++    if (subreq == NULL) {
++        return NULL;
++    }
++    tevent_req_set_callback(subreq, timed_request_start, req);
++
++    return req;
++}
++
++static void timed_request_start(struct tevent_req *subreq)
++{
++    struct timeval tv;
++    struct tevent_timer *timeout = NULL;
++    struct tevent_req *req = tevent_req_callback_data(subreq,
++                                                      struct tevent_req);
++    struct timed_request_state *state = tevent_req_data(req,
++                                                struct timed_request_state);
++    errno_t ret;
++
++    ret = kcm_op_queue_recv(subreq, state, &state->queue_entry);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    tv = tevent_timeval_current_ofs(state->delay, 0);
++    timeout = tevent_add_timer(state->ev, state, tv, timed_request_done, req);
++    if (timeout == NULL) {
++        tevent_req_error(req, ENOMEM);
++        return;
++    }
++
++    return;
++}
++
++static void timed_request_done(struct tevent_context *ev,
++                               struct tevent_timer *te,
++                               struct timeval current_time,
++                               void *pvt)
++{
++    struct tevent_req *req = talloc_get_type(pvt, struct tevent_req);
++    DEBUG(SSSDBG_TRACE_ALL, "Request %p done\n", req);
++    tevent_req_done(req);
++}
++
++static errno_t timed_request_recv(struct tevent_req *req,
++                                  int *req_id)
++{
++    struct timed_request_state *state = tevent_req_data(req,
++                                                struct timed_request_state);
++
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++    *req_id = state->req_id;
++    return EOK;
++}
++
++struct test_ctx {
++    struct kcm_ops_queue_ctx *qctx;
++    struct tevent_context *ev;
++
++    int *req_ids;
++
++    int num_requests;
++    int finished_requests;
++    bool done;
++    errno_t error;
++};
++
++static int setup_kcm_queue(void **state)
++{
++    struct test_ctx *tctx;
++
++    tctx = talloc_zero(NULL, struct test_ctx);
++    assert_non_null(tctx);
++
++    tctx->ev = tevent_context_init(tctx);
++    assert_non_null(tctx->ev);
++
++    tctx->qctx = kcm_ops_queue_create(tctx);
++    assert_non_null(tctx->qctx);
++
++    *state = tctx;
++    return 0;
++}
++
++static int teardown_kcm_queue(void **state)
++{
++    struct test_ctx *tctx = talloc_get_type(*state, struct test_ctx);
++    talloc_free(tctx);
++    return 0;
++}
++
++static void test_kcm_queue_done(struct tevent_req *req)
++{
++    struct test_ctx *test_ctx = tevent_req_callback_data(req,
++                                                struct test_ctx);
++    int req_id = INVALID_ID;
++
++    test_ctx->error = timed_request_recv(req, &req_id);
++    talloc_zfree(req);
++    if (test_ctx->error != EOK) {
++        test_ctx->done = true;
++        return;
++    }
++
++    if (test_ctx->req_ids[test_ctx->finished_requests] != req_id) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Request %d finished, expected %d\n",
++              req_id, test_ctx->req_ids[test_ctx->finished_requests]);
++        test_ctx->error = EIO;
++        test_ctx->done = true;
++        return;
++    }
++
++    test_ctx->finished_requests++;
++    if (test_ctx->finished_requests == test_ctx->num_requests) {
++        test_ctx->done = true;
++        return;
++    }
++}
++
++/*
++ * Just make sure that a single pass through the queue works
++ */
++static void test_kcm_queue_single(void **state)
++{
++    struct test_ctx *test_ctx = talloc_get_type(*state, struct test_ctx);
++    struct tevent_req *req;
++    struct cli_creds client;
++    static int req_ids[] = { 0 };
++
++    client.ucred.uid = getuid();
++    client.ucred.gid = getgid();
++
++    req = timed_request_send(test_ctx,
++                             test_ctx->ev,
++                             test_ctx->qctx,
++                             &client, 1, 0);
++    assert_non_null(req);
++    tevent_req_set_callback(req, test_kcm_queue_done, test_ctx);
++
++    test_ctx->num_requests = 1;
++    test_ctx->req_ids = req_ids;
++
++    while (test_ctx->done == false) {
++        tevent_loop_once(test_ctx->ev);
++    }
++    assert_int_equal(test_ctx->error, EOK);
++}
++
++/*
++ * Test that multiple requests from the same ID wait for one another
++ */
++static void test_kcm_queue_multi_same_id(void **state)
++{
++    struct test_ctx *test_ctx = talloc_get_type(*state, struct test_ctx);
++    struct tevent_req *req;
++    struct cli_creds client;
++    /* The slow request will finish first because request from
++     * the same ID are serialized
++     */
++    static int req_ids[] = { SLOW_REQ_ID, FAST_REQ_ID };
++
++    client.ucred.uid = getuid();
++    client.ucred.gid = getgid();
++
++    req = timed_request_send(test_ctx,
++                             test_ctx->ev,
++                             test_ctx->qctx,
++                             &client,
++                             SLOW_REQ_DELAY,
++                             SLOW_REQ_ID);
++    assert_non_null(req);
++    tevent_req_set_callback(req, test_kcm_queue_done, test_ctx);
++
++    req = timed_request_send(test_ctx,
++                             test_ctx->ev,
++                             test_ctx->qctx,
++                             &client,
++                             FAST_REQ_DELAY,
++                             FAST_REQ_ID);
++    assert_non_null(req);
++    tevent_req_set_callback(req, test_kcm_queue_done, test_ctx);
++
++    test_ctx->num_requests = 2;
++    test_ctx->req_ids = req_ids;
++
++    while (test_ctx->done == false) {
++        tevent_loop_once(test_ctx->ev);
++    }
++    assert_int_equal(test_ctx->error, EOK);
++}
++
++/*
++ * Test that multiple requests from different IDs don't wait for one
++ * another and can run concurrently
++ */
++static void test_kcm_queue_multi_different_id(void **state)
++{
++    struct test_ctx *test_ctx = talloc_get_type(*state, struct test_ctx);
++    struct tevent_req *req;
++    struct cli_creds client;
++    /* In this test, the fast request will finish sooner because
++     * both requests are from different IDs, allowing them to run
++     * concurrently
++     */
++    static int req_ids[] = { FAST_REQ_ID, SLOW_REQ_ID };
++
++    client.ucred.uid = getuid();
++    client.ucred.gid = getgid();
++
++    req = timed_request_send(test_ctx,
++                             test_ctx->ev,
++                             test_ctx->qctx,
++                             &client,
++                             SLOW_REQ_DELAY,
++                             SLOW_REQ_ID);
++    assert_non_null(req);
++    tevent_req_set_callback(req, test_kcm_queue_done, test_ctx);
++
++    client.ucred.uid = getuid() + 1;
++    client.ucred.gid = getgid() + 1;
++
++    req = timed_request_send(test_ctx,
++                             test_ctx->ev,
++                             test_ctx->qctx,
++                             &client,
++                             FAST_REQ_DELAY,
++                             FAST_REQ_ID);
++    assert_non_null(req);
++    tevent_req_set_callback(req, test_kcm_queue_done, test_ctx);
++
++    test_ctx->num_requests = 2;
++    test_ctx->req_ids = req_ids;
++
++    while (test_ctx->done == false) {
++        tevent_loop_once(test_ctx->ev);
++    }
++    assert_int_equal(test_ctx->error, EOK);
++}
++
++int main(int argc, const char *argv[])
++{
++    poptContext pc;
++    int opt;
++    int rv;
++    struct poptOption long_options[] = {
++        POPT_AUTOHELP
++        SSSD_DEBUG_OPTS
++        POPT_TABLEEND
++    };
++
++    const struct CMUnitTest tests[] = {
++        cmocka_unit_test_setup_teardown(test_kcm_queue_single,
++                                        setup_kcm_queue,
++                                        teardown_kcm_queue),
++        cmocka_unit_test_setup_teardown(test_kcm_queue_multi_same_id,
++                                        setup_kcm_queue,
++                                        teardown_kcm_queue),
++        cmocka_unit_test_setup_teardown(test_kcm_queue_multi_different_id,
++                                        setup_kcm_queue,
++                                        teardown_kcm_queue),
++    };
++
++    /* Set debug level to invalid value so we can deside if -d 0 was used. */
++    debug_level = SSSDBG_INVALID;
++
++    pc = poptGetContext(argv[0], argc, argv, long_options, 0);
++    while((opt = poptGetNextOpt(pc)) != -1) {
++        switch(opt) {
++        default:
++            fprintf(stderr, "\nInvalid option %s: %s\n\n",
++                    poptBadOption(pc, 0), poptStrerror(opt));
++            poptPrintUsage(pc, stderr, 0);
++            return 1;
++        }
++    }
++    poptFreeContext(pc);
++
++    DEBUG_CLI_INIT(debug_level);
++
++    /* Even though normally the tests should clean up after themselves
++     * they might not after a failed run. Remove the old db to be sure */
++    tests_set_cwd();
++
++    rv = cmocka_run_group_tests(tests, NULL, NULL);
++
++    return rv;
++}
+-- 
+2.12.2
+

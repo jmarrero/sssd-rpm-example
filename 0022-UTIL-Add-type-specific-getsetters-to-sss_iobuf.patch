@@ -1,0 +1,194 @@
+From 5f7f45a64bdb9353f15b945db4ad2564b4b28ab2 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Thu, 23 Feb 2017 21:57:13 +0100
+Subject: [PATCH 22/97] UTIL: Add type-specific getsetters to sss_iobuf
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The KCM responder receives its input as unstructured data. To make the
+parsing easier, this commit adds several type-specific getsetters to the
+iobuf module.
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+Reviewed-by: Simo Sorce <simo@redhat.com>
+---
+ src/util/sss_iobuf.c | 108 +++++++++++++++++++++++++++++++++++++++++++++++++++
+ src/util/sss_iobuf.h |  33 ++++++++++++++++
+ 2 files changed, 141 insertions(+)
+
+diff --git a/src/util/sss_iobuf.c b/src/util/sss_iobuf.c
+index 900418b750a3455ebc2c3bb1893db726692260b8..fc288d2df2bfaaba393dd490d4da8976de804cb5 100644
+--- a/src/util/sss_iobuf.c
++++ b/src/util/sss_iobuf.c
+@@ -184,6 +184,25 @@ errno_t sss_iobuf_read(struct sss_iobuf *iobuf,
+     return EOK;
+ }
+ 
++errno_t sss_iobuf_read_len(struct sss_iobuf *iobuf,
++                           size_t len,
++                           uint8_t *_buf)
++{
++    size_t read;
++    errno_t ret;
++
++    ret = sss_iobuf_read(iobuf, len, _buf, &read);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    if (read != len) {
++        return ENOBUFS;
++    }
++
++    return EOK;
++}
++
+ errno_t sss_iobuf_write_len(struct sss_iobuf *iobuf,
+                             uint8_t *buf,
+                             size_t len)
+@@ -203,3 +222,92 @@ errno_t sss_iobuf_write_len(struct sss_iobuf *iobuf,
+ 
+     return EOK;
+ }
++
++errno_t sss_iobuf_read_uint32(struct sss_iobuf *iobuf,
++                              uint32_t *_val)
++{
++    SAFEALIGN_COPY_UINT32_CHECK(_val, iobuf_ptr(iobuf),
++                                iobuf->capacity, &iobuf->dp);
++    return EOK;
++}
++
++errno_t sss_iobuf_read_int32(struct sss_iobuf *iobuf,
++                             int32_t *_val)
++{
++    SAFEALIGN_COPY_INT32_CHECK(_val, iobuf_ptr(iobuf),
++                               iobuf->capacity, &iobuf->dp);
++    return EOK;
++}
++
++errno_t sss_iobuf_write_uint32(struct sss_iobuf *iobuf,
++                               uint32_t val)
++{
++    errno_t ret;
++
++    ret = ensure_bytes(iobuf, sizeof(uint32_t));
++    if (ret != EOK) {
++        return ret;
++    }
++
++    SAFEALIGN_SETMEM_UINT32(iobuf_ptr(iobuf), val, &iobuf->dp);
++    return EOK;
++}
++
++errno_t sss_iobuf_write_int32(struct sss_iobuf *iobuf,
++                              int32_t val)
++{
++    errno_t ret;
++
++    ret = ensure_bytes(iobuf, sizeof(int32_t));
++    if (ret != EOK) {
++        return ret;
++    }
++
++    SAFEALIGN_SETMEM_INT32(iobuf_ptr(iobuf), val, &iobuf->dp);
++    return EOK;
++}
++
++errno_t sss_iobuf_read_stringz(struct sss_iobuf *iobuf,
++                               const char **_out)
++{
++    uint8_t *end;
++    size_t len;
++
++    if (iobuf == NULL) {
++        return EINVAL;
++    }
++
++    if (_out == NULL) {
++        return EINVAL;
++    }
++
++    *_out = NULL;
++
++    end = memchr(iobuf_ptr(iobuf), '\0', sss_iobuf_get_size(iobuf));
++    if (end == NULL) {
++        return EINVAL;
++    }
++
++    len = end + 1 - iobuf_ptr(iobuf);
++    if (sss_iobuf_get_size(iobuf) < len) {
++        return EINVAL;
++    }
++
++    *_out = (const char *) iobuf_ptr(iobuf);
++    iobuf->dp += len;
++    return EOK;
++}
++
++errno_t sss_iobuf_write_stringz(struct sss_iobuf *iobuf,
++                                const char *str)
++{
++    if (iobuf == NULL || str == NULL) {
++        return EINVAL;
++    }
++
++    SAFEALIGN_MEMCPY_CHECK(iobuf_ptr(iobuf),
++                           str, strlen(str)+1,
++                           sss_iobuf_get_size(iobuf),
++                           &iobuf->dp);
++    return EOK;
++}
+diff --git a/src/util/sss_iobuf.h b/src/util/sss_iobuf.h
+index 900faaa212230f72f52e344c085167e80ae2b465..cc3dfd1e98eeb49b979ac321bd0253bffa8a6dff 100644
+--- a/src/util/sss_iobuf.h
++++ b/src/util/sss_iobuf.h
+@@ -96,6 +96,22 @@ errno_t sss_iobuf_read(struct sss_iobuf *iobuf,
+                        size_t *_read);
+ 
+ /*
++ * @brief Read an exact number of bytes from an IO buffer
++ *
++ * Read exactly len bytes from an IO buffer. If the buffer contains fewer
++ * bytes than len, ENOBUFS is returned.
++ *
++ * @param[in]  iobuf        The IO buffer to read from
++ * @param[in]  len          The maximum number of bytes to read
++ * @param[out] _buf         The buffer to read data into from iobuf
++ *
++ * @return EOK on success, errno otherwise
++ */
++errno_t sss_iobuf_read_len(struct sss_iobuf *iobuf,
++                           size_t len,
++                           uint8_t *_buf);
++
++/*
+  * @brief Write into an IO buffer
+  *
+  * Attempts to write len bytes into the iobuf. If the capacity is exceeded,
+@@ -115,4 +131,21 @@ errno_t sss_iobuf_write_len(struct sss_iobuf *iobuf,
+                             uint8_t *buf,
+                             size_t len);
+ 
++errno_t sss_iobuf_read_uint32(struct sss_iobuf *iobuf,
++                              uint32_t *_val);
++
++errno_t sss_iobuf_write_uint32(struct sss_iobuf *iobuf,
++                               uint32_t val);
++
++errno_t sss_iobuf_read_int32(struct sss_iobuf *iobuf,
++                             int32_t *_val);
++
++errno_t sss_iobuf_write_int32(struct sss_iobuf *iobuf,
++                              int32_t val);
++
++errno_t sss_iobuf_read_stringz(struct sss_iobuf *iobuf,
++                               const char **_out);
++
++errno_t sss_iobuf_write_stringz(struct sss_iobuf *iobuf,
++                                const char *str);
+ #endif /* __SSS_IOBUF_H_ */
+-- 
+2.12.2
+

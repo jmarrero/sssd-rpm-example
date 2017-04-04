@@ -1,0 +1,32 @@
+From 24889dc5e7eb7bc992ab0fa05edfdfa1d157131a Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 15 Mar 2017 13:42:03 +0100
+Subject: [PATCH 19/97] UTIL: Fix a typo in the tcurl test tool
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+Reviewed-by: Simo Sorce <simo@redhat.com>
+---
+ src/tests/tcurl_test_tool.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/tests/tcurl_test_tool.c b/src/tests/tcurl_test_tool.c
+index 35ea979780df47c92ed92bc5bba713faa8909b90..38cea432885c97ca3827c8f158bf7e3ebfc67b31 100644
+--- a/src/tests/tcurl_test_tool.c
++++ b/src/tests/tcurl_test_tool.c
+@@ -204,8 +204,8 @@ int main(int argc, const char *argv[])
+                               urls[i],
+                               headers,
+                               inbufs[i],
+-                              10);
+-        if (ctx == NULL) {
++                              5);
++        if (req == NULL) {
+             DEBUG(SSSDBG_FATAL_FAILURE, "Could not create request\n");
+             talloc_zfree(tool_ctx);
+             return 1;
+-- 
+2.12.2
+

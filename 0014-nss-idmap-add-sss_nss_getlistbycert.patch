@@ -1,0 +1,736 @@
+From 440797cba931aa491bf418035f55935943e22b4b Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 15 Mar 2017 14:21:26 +0100
+Subject: [PATCH 14/97] nss-idmap: add sss_nss_getlistbycert()
+
+This patch adds a getlistbycert() call to libsss_nss_idmap to make it on
+par with InfoPipe.
+
+Related to https://pagure.io/SSSD/sssd/issue/3050
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ Makefile.am                                |   2 +-
+ src/python/pysss_nss_idmap.c               | 103 ++++++++++++++++++-
+ src/responder/nss/nss_cmd.c                |   7 ++
+ src/responder/nss/nss_protocol.h           |   6 ++
+ src/responder/nss/nss_protocol_sid.c       |  63 ++++++++++++
+ src/sss_client/idmap/sss_nss_idmap.c       | 110 +++++++++++++++++++-
+ src/sss_client/idmap/sss_nss_idmap.exports |   6 ++
+ src/sss_client/idmap/sss_nss_idmap.h       |  17 +++-
+ src/sss_client/sss_cli.h                   |   5 +
+ src/tests/cmocka/test_nss_srv.c            | 158 +++++++++++++++++++++++++++++
+ 10 files changed, 471 insertions(+), 6 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index bd0ca0d303e1742ad26c7648cd24e2c0135af34e..7516338bc6fd95045d20db8155a0c82fd7003358 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1128,7 +1128,7 @@ libsss_nss_idmap_la_LIBADD = \
+     $(CLIENT_LIBS)
+ libsss_nss_idmap_la_LDFLAGS = \
+     -Wl,--version-script,$(srcdir)/src/sss_client/idmap/sss_nss_idmap.exports \
+-    -version-info 2:0:2
++    -version-info 3:0:3
+ 
+ dist_noinst_DATA += src/sss_client/idmap/sss_nss_idmap.exports
+ 
+diff --git a/src/python/pysss_nss_idmap.c b/src/python/pysss_nss_idmap.c
+index c57cc10a86a7a9a22a791c1eae027a1aafa8f780..2e5851c7a6e48629fd93e428aada499fcbe36ebb 100644
+--- a/src/python/pysss_nss_idmap.c
++++ b/src/python/pysss_nss_idmap.c
+@@ -36,9 +36,37 @@ enum lookup_type {
+     SIDBYID,
+     NAMEBYSID,
+     IDBYSID,
+-    NAMEBYCERT
++    NAMEBYCERT,
++    LISTBYCERT
+ };
+ 
++static int add_dict_to_list(PyObject *py_list, PyObject *res_type,
++                            PyObject *res, PyObject *id_type)
++{
++    int ret;
++    PyObject *py_dict;
++
++    py_dict =  PyDict_New();
++    if (py_dict == NULL) {
++        return ENOMEM;
++    }
++
++    ret = PyDict_SetItem(py_dict, res_type, res);
++    if (ret != 0) {
++        Py_XDECREF(py_dict);
++        return ret;
++    }
++
++    ret = PyDict_SetItem(py_dict, PyBytes_FromString(SSS_TYPE_KEY), id_type);
++    if (ret != 0) {
++        Py_XDECREF(py_dict);
++        return ret;
++    }
++
++    ret = PyList_Append(py_list, py_dict);
++
++    return ret;
++}
+ static int add_dict(PyObject *py_result, PyObject *key, PyObject *res_type,
+                     PyObject *res, PyObject *id_type)
+ {
+@@ -191,6 +219,57 @@ static int do_getnamebycert(PyObject *py_result, PyObject *py_cert)
+     return ret;
+ }
+ 
++static int do_getlistbycert(PyObject *py_result, PyObject *py_cert)
++{
++    int ret;
++    const char *cert;
++    char **names = NULL;
++    enum sss_id_type *id_types = NULL;
++    size_t c;
++
++    cert = py_string_or_unicode_as_string(py_cert);
++    if (cert == NULL) {
++        return EINVAL;
++    }
++
++    ret = sss_nss_getlistbycert(cert, &names, &id_types);
++    if (ret == 0) {
++
++        PyObject *py_list;
++
++        py_list =  PyList_New(0);
++        if (py_list == NULL) {
++            return ENOMEM;
++        }
++
++        for (c = 0; names[c] != NULL; c++) {
++            ret = add_dict_to_list(py_list,
++                                   PyBytes_FromString(SSS_NAME_KEY),
++                                   PyUnicode_FromString(names[c]),
++                                   PYNUMBER_FROMLONG(id_types[c]));
++            if (ret != 0) {
++                goto done;
++            }
++        }
++        ret = PyDict_SetItem(py_result, py_cert, py_list);
++        if (ret != 0) {
++            goto done;
++        }
++    }
++
++done:
++    free(id_types);
++    if (names != NULL) {
++        for (c = 0; names[c] != NULL; c++) {
++            free(names[c]);
++        }
++        free(names);
++    }
++
++    return ret;
++}
++
++
+ static int do_getidbysid(PyObject *py_result, PyObject *py_sid)
+ {
+     const char *sid;
+@@ -231,6 +310,9 @@ static int do_lookup(enum lookup_type type, PyObject *py_result,
+     case NAMEBYCERT:
+         return do_getnamebycert(py_result, py_inp);
+         break;
++    case LISTBYCERT:
++        return do_getlistbycert(py_result, py_inp);
++        break;
+     default:
+         return ENOSYS;
+     }
+@@ -368,7 +450,7 @@ static PyObject * py_getidbysid(PyObject *module, PyObject *args)
+ }
+ 
+ PyDoc_STRVAR(getnamebycert_doc,
+-"getnamebycert(sid or list/tuple of certificates) -> dict(sid => dict(results))\n\
++"getnamebycert(certificate or list/tuple of certificates) -> dict(certificate => dict(results))\n\
+ \n\
+ Returns a dictionary with a dictonary of results for each given certificates.\n\
+ The result dictonary contain the name and the type of the object which can be\n\
+@@ -382,6 +464,21 @@ static PyObject * py_getnamebycert(PyObject *module, PyObject *args)
+     return check_args(NAMEBYCERT, args);
+ }
+ 
++PyDoc_STRVAR(getlistbycert_doc,
++"getnamebycert(certificate or list/tuple of certificates) -> dict(certificate => dict(results))\n\
++\n\
++Returns a dictionary with a dictonary of results for each given certificates.\n\
++The result dictonary contain the name and the type of the object which can be\n\
++accessed with the key constants NAME_KEY and TYPE_KEY, respectively.\n\
++\n\
++NOTE: getlistbycert currently works only with id_provider set as \"ad\" or \"ipa\""
++);
++
++static PyObject * py_getlistbycert(PyObject *module, PyObject *args)
++{
++    return check_args(LISTBYCERT, args);
++}
++
+ static PyMethodDef methods[] = {
+     { sss_py_const_p(char, "getsidbyname"), (PyCFunction) py_getsidbyname,
+       METH_VARARGS, getsidbyname_doc },
+@@ -393,6 +490,8 @@ static PyMethodDef methods[] = {
+       METH_VARARGS, getidbysid_doc },
+     { sss_py_const_p(char, "getnamebycert"), (PyCFunction) py_getnamebycert,
+       METH_VARARGS, getnamebycert_doc },
++    { sss_py_const_p(char, "getlistbycert"), (PyCFunction) py_getlistbycert,
++      METH_VARARGS, getlistbycert_doc },
+     { NULL,NULL, 0, NULL }
+ };
+ 
+diff --git a/src/responder/nss/nss_cmd.c b/src/responder/nss/nss_cmd.c
+index 08b3d32f2662efc1cc803f6e9e5f2d064f7d3033..1931bf62a686c7f30852dac547866609cf54a81b 100644
+--- a/src/responder/nss/nss_cmd.c
++++ b/src/responder/nss/nss_cmd.c
+@@ -932,6 +932,12 @@ static errno_t nss_cmd_getnamebycert(struct cli_ctx *cli_ctx)
+                           nss_protocol_fill_single_name);
+ }
+ 
++static errno_t nss_cmd_getlistbycert(struct cli_ctx *cli_ctx)
++{
++    return nss_getby_cert(cli_ctx, CACHE_REQ_USER_BY_CERT,
++                          nss_protocol_fill_name_list);
++}
++
+ struct sss_cmd_table *get_nss_cmds(void)
+ {
+     static struct sss_cmd_table nss_cmds[] = {
+@@ -961,6 +967,7 @@ struct sss_cmd_table *get_nss_cmds(void)
+         { SSS_NSS_GETIDBYSID, nss_cmd_getidbysid },
+         { SSS_NSS_GETORIGBYNAME, nss_cmd_getorigbyname },
+         { SSS_NSS_GETNAMEBYCERT, nss_cmd_getnamebycert },
++        { SSS_NSS_GETLISTBYCERT, nss_cmd_getlistbycert },
+         { SSS_CLI_NULL, NULL }
+     };
+ 
+diff --git a/src/responder/nss/nss_protocol.h b/src/responder/nss/nss_protocol.h
+index c94e7b911eb3c0f97b8c06b1766573311cde41ae..e4c0e52c0e642e885ef2c8423ea564beff7242cf 100644
+--- a/src/responder/nss/nss_protocol.h
++++ b/src/responder/nss/nss_protocol.h
+@@ -175,6 +175,12 @@ nss_protocol_fill_single_name(struct nss_ctx *nss_ctx,
+                               struct cache_req_result *result);
+ 
+ errno_t
++nss_protocol_fill_name_list(struct nss_ctx *nss_ctx,
++                            struct nss_cmd_ctx *cmd_ctx,
++                            struct sss_packet *packet,
++                            struct cache_req_result *result);
++
++errno_t
+ nss_protocol_fill_id(struct nss_ctx *nss_ctx,
+                      struct nss_cmd_ctx *cmd_ctx,
+                      struct sss_packet *packet,
+diff --git a/src/responder/nss/nss_protocol_sid.c b/src/responder/nss/nss_protocol_sid.c
+index 0b97e65f75412d40832d861568d8e2f9de5e1732..a6a4e27d039c67ef98f6d5900d5e3fcadb3ee717 100644
+--- a/src/responder/nss/nss_protocol_sid.c
++++ b/src/responder/nss/nss_protocol_sid.c
+@@ -498,3 +498,66 @@ nss_protocol_fill_id(struct nss_ctx *nss_ctx,
+ 
+     return EOK;
+ }
++
++errno_t
++nss_protocol_fill_name_list(struct nss_ctx *nss_ctx,
++                            struct nss_cmd_ctx *cmd_ctx,
++                            struct sss_packet *packet,
++                            struct cache_req_result *result)
++{
++    enum sss_id_type *id_types;
++    size_t rp = 0;
++    size_t body_len;
++    uint8_t *body;
++    errno_t ret;
++    struct sized_string *sz_names;
++    size_t len;
++    size_t c;
++    const char *tmp_str;
++
++    sz_names = talloc_array(cmd_ctx, struct sized_string, result->count);
++    if (sz_names == NULL) {
++        return ENOMEM;
++    }
++
++    id_types = talloc_array(cmd_ctx, enum sss_id_type, result->count);
++    if (id_types == NULL) {
++        return ENOMEM;
++    }
++
++    len = 0;
++    for (c = 0; c < result->count; c++) {
++        ret = nss_get_id_type(cmd_ctx, result, &(id_types[c]));
++        if (ret != EOK) {
++            return ret;
++        }
++
++        tmp_str = nss_get_name_from_msg(result->domain, result->msgs[c]);
++        if (tmp_str == NULL) {
++            return EINVAL;
++        }
++        to_sized_string(&(sz_names[c]), tmp_str);
++
++        len += sz_names[c].len;
++    }
++
++    len += (2 + result->count) * sizeof(uint32_t);
++
++    ret = sss_packet_grow(packet, len);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "sss_packet_grow failed.\n");
++        return ret;
++    }
++
++    sss_packet_get_body(packet, &body, &body_len);
++
++    SAFEALIGN_SET_UINT32(&body[rp], result->count, &rp); /* Num results. */
++    SAFEALIGN_SET_UINT32(&body[rp], 0, &rp); /* Reserved. */
++    for (c = 0; c < result->count; c++) {
++        SAFEALIGN_SET_UINT32(&body[rp], id_types[c], &rp);
++        SAFEALIGN_SET_STRING(&body[rp], sz_names[c].str, sz_names[c].len,
++                             &rp);
++    }
++
++    return EOK;
++}
+diff --git a/src/sss_client/idmap/sss_nss_idmap.c b/src/sss_client/idmap/sss_nss_idmap.c
+index fa5a499e3606f7e45a406de4d63002ba35365cb1..6f3af267a1e763e7dce77e3862be377ae2bfe984 100644
+--- a/src/sss_client/idmap/sss_nss_idmap.c
++++ b/src/sss_client/idmap/sss_nss_idmap.c
+@@ -31,6 +31,7 @@
+ #include "util/strtonum.h"
+ 
+ #define DATA_START (3 * sizeof(uint32_t))
++#define LIST_START (2 * sizeof(uint32_t))
+ union input {
+     const char *str;
+     uint32_t id;
+@@ -38,10 +39,12 @@ union input {
+ 
+ struct output {
+     enum sss_id_type type;
++    enum sss_id_type *types;
+     union {
+         char *str;
+         uint32_t id;
+         struct sss_nss_kv *kv_list;
++        char **names;
+     } d;
+ };
+ 
+@@ -72,6 +75,63 @@ void sss_nss_free_kv(struct sss_nss_kv *kv_list)
+     }
+ }
+ 
++void sss_nss_free_list(char **l)
++{
++    size_t c;
++
++    if (l != NULL) {
++        for (c = 0; l[c] != NULL; c++) {
++            free(l[c]);
++        }
++        free(l);
++    }
++}
++
++static int buf_to_name_type_list(uint8_t *buf, size_t buf_len, uint32_t num,
++                                 char ***names, enum sss_id_type **types)
++{
++    int ret;
++    size_t c;
++    char **n = NULL;
++    enum sss_id_type *t = NULL;
++    size_t rp = 0;
++
++    n = calloc(num + 1, sizeof(char *));
++    if (n == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    t = calloc(num + 1, sizeof(enum sss_id_type));
++    if (t == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    for (c = 0; c < num; c++) {
++        SAFEALIGN_COPY_UINT32(&(t[c]), buf + rp, &rp);
++        n[c] = strdup((char *) buf + rp);
++        if (n[c] == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++        rp += strlen(n[c]) + 1;
++    }
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        sss_nss_free_list(n);
++        free(t);
++    } else {
++        *names = n;
++        *types = t;
++    }
++
++    return ret;
++}
++
+ static int  buf_to_kv_list(uint8_t *buf, size_t buf_len,
+                            struct sss_nss_kv **kv_list)
+ {
+@@ -153,13 +213,14 @@ static int sss_nss_getyyybyxxx(union input inp, enum sss_cli_command cmd ,
+     size_t data_len;
+     uint32_t c;
+     struct sss_nss_kv *kv_list;
++    char **names;
++    enum sss_id_type *types;
+ 
+     switch (cmd) {
+     case SSS_NSS_GETSIDBYNAME:
+     case SSS_NSS_GETNAMEBYSID:
+     case SSS_NSS_GETIDBYSID:
+     case SSS_NSS_GETORIGBYNAME:
+-    case SSS_NSS_GETNAMEBYCERT:
+         ret = sss_strnlen(inp.str, 2048, &inp_len);
+         if (ret != EOK) {
+             return EINVAL;
+@@ -169,6 +230,17 @@ static int sss_nss_getyyybyxxx(union input inp, enum sss_cli_command cmd ,
+         rd.data = inp.str;
+ 
+         break;
++    case SSS_NSS_GETNAMEBYCERT:
++    case SSS_NSS_GETLISTBYCERT:
++        ret = sss_strnlen(inp.str, 10 * 1024 , &inp_len);
++        if (ret != EOK) {
++            return EINVAL;
++        }
++
++        rd.len = inp_len + 1;
++        rd.data = inp.str;
++
++        break;
+     case SSS_NSS_GETSIDBYID:
+         rd.len = sizeof(uint32_t);
+         rd.data = &inp.id;
+@@ -195,7 +267,7 @@ static int sss_nss_getyyybyxxx(union input inp, enum sss_cli_command cmd ,
+     if (num_results == 0) {
+         ret = ENOENT;
+         goto done;
+-    } else if (num_results > 1) {
++    } else if (num_results > 1 && cmd != SSS_NSS_GETLISTBYCERT) {
+         ret = EBADMSG;
+         goto done;
+     }
+@@ -237,6 +309,18 @@ static int sss_nss_getyyybyxxx(union input inp, enum sss_cli_command cmd ,
+         out->d.id = c;
+ 
+         break;
++    case SSS_NSS_GETLISTBYCERT:
++        ret = buf_to_name_type_list(repbuf + LIST_START, replen - LIST_START,
++                                    num_results,
++                                    &names, &types);
++        if (ret != EOK) {
++            goto done;
++        }
++
++        out->types = types;
++        out->d.names = names;
++
++        break;
+     case SSS_NSS_GETORIGBYNAME:
+         ret = buf_to_kv_list(repbuf + DATA_START, data_len, &kv_list);
+         if (ret != EOK) {
+@@ -392,3 +476,25 @@ int sss_nss_getnamebycert(const char *cert, char **fq_name,
+ 
+     return ret;
+ }
++
++int sss_nss_getlistbycert(const char *cert, char ***fq_name,
++                          enum sss_id_type **type)
++{
++    int ret;
++    union input inp;
++    struct output out;
++
++    if (fq_name == NULL || cert == NULL || *cert == '\0') {
++        return EINVAL;
++    }
++
++    inp.str = cert;
++
++    ret = sss_nss_getyyybyxxx(inp, SSS_NSS_GETLISTBYCERT, &out);
++    if (ret == EOK) {
++        *fq_name = out.d.names;
++        *type = out.types;
++    }
++
++    return ret;
++}
+diff --git a/src/sss_client/idmap/sss_nss_idmap.exports b/src/sss_client/idmap/sss_nss_idmap.exports
+index bd5d80212017d38334c3cdeefa47d6029f42aebb..49dac6fc9351b0ca98cd46e83b85ec8ef0075a0d 100644
+--- a/src/sss_client/idmap/sss_nss_idmap.exports
++++ b/src/sss_client/idmap/sss_nss_idmap.exports
+@@ -25,3 +25,9 @@ SSS_NSS_IDMAP_0.2.0 {
+     global:
+         sss_nss_getnamebycert;
+ } SSS_NSS_IDMAP_0.1.0;
++
++SSS_NSS_IDMAP_0.3.0 {
++    # public functions
++    global:
++        sss_nss_getlistbycert;
++} SSS_NSS_IDMAP_0.2.0;
+diff --git a/src/sss_client/idmap/sss_nss_idmap.h b/src/sss_client/idmap/sss_nss_idmap.h
+index 8a6299194e7b91e084b26c0c96e2f93875a832e7..cbf19479ff9ec6e0d6e07e1f7e48a1571e147740 100644
+--- a/src/sss_client/idmap/sss_nss_idmap.h
++++ b/src/sss_client/idmap/sss_nss_idmap.h
+@@ -130,7 +130,7 @@ int sss_nss_getorigbyname(const char *fq_name, struct sss_nss_kv **kv_list,
+  * @param[in] cert     base64 encoded certificate
+  * @param[out] fq_name Fully qualified name of a user or a group,
+  *                     must be freed by the caller
+- * @param[out] type    Type of the object related to the SID
++ * @param[out] type    Type of the object related to the cert
+  *
+  * @return
+  *  - see #sss_nss_getsidbyname
+@@ -139,6 +139,21 @@ int sss_nss_getnamebycert(const char *cert, char **fq_name,
+                           enum sss_id_type *type);
+ 
+ /**
++ * @brief Return a list of fully qualified names for the given base64 encoded
++ * X.509 certificate in DER format
++ *
++ * @param[in] cert     base64 encoded certificate
++ * @param[out] fq_name List of fully qualified name of users or groups,
++ *                     must be freed by the caller
++ * @param[out] type    List of types of the objects related to the cert
++ *
++ * @return
++ *  - see #sss_nss_getsidbyname
++ */
++int sss_nss_getlistbycert(const char *cert, char ***fq_name,
++                          enum sss_id_type **type);
++
++/**
+  * @brief Free key-value list returned by sss_nss_getorigbyname()
+  *
+  * @param[in] kv_list Key-value list returned by sss_nss_getorigbyname().
+diff --git a/src/sss_client/sss_cli.h b/src/sss_client/sss_cli.h
+index 8091e11515184dc9b7f32eed535055d9eee3143f..59fee7a4eceb2c185e156e812af7f2f4c6b2a0dd 100644
+--- a/src/sss_client/sss_cli.h
++++ b/src/sss_client/sss_cli.h
+@@ -260,6 +260,11 @@ SSS_NSS_GETNAMEBYCERT = 0x0116, /**< Takes the zero terminated string
+                                      of a X509 certificate and returns the zero
+                                      terminated fully qualified name of the
+                                      related object. */
++SSS_NSS_GETLISTBYCERT = 0x0117, /**< Takes the zero terminated string
++                                     of the base64 encoded DER representation
++                                     of a X509 certificate and returns a list
++                                     of zero terminated fully qualified names
++                                     of the related objects. */
+ };
+ 
+ /**
+diff --git a/src/tests/cmocka/test_nss_srv.c b/src/tests/cmocka/test_nss_srv.c
+index 76b9c6fb05673130de0957e93291919c263a28f3..50714715cc80338640f2a77ecbe17bd5e0d6e911 100644
+--- a/src/tests/cmocka/test_nss_srv.c
++++ b/src/tests/cmocka/test_nss_srv.c
+@@ -3454,6 +3454,16 @@ struct passwd testbycert = {
+     .pw_passwd = discard_const("*"),
+ };
+ 
++struct passwd testbycert2 = {
++    .pw_name = discard_const("testcertuser2"),
++    .pw_uid = 23457,
++    .pw_gid = 6890,
++    .pw_dir = discard_const("/home/testcertuser2"),
++    .pw_gecos = discard_const("test cert user2"),
++    .pw_shell = discard_const("/bin/sh"),
++    .pw_passwd = discard_const("*"),
++};
++
+ #define TEST_TOKEN_CERT \
+ "MIIECTCCAvGgAwIBAgIBCDANBgkqhkiG9w0BAQsFADA0MRIwEAYDVQQKDAlJUEEu" \
+ "REVWRUwxHjAcBgNVBAMMFUNlcnRpZmljYXRlIEF1dGhvcml0eTAeFw0xNTA2MjMx" \
+@@ -3495,6 +3505,57 @@ static int test_nss_getnamebycert_check(uint32_t status, uint8_t *body, size_t b
+     return EOK;
+ }
+ 
++static int test_nss_getlistbycert_check(uint32_t status, uint8_t *body, size_t blen)
++{
++    size_t rp = 0;
++    uint32_t id_type;
++    uint32_t num;
++    uint32_t reserved;
++    const char *name;
++    int found = 0;
++    const char *fq_name1 = "testcertuser@"TEST_DOM_NAME ;
++    const char *fq_name2 = "testcertuser2@"TEST_DOM_NAME;
++
++    assert_int_equal(status, EOK);
++
++    /* num_results and reserved */
++    SAFEALIGN_COPY_UINT32(&num, body + rp, &rp);
++    assert_in_range(num, 1, 2);
++    SAFEALIGN_COPY_UINT32(&reserved, body + rp, &rp);
++    assert_int_equal(reserved, 0);
++
++    SAFEALIGN_COPY_UINT32(&id_type, body + rp, &rp);
++    assert_int_equal(id_type, SSS_ID_TYPE_UID);
++
++    name = (const char *)body + rp;
++    if (num == 1) {
++        assert_string_equal(name, fq_name1);
++        return EOK;
++    }
++
++    rp += strlen(name) + 1;
++    if (strcmp(name, fq_name1) == 0) {
++        found = 1;
++    } else if (strcmp(name, fq_name2) == 0) {
++        found = 2;
++    }
++    assert_in_range(found, 1, 2);
++
++    SAFEALIGN_COPY_UINT32(&id_type, body + rp, &rp);
++    assert_int_equal(id_type, SSS_ID_TYPE_UID);
++
++    name = (const char *)body + rp;
++    if (found == 1) {
++        assert_string_equal(name, fq_name2);
++    } else {
++        assert_string_equal(name, fq_name1);
++    }
++
++
++    return EOK;
++}
++
++
+ static void test_nss_getnamebycert(void **state)
+ {
+     errno_t ret;
+@@ -3572,6 +3633,99 @@ void test_nss_getnamebycert_neg(void **state)
+     assert_int_equal(nss_test_ctx->ncache_hits, 1);
+ }
+ 
++static void test_nss_getlistbycert(void **state)
++{
++    errno_t ret;
++    struct sysdb_attrs *attrs;
++    unsigned char *der = NULL;
++    size_t der_size;
++
++    attrs = sysdb_new_attrs(nss_test_ctx);
++    assert_non_null(attrs);
++
++    der = sss_base64_decode(nss_test_ctx, TEST_TOKEN_CERT, &der_size);
++    assert_non_null(der);
++
++    ret = sysdb_attrs_add_mem(attrs, SYSDB_USER_CERT, der, der_size);
++    talloc_free(der);
++    assert_int_equal(ret, EOK);
++
++    /* Prime the cache with a valid user */
++    ret = store_user(nss_test_ctx, nss_test_ctx->tctx->dom,
++                     &testbycert, attrs, 0);
++    assert_int_equal(ret, EOK);
++    talloc_free(attrs);
++
++    mock_input_cert(TEST_TOKEN_CERT);
++    will_return(__wrap_sss_packet_get_cmd, SSS_NSS_GETLISTBYCERT);
++    mock_fill_bysid();
++
++    /* Query for that user, call a callback when command finishes */
++    /* Should go straight to back end, without contacting DP. */
++    /* If there is only a single user mapped the result will look like the */
++    /* result of getnamebycert. */
++    set_cmd_cb(test_nss_getlistbycert_check);
++    ret = sss_cmd_execute(nss_test_ctx->cctx, SSS_NSS_GETLISTBYCERT,
++                          nss_test_ctx->nss_cmds);
++    assert_int_equal(ret, EOK);
++
++    /* Wait until the test finishes with EOK */
++    ret = test_ev_loop(nss_test_ctx->tctx);
++    assert_int_equal(ret, EOK);
++}
++
++static void test_nss_getlistbycert_multi(void **state)
++{
++    errno_t ret;
++    struct sysdb_attrs *attrs;
++    unsigned char *der = NULL;
++    size_t der_size;
++
++    der = sss_base64_decode(nss_test_ctx, TEST_TOKEN_CERT, &der_size);
++    assert_non_null(der);
++
++    attrs = sysdb_new_attrs(nss_test_ctx);
++    assert_non_null(attrs);
++
++    ret = sysdb_attrs_add_mem(attrs, SYSDB_USER_CERT, der, der_size);
++    assert_int_equal(ret, EOK);
++
++    /* Prime the cache with two valid user */
++    ret = store_user(nss_test_ctx, nss_test_ctx->tctx->dom,
++                     &testbycert, attrs, 0);
++    assert_int_equal(ret, EOK);
++    talloc_free(attrs);
++
++    /* Looks like attrs is modified during store_user() makes sure we start
++     * with fresh data. */
++    attrs = sysdb_new_attrs(nss_test_ctx);
++    assert_non_null(attrs);
++
++    ret = sysdb_attrs_add_mem(attrs, SYSDB_USER_CERT, der, der_size);
++    talloc_free(der);
++    assert_int_equal(ret, EOK);
++
++    ret = store_user(nss_test_ctx, nss_test_ctx->tctx->dom,
++                     &testbycert2, attrs, 0);
++    assert_int_equal(ret, EOK);
++    talloc_free(attrs);
++
++    mock_input_cert(TEST_TOKEN_CERT);
++    will_return(__wrap_sss_packet_get_cmd, SSS_NSS_GETLISTBYCERT);
++    mock_fill_bysid();
++
++    /* Query for that user, call a callback when command finishes */
++    /* Should go straight to back end, without contacting DP */
++    set_cmd_cb(test_nss_getlistbycert_check);
++    ret = sss_cmd_execute(nss_test_ctx->cctx, SSS_NSS_GETLISTBYCERT,
++                          nss_test_ctx->nss_cmds);
++    assert_int_equal(ret, EOK);
++
++    /* Wait until the test finishes with EOK */
++    ret = test_ev_loop(nss_test_ctx->tctx);
++    assert_int_equal(ret, EOK);
++}
++
+ struct passwd sid_user = {
+     .pw_name = discard_const("testusersid"),
+     .pw_uid = 1234,
+@@ -3818,6 +3972,10 @@ int main(int argc, const char *argv[])
+                                         nss_test_setup, nss_test_teardown),
+         cmocka_unit_test_setup_teardown(test_nss_getnamebycert,
+                                         nss_test_setup, nss_test_teardown),
++        cmocka_unit_test_setup_teardown(test_nss_getlistbycert,
++                                        nss_test_setup, nss_test_teardown),
++        cmocka_unit_test_setup_teardown(test_nss_getlistbycert_multi,
++                                        nss_test_setup, nss_test_teardown),
+         cmocka_unit_test_setup_teardown(test_nss_getsidbyname,
+                                         nss_test_setup, nss_test_teardown),
+         cmocka_unit_test_setup_teardown(test_nss_getsidbyupn,
+-- 
+2.12.2
+

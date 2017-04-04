@@ -1,0 +1,48 @@
+From 36e49a842e257ac9bde71728ee3bef4299b6e6e2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Fri, 24 Feb 2017 12:23:22 +0100
+Subject: [PATCH 79/97] tcurl test: add support for raw output
+
+Reviewed-by: Simo Sorce <simo@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/tests/tcurl_test_tool.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/tests/tcurl_test_tool.c b/src/tests/tcurl_test_tool.c
+index e5fc9705db415650d849b89c3d18e41574b7e28b..7d3bc19f0ec7e118e251247536d25c58fe009f54 100644
+--- a/src/tests/tcurl_test_tool.c
++++ b/src/tests/tcurl_test_tool.c
+@@ -36,6 +36,7 @@ struct tool_ctx {
+ struct tool_options {
+     int debug;
+     int verbose;
++    int raw;
+ 
+     enum tcurl_http_method method;
+     const char *socket_path;
+@@ -173,6 +174,13 @@ prepare_requests(TALLOC_CTX *mem_ctx,
+             goto done;
+         }
+ 
++        if (opts->raw) {
++            ret = tcurl_req_enable_rawoutput(requests[i]);
++            if (ret != EOK) {
++                goto done;
++            }
++        }
++
+         i++;
+     }
+ 
+@@ -270,6 +278,7 @@ int main(int argc, const char *argv[])
+         { "put", 'p', POPT_ARG_NONE, NULL, 'p', "Perform a HTTP PUT", NULL },
+         { "post", 'o', POPT_ARG_NONE, NULL, 'o', "Perform a HTTP POST", NULL },
+         { "del", 'd', POPT_ARG_NONE, NULL, 'd', "Perform a HTTP DELETE", NULL },
++        { "raw", 'r', POPT_ARG_NONE, &opts.raw, '\0', "Print raw protocol output", NULL },
+         { "verbose", 'v', POPT_ARG_NONE, &opts.verbose, '\0', "Print response code and body", NULL },
+         POPT_TABLEEND
+     };
+-- 
+2.12.2
+

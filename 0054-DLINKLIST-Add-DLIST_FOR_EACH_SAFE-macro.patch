@@ -1,0 +1,37 @@
+From 34228050af1e25706f61ec9df648852284b61c2b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Tue, 21 Mar 2017 20:56:38 +0100
+Subject: [PATCH 54/97] DLINKLIST: Add DLIST_FOR_EACH_SAFE macro
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This macro, as DLIST_FOR_EACH, iterates over the whole list. The main
+difference between both is that in the _SAFE version the pointer to the
+next list node is stored, allowing us to delete the current node safely.
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/util/dlinklist.h | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/util/dlinklist.h b/src/util/dlinklist.h
+index 4f6aef830e914c22654970081263d43461c1750f..017c60468e66dbec15724d5f4832da412f42136b 100644
+--- a/src/util/dlinklist.h
++++ b/src/util/dlinklist.h
+@@ -147,4 +147,9 @@ do { \
+ #define DLIST_FOR_EACH(p, list) \
+     for ((p) = (list); (p) != NULL; (p) = (p)->next)
+ 
++#define DLIST_FOR_EACH_SAFE(p, q, list) \
++    for ((p) = (list), (q) = (p) != NULL ? (p)->next : NULL; \
++         (p) != NULL; \
++         (p) = (q), (q) = (p) != NULL ? (p)->next : NULL)
++
+ #endif /* _DLINKLIST_H */
+-- 
+2.12.2
+

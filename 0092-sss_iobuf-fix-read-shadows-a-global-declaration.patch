@@ -1,0 +1,39 @@
+From 18e4fe9d836e8f7bee52724374ffc0011172329f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 28 Mar 2017 15:26:52 +0200
+Subject: [PATCH 92/97] sss_iobuf: fix 'read' shadows a global declaration
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/util/sss_iobuf.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/util/sss_iobuf.c b/src/util/sss_iobuf.c
+index fc288d2df2bfaaba393dd490d4da8976de804cb5..518713e4cc3dd99627a3a4450f235cbbc69ed3a2 100644
+--- a/src/util/sss_iobuf.c
++++ b/src/util/sss_iobuf.c
+@@ -188,15 +188,15 @@ errno_t sss_iobuf_read_len(struct sss_iobuf *iobuf,
+                            size_t len,
+                            uint8_t *_buf)
+ {
+-    size_t read;
++    size_t read_bytes;
+     errno_t ret;
+ 
+-    ret = sss_iobuf_read(iobuf, len, _buf, &read);
++    ret = sss_iobuf_read(iobuf, len, _buf, &read_bytes);
+     if (ret != EOK) {
+         return ret;
+     }
+ 
+-    if (read != len) {
++    if (read_bytes != len) {
+         return ENOBUFS;
+     }
+ 
+-- 
+2.12.2
+

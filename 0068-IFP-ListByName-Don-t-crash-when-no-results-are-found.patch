@@ -1,0 +1,57 @@
+From b010f24f4d96d15c5c85021bb4aa83db25cd3df5 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 28 Mar 2017 14:07:29 +0200
+Subject: [PATCH 68/97] IFP: ListByName: Don't crash when no results are found
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If no results were found using the List command, the results variable
+was undefined which resulted in a crash.
+
+Instead, only copy the results of the cache_req lookup returns EOK and
+we can presume that the results are valid.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/responder/ifp/ifp_users.c | 16 +++++++++-------
+ 1 file changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/src/responder/ifp/ifp_users.c b/src/responder/ifp/ifp_users.c
+index ce9557f94351b730ee46f3cbce31613cb5901942..188194f2ab356d0e67b0f26b003f3a9ce48e6acd 100644
+--- a/src/responder/ifp/ifp_users.c
++++ b/src/responder/ifp/ifp_users.c
+@@ -801,7 +801,7 @@ static void ifp_users_list_by_name_done(struct tevent_req *req)
+     DBusError *error;
+     struct ifp_list_ctx *list_ctx;
+     struct sbus_request *sbus_req;
+-    struct cache_req_result *result;
++    struct cache_req_result *result = NULL;
+     errno_t ret;
+ 
+     list_ctx = tevent_req_callback_data(req, struct ifp_list_ctx);
+@@ -816,12 +816,14 @@ static void ifp_users_list_by_name_done(struct tevent_req *req)
+         return;
+     }
+ 
+-    ret = ifp_users_list_copy(list_ctx, result->ldb_result);
+-    if (ret != EOK) {
+-        error = sbus_error_new(sbus_req, SBUS_ERROR_INTERNAL,
+-                               "Failed to copy domain result");
+-        sbus_request_fail_and_finish(sbus_req, error);
+-        return;
++    if (ret == EOK) {
++        ret = ifp_users_list_copy(list_ctx, result->ldb_result);
++        if (ret != EOK) {
++            error = sbus_error_new(sbus_req, SBUS_ERROR_INTERNAL,
++                                "Failed to copy domain result");
++            sbus_request_fail_and_finish(sbus_req, error);
++            return;
++        }
+     }
+ 
+     list_ctx->dom = get_next_domain(list_ctx->dom, SSS_GND_DESCEND);
+-- 
+2.12.2
+

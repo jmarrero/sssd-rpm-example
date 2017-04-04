@@ -1,0 +1,54 @@
+From f75ba99fc8dd64e45af2f642d9fb7660860fd28f Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 27 Mar 2017 14:44:29 +0200
+Subject: [PATCH 42/97] intg: Remove bashism from intgcheck-prepare
+
+env variable UID is not defined in all shells (eg. dash)
+We also need to move invocation of "id -u" before nss_wraper
+is enabled otherwise we would get root instead of real user.
+
+=================================== FAILURES ===================================
+________________________ test_kcm_mem_init_list_destroy ________________________
+Traceback (most recent call last):
+  File "/home/build/sssd/src/tests/intg/test_kcm.py", line 198, in test_kcm_mem_init_list_destroy
+    kcm_init_list_destroy(testenv)
+  File "/home/build/sssd/src/tests/intg/test_kcm.py", line 183, in kcm_init_list_destroy
+    exp_ccname = testenv.ccname()
+  File "/home/build/sssd/src/tests/intg/test_kcm.py", line 45, in ccname
+    my_uid = self.my_uid()
+  File "/home/build/sssd/src/tests/intg/test_kcm.py", line 41, in my_uid
+    return int(s_myuid)
+ValueError: invalid literal for int() with base 10: ''
+
+And we already use different approach in top level Makefile.am
+3488)      $(INTGCHECK_CONFIGURE_FLAGS) \
+3489)      CFLAGS="$$CFLAGS $(AM_CFLAGS) -DKCM_PEER_UID=$$(id -u)"; \
+3490)  $(MAKE) $(AM_MAKEFLAGS) ; \
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/tests/intg/Makefile.am | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/tests/intg/Makefile.am b/src/tests/intg/Makefile.am
+index 8526beace09b15c99aa27ac98d5038d1980f6a71..8566106e9017a8d3c9e7a3898a3a886e2966e346 100644
+--- a/src/tests/intg/Makefile.am
++++ b/src/tests/intg/Makefile.am
+@@ -76,6 +76,7 @@ intgcheck-installed: config.py passwd group
+ 	PATH="$(abs_builddir):$(abs_srcdir):$$PATH" \
+ 	PYTHONPATH="$(abs_builddir):$(abs_srcdir)" \
+ 	LDB_MODULES_PATH="$(DESTDIR)$(ldblibdir)" \
++	NON_WRAPPED_UID=$$(id -u) \
+ 	LD_PRELOAD="$$nss_wrapper $$uid_wrapper" \
+ 	NSS_WRAPPER_PASSWD="$(abs_builddir)/passwd" \
+ 	NSS_WRAPPER_GROUP="$(abs_builddir)/group" \
+@@ -83,6 +84,5 @@ intgcheck-installed: config.py passwd group
+ 	NSS_WRAPPER_MODULE_FN_PREFIX="sss" \
+ 	UID_WRAPPER=1 \
+ 	UID_WRAPPER_ROOT=1 \
+-	NON_WRAPPED_UID=$$(echo $$UID) \
+ 	    fakeroot $(PYTHON2) $(PYTEST) -v --tb=native $(INTGCHECK_PYTEST_ARGS) .
+ 	rm -f $(DESTDIR)$(logpath)/*
+-- 
+2.12.2
+

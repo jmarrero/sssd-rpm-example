@@ -1,0 +1,141 @@
+From ed0cdfcacc44e4e13e1524e254efa744610a87c2 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 22 Mar 2017 13:06:08 +0100
+Subject: [PATCH 73/97] LDAP: save non-POSIX users in application domains
+
+Related to:
+https://pagure.io/SSSD/sssd/issue/3310
+
+If a user being saved by the LDAP provider does not have a UID or GID
+and the domain type is application, we save the user entry as non-POSIX.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/providers/ldap/sdap_async_users.c | 72 +++++++++++++++++++++++++++--------
+ 1 file changed, 57 insertions(+), 15 deletions(-)
+
+diff --git a/src/providers/ldap/sdap_async_users.c b/src/providers/ldap/sdap_async_users.c
+index 3d957ab584865f74499bc732395388a78965fe5f..265cd7e4f7929c295d5bdcfbd781221b74601f13 100644
+--- a/src/providers/ldap/sdap_async_users.c
++++ b/src/providers/ldap/sdap_async_users.c
+@@ -112,6 +112,28 @@ done:
+     return ret;
+ }
+ 
++static errno_t sdap_set_non_posix_flag(struct sysdb_attrs *attrs,
++                                       const char *pkey)
++{
++    errno_t ret;
++
++    ret = sysdb_attrs_add_uint32(attrs, pkey, 0);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Failed to add a zero ID to a non-posix object!\n");
++        return ret;
++    }
++
++    ret = sysdb_attrs_add_bool(attrs, SYSDB_POSIX, false);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Error: Failed to mark objects as non-posix!\n");
++        return ret;
++    }
++
++    return EOK;
++}
++
+ /* FIXME: support storing additional attributes */
+ int sdap_save_user(TALLOC_CTX *memctx,
+                    struct sdap_options *opts,
+@@ -130,8 +152,8 @@ int sdap_save_user(TALLOC_CTX *memctx,
+     const char *homedir;
+     const char *shell;
+     const char *orig_dn = NULL;
+-    uid_t uid;
+-    gid_t gid;
++    uid_t uid = 0;
++    gid_t gid = 0;
+     struct sysdb_attrs *user_attrs;
+     char *upn = NULL;
+     size_t i;
+@@ -146,6 +168,7 @@ int sdap_save_user(TALLOC_CTX *memctx,
+     size_t c;
+     char *p1;
+     char *p2;
++    bool is_posix = true;
+ 
+     DEBUG(SSSDBG_TRACE_FUNC, "Save user\n");
+ 
+@@ -295,19 +318,29 @@ int sdap_save_user(TALLOC_CTX *memctx,
+         ret = sysdb_attrs_get_uint32_t(attrs,
+                                        opts->user_map[SDAP_AT_USER_UID].sys_name,
+                                        &uid);
+-        if (ret != EOK) {
++        if (ret == ENOENT && dom->type == DOM_TYPE_APPLICATION) {
++            DEBUG(SSSDBG_TRACE_INTERNAL,
++                  "Marking object as non-posix and setting ID=0!\n");
++            ret = sdap_set_non_posix_flag(user_attrs,
++                    opts->user_map[SDAP_AT_USER_UID].sys_name);
++            if (ret != EOK) {
++                goto done;
++            }
++            is_posix = false;
++        } else if (ret != EOK) {
+             DEBUG(SSSDBG_CRIT_FAILURE,
+-                  "no uid provided for [%s] in domain [%s].\n",
++                  "Cannot retrieve UID for [%s] in domain [%s].\n",
+                    user_name, dom->name);
+-            ret = EINVAL;
++            ret = ERR_NO_POSIX;
+             goto done;
+         }
+     }
+-    /* check that the uid is valid for this domain */
+-    if (OUT_OF_ID_RANGE(uid, dom->id_min, dom->id_max)) {
+-            DEBUG(SSSDBG_OP_FAILURE,
+-                  "User [%s] filtered out! (uid out of range)\n",
+-                      user_name);
++
++    /* check that the uid is valid for this domain if the user is a POSIX one */
++    if (is_posix == true && OUT_OF_ID_RANGE(uid, dom->id_min, dom->id_max)) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "User [%s] filtered out! (uid out of range)\n",
++              user_name);
+         ret = EINVAL;
+         goto done;
+     }
+@@ -349,17 +382,26 @@ int sdap_save_user(TALLOC_CTX *memctx,
+         ret = sysdb_attrs_get_uint32_t(attrs,
+                                        opts->user_map[SDAP_AT_USER_GID].sys_name,
+                                        &gid);
+-        if (ret != EOK) {
++        if (ret == ENOENT && dom->type == DOM_TYPE_APPLICATION) {
++            DEBUG(SSSDBG_TRACE_INTERNAL,
++                  "Marking object as non-posix and setting ID=0!\n");
++            ret = sdap_set_non_posix_flag(attrs,
++                    opts->user_map[SDAP_AT_USER_GID].sys_name);
++            if (ret != EOK) {
++                goto done;
++            }
++            is_posix = false;
++        } else if (ret != EOK) {
+             DEBUG(SSSDBG_CRIT_FAILURE,
+-                  "no gid provided for [%s] in domain [%s].\n",
+-                  user_name, dom->name);
+-            ret = EINVAL;
++                  "Cannot retrieve GID for [%s] in domain [%s].\n",
++                   user_name, dom->name);
++            ret = ERR_NO_POSIX;
+             goto done;
+         }
+     }
+ 
+     /* check that the gid is valid for this domain */
+-    if (IS_SUBDOMAIN(dom) == false &&
++    if (is_posix == true && IS_SUBDOMAIN(dom) == false &&
+             OUT_OF_ID_RANGE(gid, dom->id_min, dom->id_max)) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "User [%s] filtered out! (primary gid out of range)\n",
+-- 
+2.12.2
+

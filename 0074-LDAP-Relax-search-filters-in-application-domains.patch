@@ -1,0 +1,254 @@
+From 3e39806177e1cd383743ff596cb96df44a6ce8c9 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 22 Mar 2017 13:06:14 +0100
+Subject: [PATCH 74/97] LDAP: Relax search filters in application domains
+
+Related to:
+https://pagure.io/SSSD/sssd/issue/3310
+
+If a request comes towards an application domain, we can drop the part
+of the filter that asserts that the object has a valid UID/GID. Instead,
+we just search by name.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/providers/ldap/ldap_id.c               | 35 ++++++++++++++++++++++++----
+ src/providers/ldap/sdap_async_enum.c       |  7 +++++-
+ src/providers/ldap/sdap_async_initgroups.c | 37 ++++++++++++++++++++++++------
+ 3 files changed, 66 insertions(+), 13 deletions(-)
+
+diff --git a/src/providers/ldap/ldap_id.c b/src/providers/ldap/ldap_id.c
+index 0bee0ca8d71abece6749fdb8393b9ceacb64417d..7400dc1f57e30cc6ae5f939ffa628a1e9dd47e06 100644
+--- a/src/providers/ldap/ldap_id.c
++++ b/src/providers/ldap/ldap_id.c
+@@ -56,6 +56,7 @@ struct users_get_state {
+     char *filter;
+     const char **attrs;
+     bool use_id_mapping;
++    bool non_posix;
+ 
+     int dp_error;
+     int sdap_ret;
+@@ -114,6 +115,10 @@ struct tevent_req *users_get_send(TALLOC_CTX *memctx,
+     state->filter_value = filter_value;
+     state->filter_type = filter_type;
+ 
++    if (state->domain->type == DOM_TYPE_APPLICATION) {
++        state->non_posix = true;
++    }
++
+     state->use_id_mapping = sdap_idmap_domain_has_algorithmic_mapping(
+                                                           ctx->opts->idmap_ctx,
+                                                           sdom->dom->name,
+@@ -292,7 +297,13 @@ struct tevent_req *users_get_send(TALLOC_CTX *memctx,
+         }
+     }
+ 
+-    if (state->use_id_mapping || filter_type == BE_FILTER_SECID) {
++    if (state->non_posix) {
++        state->filter = talloc_asprintf(state,
++                                        "(&%s(objectclass=%s)(%s=*))",
++                                        user_filter,
++                                        ctx->opts->user_map[SDAP_OC_USER].name,
++                                        ctx->opts->user_map[SDAP_AT_USER_NAME].name);
++    } else if (state->use_id_mapping || filter_type == BE_FILTER_SECID) {
+         /* When mapping IDs or looking for SIDs, we don't want to limit
+          * ourselves to users with a UID value. But there must be a SID to map
+          * from.
+@@ -304,7 +315,8 @@ struct tevent_req *users_get_send(TALLOC_CTX *memctx,
+                                         ctx->opts->user_map[SDAP_AT_USER_NAME].name,
+                                         ctx->opts->user_map[SDAP_AT_USER_OBJECTSID].name);
+     } else {
+-        /* When not ID-mapping, make sure there is a non-NULL UID */
++        /* When not ID-mapping or looking up POSIX users,
++         * make sure there is a non-NULL UID */
+         state->filter = talloc_asprintf(state,
+                                         "(&%s(objectclass=%s)(%s=*)(&(%s=*)(!(%s=0))))",
+                                         user_filter,
+@@ -380,6 +392,7 @@ static void users_get_connect_done(struct tevent_req *subreq)
+      * have no idea about POSIX attributes support, run a one-time check
+      */
+     if (state->use_id_mapping == false &&
++            state->non_posix == false &&
+             state->ctx->opts->schema_type == SDAP_SCHEMA_AD &&
+             state->ctx->srv_opts &&
+             state->ctx->srv_opts->posix_checked == false) {
+@@ -650,6 +663,7 @@ struct groups_get_state {
+     char *filter;
+     const char **attrs;
+     bool use_id_mapping;
++    bool non_posix;
+ 
+     int dp_error;
+     int sdap_ret;
+@@ -709,6 +723,10 @@ struct tevent_req *groups_get_send(TALLOC_CTX *memctx,
+     state->filter_value = filter_value;
+     state->filter_type = filter_type;
+ 
++    if (state->domain->type == DOM_TYPE_APPLICATION) {
++        state->non_posix = true;
++    }
++
+     state->use_id_mapping = sdap_idmap_domain_has_algorithmic_mapping(
+                                                           ctx->opts->idmap_ctx,
+                                                           sdom->dom->name,
+@@ -827,9 +845,11 @@ struct tevent_req *groups_get_send(TALLOC_CTX *memctx,
+         goto done;
+     }
+ 
+-    if (state->use_id_mapping || filter_type == BE_FILTER_SECID) {
+-        /* When mapping IDs or looking for SIDs, we don't want to limit
+-         * ourselves to groups with a GID value
++    if (state->non_posix
++            || state->use_id_mapping
++            || filter_type == BE_FILTER_SECID) {
++        /* When mapping IDs or looking for SIDs, or when in a non-POSIX domain,
++         * we don't want to limit ourselves to groups with a GID value
+          */
+ 
+         state->filter = talloc_asprintf(state,
+@@ -1123,6 +1143,7 @@ struct groups_by_user_state {
+     int filter_type;
+     const char *extra_value;
+     const char **attrs;
++    bool non_posix;
+ 
+     int dp_error;
+     int sdap_ret;
+@@ -1204,6 +1225,10 @@ static struct tevent_req *groups_by_user_send(TALLOC_CTX *memctx,
+     state->domain = sdom->dom;
+     state->sysdb = sdom->dom->sysdb;
+ 
++    if (state->domain->type == DOM_TYPE_APPLICATION) {
++        state->non_posix = true;
++    }
++
+     ret = build_attrs_from_map(state, ctx->opts->group_map, SDAP_OPTS_GROUP,
+                                NULL, &state->attrs, NULL);
+     if (ret != EOK) goto fail;
+diff --git a/src/providers/ldap/sdap_async_enum.c b/src/providers/ldap/sdap_async_enum.c
+index 3f65059e18d5c8b548da0babec867d27c3a64198..91e481c4e694126900c729e86d187fba355de0b8 100644
+--- a/src/providers/ldap/sdap_async_enum.c
++++ b/src/providers/ldap/sdap_async_enum.c
+@@ -717,6 +717,7 @@ static struct tevent_req *enum_groups_send(TALLOC_CTX *memctx,
+     struct enum_groups_state *state;
+     int ret;
+     bool use_mapping;
++    bool non_posix = false;
+     char *oc_list;
+ 
+     req = tevent_req_create(memctx, &state, struct enum_groups_state);
+@@ -727,6 +728,10 @@ static struct tevent_req *enum_groups_send(TALLOC_CTX *memctx,
+     state->ctx = ctx;
+     state->op = op;
+ 
++    if (sdom->dom->type == DOM_TYPE_APPLICATION) {
++        non_posix = true;
++    }
++
+     use_mapping = sdap_idmap_domain_has_algorithmic_mapping(
+                                                         ctx->opts->idmap_ctx,
+                                                         sdom->dom->name,
+@@ -749,7 +754,7 @@ static struct tevent_req *enum_groups_send(TALLOC_CTX *memctx,
+         goto fail;
+     }
+ 
+-    if (use_mapping) {
++    if (!non_posix && use_mapping) {
+         /* If we're ID-mapping, check for the objectSID as well */
+         state->filter = talloc_asprintf_append_buffer(
+                 state->filter, "(%s=*)",
+diff --git a/src/providers/ldap/sdap_async_initgroups.c b/src/providers/ldap/sdap_async_initgroups.c
+index 79af7a3eda3fe8533933535c98c2b4b4698dfda2..c926ddcbefe471daa80505e139c3f19efa33b9ba 100644
+--- a/src/providers/ldap/sdap_async_initgroups.c
++++ b/src/providers/ldap/sdap_async_initgroups.c
+@@ -376,7 +376,7 @@ struct sdap_initgr_rfc2307_state {
+     struct sdap_handle *sh;
+     const char **attrs;
+     const char *name;
+-    const char *base_filter;
++    char *base_filter;
+     const char *orig_dn;
+     char *filter;
+     int timeout;
+@@ -473,18 +473,32 @@ struct tevent_req *sdap_initgr_rfc2307_send(TALLOC_CTX *memctx,
+     }
+ 
+     state->base_filter = talloc_asprintf(state,
+-                             "(&(%s=%s)(%s)(%s=*)(&(%s=*)(!(%s=0))))",
++                             "(&(%s=%s)(%s)(%s=*)",
+                              opts->group_map[SDAP_AT_GROUP_MEMBER].name,
+                              clean_name, oc_list,
+-                             opts->group_map[SDAP_AT_GROUP_NAME].name,
+-                             opts->group_map[SDAP_AT_GROUP_GID].name,
+-                             opts->group_map[SDAP_AT_GROUP_GID].name);
++                             opts->group_map[SDAP_AT_GROUP_NAME].name);
+     if (!state->base_filter) {
+         talloc_zfree(req);
+         return NULL;
+     }
+     talloc_zfree(clean_name);
+ 
++    switch (domain->type) {
++    case DOM_TYPE_APPLICATION:
++        state->base_filter = talloc_asprintf_append(state->base_filter, ")");
++        break;
++    case DOM_TYPE_POSIX:
++        state->base_filter = talloc_asprintf_append(state->base_filter,
++                                        "(&(%s=*)(!(%s=0))))",
++                                        opts->group_map[SDAP_AT_GROUP_GID].name,
++                                        opts->group_map[SDAP_AT_GROUP_GID].name);
++        break;
++    }
++    if (!state->base_filter) {
++        ret = ENOMEM;
++        goto done;
++    }
++
+     ret = sdap_initgr_rfc2307_next_base(req);
+ 
+ done:
+@@ -2666,6 +2680,7 @@ struct sdap_get_initgr_state {
+     char *shortname;
+     char *filter;
+     int timeout;
++    bool non_posix;
+ 
+     struct sysdb_attrs *orig_user;
+ 
+@@ -2724,6 +2739,10 @@ struct tevent_req *sdap_get_initgr_send(TALLOC_CTX *memctx,
+         goto done;
+     }
+ 
++    if (state->dom->type == DOM_TYPE_APPLICATION) {
++        state->non_posix = true;
++    }
++
+     use_id_mapping = sdap_idmap_domain_has_algorithmic_mapping(
+                                                           id_ctx->opts->idmap_ctx,
+                                                           sdom->dom->name,
+@@ -2813,7 +2832,10 @@ struct tevent_req *sdap_get_initgr_send(TALLOC_CTX *memctx,
+         }
+     }
+ 
+-    if (use_id_mapping) {
++    if (state->non_posix) {
++        state->user_base_filter = talloc_asprintf_append(state->user_base_filter,
++                                                         ")");
++    } else if (use_id_mapping) {
+         /* When mapping IDs or looking for SIDs, we don't want to limit
+          * ourselves to users with a UID value. But there must be a SID to map
+          * from.
+@@ -2822,7 +2844,8 @@ struct tevent_req *sdap_get_initgr_send(TALLOC_CTX *memctx,
+                                         "(%s=*))",
+                                         id_ctx->opts->user_map[SDAP_AT_USER_OBJECTSID].name);
+     } else {
+-        /* When not ID-mapping, make sure there is a non-NULL UID */
++        /* When not ID-mapping or looking up app users, make sure there
++         * is a non-NULL UID */
+         state->user_base_filter = talloc_asprintf_append(state->user_base_filter,
+                                         "(&(%s=*)(!(%s=0))))",
+                                         id_ctx->opts->user_map[SDAP_AT_USER_UID].name,
+-- 
+2.12.2
+
