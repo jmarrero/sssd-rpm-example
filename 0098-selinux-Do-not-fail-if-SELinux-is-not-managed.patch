@@ -1,0 +1,210 @@
+From 78a08d30b5fbf6e1e3b589e0cf67022e0c1faa33 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Wed, 8 Feb 2017 12:01:37 +0100
+Subject: [PATCH] selinux: Do not fail if SELinux is not managed
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Previously we failed if semanage_is_managed returned 0 or -1 (not
+managed or error). With this patch we only fail in case of error and
+continue normally if selinux is not managed by libsemanage at all.
+
+Resolves:
+https://fedorahosted.org/sssd/ticket/3297
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ Makefile.am                       |  1 +
+ src/providers/ipa/selinux_child.c |  9 ++++--
+ src/util/sss_semanage.c           | 61 +++++++++++++++++++++++++--------------
+ src/util/util_errors.c            |  1 +
+ src/util/util_errors.h            |  1 +
+ 5 files changed, 49 insertions(+), 24 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 5264183cd..d45c0ff75 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -4040,6 +4040,7 @@ selinux_child_SOURCES = \
+     src/util/atomic_io.c \
+     src/util/util.c \
+     src/util/util_ext.c \
++    src/util/util_errors.c
+     $(NULL)
+ selinux_child_CFLAGS = \
+     $(AM_CFLAGS) \
+diff --git a/src/providers/ipa/selinux_child.c b/src/providers/ipa/selinux_child.c
+index 380005c7a..f8dd3954a 100644
+--- a/src/providers/ipa/selinux_child.c
++++ b/src/providers/ipa/selinux_child.c
+@@ -174,14 +174,19 @@ static bool seuser_needs_update(struct input_buffer *ibuf)
+ 
+     ret = get_seuser(ibuf, ibuf->username, &db_seuser, &db_mls_range);
+     DEBUG(SSSDBG_TRACE_INTERNAL,
+-          "get_seuser: ret: %d seuser: %s mls: %s\n",
+-          ret, db_seuser ? db_seuser : "unknown",
++          "get_seuser: ret: %d msg: [%s] seuser: %s mls: %s\n",
++          ret, sss_strerror(ret),
++          db_seuser ? db_seuser : "unknown",
+           db_mls_range ? db_mls_range : "unknown");
+     if (ret == EOK && db_seuser && db_mls_range &&
+             strcmp(db_seuser, ibuf->seuser) == 0 &&
+             strcmp(db_mls_range, ibuf->mls_range) == 0) {
+         needs_update = false;
+     }
++    /* OR */
++    if (ret == ERR_SELINUX_NOT_MANAGED) {
++        needs_update = false;
++    }
+ 
+     talloc_free(db_seuser);
+     talloc_free(db_mls_range);
+diff --git a/src/util/sss_semanage.c b/src/util/sss_semanage.c
+index fe06bee1d..0da97aad4 100644
+--- a/src/util/sss_semanage.c
++++ b/src/util/sss_semanage.c
+@@ -73,7 +73,7 @@ static void sss_semanage_close(semanage_handle_t *handle)
+     semanage_handle_destroy(handle);
+ }
+ 
+-static semanage_handle_t *sss_semanage_init(void)
++static int sss_semanage_init(semanage_handle_t **_handle)
+ {
+     int ret;
+     semanage_handle_t *handle = NULL;
+@@ -81,7 +81,8 @@ static semanage_handle_t *sss_semanage_init(void)
+     handle = semanage_handle_create();
+     if (!handle) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot create SELinux management handle\n");
+-        return NULL;
++        ret = EIO;
++        goto done;
+     }
+ 
+     semanage_msg_set_callback(handle,
+@@ -89,28 +90,41 @@ static semanage_handle_t *sss_semanage_init(void)
+                               NULL);
+ 
+     ret = semanage_is_managed(handle);
+-    if (ret != 1) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "SELinux policy not managed\n");
+-        goto fail;
++    if (ret == 0) {
++        DEBUG(SSSDBG_TRACE_FUNC, "SELinux policy not managed via libsemanage\n");
++        ret = ERR_SELINUX_NOT_MANAGED;
++        goto done;
++    } else if (ret == -1) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Call to semanage_is_managed failed\n");
++        ret = EIO;
++        goto done;
+     }
+ 
+     ret = semanage_access_check(handle);
+     if (ret < SEMANAGE_CAN_READ) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot read SELinux policy store\n");
+-        goto fail;
++        ret = EACCES;
++        goto done;
+     }
+ 
+     ret = semanage_connect(handle);
+     if (ret != 0) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "Cannot estabilish SELinux management connection\n");
+-        goto fail;
++        ret = EIO;
++        goto done;
+     }
+ 
+-    return handle;
+-fail:
+-    sss_semanage_close(handle);
+-    return NULL;
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        sss_semanage_close(handle);
++    } else {
++        *_handle = handle;
++    }
++
++    return ret;
+ }
+ 
+ static int sss_semanage_user_add(semanage_handle_t *handle,
+@@ -228,10 +242,11 @@ int set_seuser(const char *login_name, const char *seuser_name,
+         return EOK;
+     }
+ 
+-    handle = sss_semanage_init();
+-    if (!handle) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot init SELinux management\n");
+-        ret = EIO;
++    ret = sss_semanage_init(&handle);
++    if (ret == ERR_SELINUX_NOT_MANAGED) {
++        goto done;
++    } else if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot create SELinux handle\n");
+         goto done;
+     }
+ 
+@@ -295,10 +310,11 @@ int del_seuser(const char *login_name)
+     int ret;
+     int exists = 0;
+ 
+-    handle = sss_semanage_init();
+-    if (!handle) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot init SELinux management\n");
+-        ret = EIO;
++    ret = sss_semanage_init(&handle);
++    if (ret == ERR_SELINUX_NOT_MANAGED) {
++        goto done;
++    } else if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot create SELinux handle\n");
+         goto done;
+     }
+ 
+@@ -377,10 +393,11 @@ int get_seuser(TALLOC_CTX *mem_ctx, const char *login_name,
+     semanage_seuser_t *sm_user = NULL;
+     semanage_seuser_key_t *sm_key = NULL;
+ 
+-    sm_handle = sss_semanage_init();
+-    if (sm_handle == NULL) {
++    ret = sss_semanage_init(&sm_handle);
++    if (ret == ERR_SELINUX_NOT_MANAGED) {
++        goto done;
++    } else if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot create SELinux handle\n");
+-        ret = EIO;
+         goto done;
+     }
+ 
+diff --git a/src/util/util_errors.c b/src/util/util_errors.c
+index 466a3b406..97eaf160f 100644
+--- a/src/util/util_errors.c
++++ b/src/util/util_errors.c
+@@ -75,6 +75,7 @@ struct err_string error_to_str[] = {
+     { "Cannot connect to system bus" }, /* ERR_NO_SYSBUS */
+     { "LDAP search returned a referral" }, /* ERR_REFERRAL */
+     { "Error setting SELinux user context" }, /* ERR_SELINUX_CONTEXT */
++    { "SELinux is not managed by libsemanage" }, /* ERR_SELINUX_NOT_MANAGED */
+     { "Username format not allowed by re_expression" }, /* ERR_REGEX_NOMATCH */
+     { "Time specification not supported" }, /* ERR_TIMESPEC_NOT_SUPPORTED */
+     { "Invalid SSSD configuration detected" }, /* ERR_INVALID_CONFIG */
+diff --git a/src/util/util_errors.h b/src/util/util_errors.h
+index 2f90c0a5d..4a250bf03 100644
+--- a/src/util/util_errors.h
++++ b/src/util/util_errors.h
+@@ -97,6 +97,7 @@ enum sssd_errors {
+     ERR_NO_SYSBUS,
+     ERR_REFERRAL,
+     ERR_SELINUX_CONTEXT,
++    ERR_SELINUX_NOT_MANAGED,
+     ERR_REGEX_NOMATCH,
+     ERR_TIMESPEC_NOT_SUPPORTED,
+     ERR_INVALID_CONFIG,
+-- 
+2.12.2
+

@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.15.3
-Release: 0.beta.1%{?dist}
+Release: 0.beta.2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -140,6 +140,7 @@ Patch0094: 0094-libsss_certmap-Accept-certificate-with-data-before-h.patch
 Patch0095: 0095-BUILD-Fix-compilation-of-libsss_certmap-with-libcryp.patch
 Patch0096: 0096-responders-do-not-leak-selinux-context-on-clients-de.patch
 Patch0097: 0097-ipa_s2n_get_acct_info_send-provide-correct-req_input.patch
+Patch0098: 0098-selinux-Do-not-fail-if-SELinux-is-not-managed.patch
 
 Patch0502:  0502-SYSTEMD-Use-capabilities.patch
 
@@ -1324,6 +1325,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Apr 06 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-0.beta.2
+- Fix issue with IPA + SELinux in containers
+- Resolves: upstream https://fedorahosted.org/sssd/ticket/3297
+
 * Tue Apr 04 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-0.beta.1
 - Backport upstream patches for 1.15.3 pre-release
 - required for building freeipa-4.5.x in rawhide
