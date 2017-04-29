@@ -1,0 +1,41 @@
+From f9bac02756aa05cc9c6ac07ae581dba67240c1a4 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 24 Apr 2017 21:04:58 +0200
+Subject: [PATCH 121/135] CACHE_REQ_DOMAIN: Add some comments to
+ cache_req_domain_new_list_from_string_list()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/common/cache_req/cache_req_domain.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/responder/common/cache_req/cache_req_domain.c b/src/responder/common/cache_req/cache_req_domain.c
+index bfdd2b7f640178f6d0a0d92f2fed329c856b478c..6d37db0f109d5343eb6d7f4272bea522d4c34cf7 100644
+--- a/src/responder/common/cache_req/cache_req_domain.c
++++ b/src/responder/common/cache_req/cache_req_domain.c
+@@ -116,6 +116,8 @@ cache_req_domain_new_list_from_string_list(TALLOC_CTX *mem_ctx,
+     bool enforce_non_fqnames = false;
+     errno_t ret;
+ 
++    /* Firstly, in case a domains' resolution order is passed ... iterate over
++     * the list adding its domains to the flatten cache req domains' list */
+     if (resolution_order != NULL) {
+         enforce_non_fqnames = true;
+         for (i = 0; resolution_order[i] != NULL; i++) {
+@@ -141,6 +143,8 @@ cache_req_domain_new_list_from_string_list(TALLOC_CTX *mem_ctx,
+         }
+     }
+ 
++    /* Then iterate through all the other domains (and subdomains) and add them
++     * to the flatten cache req domains' list */
+     for (dom = domains; dom; dom = get_next_domain(dom, flag)) {
+         if (string_in_list(dom->name, resolution_order, false)) {
+             continue;
+-- 
+2.12.2
+

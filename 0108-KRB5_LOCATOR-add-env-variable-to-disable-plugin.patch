@@ -1,0 +1,89 @@
+From 1193f20a8267e506d863b27c74870c86c085902b Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 17 Nov 2016 10:55:43 +0100
+Subject: [PATCH 108/135] KRB5_LOCATOR: add env variable to disable plugin
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If the new environment variable SSSD_KRB5_LOCATOR_DISABLE is set to any
+value SSSD's krb5 locator plugin is disabled. The variable is needed
+because there is currently no other way than removing the plugin
+completely to disable it. For a use-case see e.g.
+https://bugzilla.redhat.com/show_bug.cgi?id=1072939.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3359
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/krb5_plugin/sssd_krb5_locator_plugin.c | 15 +++++++++++++++
+ src/man/sssd_krb5_locator_plugin.8.xml     |  5 +++++
+ 2 files changed, 20 insertions(+)
+
+diff --git a/src/krb5_plugin/sssd_krb5_locator_plugin.c b/src/krb5_plugin/sssd_krb5_locator_plugin.c
+index aa8d387a5d0be302e5cc98ddcf10ebce6957f3a5..7c17fcb33373293fbbbe2be967dca57b31ef13de 100644
+--- a/src/krb5_plugin/sssd_krb5_locator_plugin.c
++++ b/src/krb5_plugin/sssd_krb5_locator_plugin.c
+@@ -45,6 +45,7 @@
+ #define BUFSIZE 512
+ #define PORT_STR_SIZE 7
+ #define SSSD_KRB5_LOCATOR_DEBUG "SSSD_KRB5_LOCATOR_DEBUG"
++#define SSSD_KRB5_LOCATOR_DISABLE "SSSD_KRB5_LOCATOR_DISABLE"
+ #define DEBUG_KEY "[sssd_krb5_locator] "
+ #define PLUGIN_DEBUG(body) do { \
+     if (ctx->debug) { \
+@@ -59,6 +60,7 @@ struct sssd_ctx {
+     char *kpasswd_addr;
+     uint16_t kpasswd_port;
+     bool debug;
++    bool disabled;
+ };
+ 
+ void plugin_debug_fn(const char *format, ...)
+@@ -232,6 +234,14 @@ krb5_error_code sssd_krb5_locator_init(krb5_context context,
+         PLUGIN_DEBUG(("sssd_krb5_locator_init called\n"));
+     }
+ 
++    dummy = getenv(SSSD_KRB5_LOCATOR_DISABLE);
++    if (dummy == NULL) {
++        ctx->disabled = false;
++    } else {
++        ctx->disabled = true;
++        PLUGIN_DEBUG(("SSSD KRB5 locator plugin is disabled.\n"));
++    }
++
+     *private_data = ctx;
+ 
+     return 0;
+@@ -273,6 +283,11 @@ krb5_error_code sssd_krb5_locator_lookup(void *private_data,
+     if (private_data == NULL) return KRB5_PLUGIN_NO_HANDLE;
+     ctx = (struct sssd_ctx *) private_data;
+ 
++    if (ctx->disabled) {
++        PLUGIN_DEBUG(("Plugin disabled, nothing to do.\n"));
++        return KRB5_PLUGIN_NO_HANDLE;
++    }
++
+     if (ctx->sssd_realm == NULL || strcmp(ctx->sssd_realm, realm) != 0) {
+         free(ctx->sssd_realm);
+         ctx->sssd_realm = strdup(realm);
+diff --git a/src/man/sssd_krb5_locator_plugin.8.xml b/src/man/sssd_krb5_locator_plugin.8.xml
+index 25a20c88fcd4c2b3f644da24b34a4d5e9eb80ed3..d28546012802955c2594680e53698518f0178ab1 100644
+--- a/src/man/sssd_krb5_locator_plugin.8.xml
++++ b/src/man/sssd_krb5_locator_plugin.8.xml
+@@ -69,6 +69,11 @@
+             If the environment variable SSSD_KRB5_LOCATOR_DEBUG is set to any
+             value debug messages will be sent to stderr.
+         </para>
++        <para>
++            If the environment variable SSSD_KRB5_LOCATOR_DISABLE is set to any
++            value the plugin is disabled and will just return
++            KRB5_PLUGIN_NO_HANDLE to the caller.
++        </para>
+     </refsect1>
+ 
+     <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="include/seealso.xml" />
+-- 
+2.12.2
+

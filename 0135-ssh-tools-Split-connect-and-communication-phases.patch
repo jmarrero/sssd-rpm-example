@@ -1,0 +1,95 @@
+From 244adc327f7e29ba2c7ef60bc9f732d8fe3e68c9 Mon Sep 17 00:00:00 2001
+From: Simo Sorce <simo@redhat.com>
+Date: Tue, 25 Apr 2017 19:19:13 +0000
+Subject: [PATCH 135/135] ssh tools: Split connect and communication phases
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We can fallback after a connect error, but we cannot easily fall back
+once we start sending data as we may have consumed part of the buffer so
+reconnecting and sending what's left would not make sense.
+
+Therefore we now fallback on connect errors, but we issue a hard fail if
+error happens after communication has been established.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/1498
+
+Merges: https://pagure.io/SSSD/sssd/pull-request/3383
+
+Signed-off-by: Simo Sorce <simo@redhat.com>
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/sss_client/ssh/sss_ssh_knownhostsproxy.c | 30 ++++++++++++++++++++--------
+ 1 file changed, 22 insertions(+), 8 deletions(-)
+
+diff --git a/src/sss_client/ssh/sss_ssh_knownhostsproxy.c b/src/sss_client/ssh/sss_ssh_knownhostsproxy.c
+index b7b0c3bb66226be1c6453332a0b3af9fdf4e5a29..976ba86b321923cecad0703214e22b0a773ef585 100644
+--- a/src/sss_client/ssh/sss_ssh_knownhostsproxy.c
++++ b/src/sss_client/ssh/sss_ssh_knownhostsproxy.c
+@@ -40,14 +40,10 @@
+ 
+ /* connect to server using socket */
+ static int
+-connect_socket(int family, struct sockaddr *addr, size_t addr_len)
++connect_socket(int family, struct sockaddr *addr, size_t addr_len, int *sd)
+ {
+     int flags;
+     int sock = -1;
+-    struct pollfd fds[2];
+-    char buffer[BUFFER_SIZE];
+-    int i;
+-    ssize_t res;
+     int ret;
+ 
+     /* set O_NONBLOCK on standard input */
+@@ -85,6 +81,22 @@ connect_socket(int family, struct sockaddr *addr, size_t addr_len)
+         goto done;
+     }
+ 
++    *sd = sock;
++
++done:
++    if (ret != 0 && sock >= 0) close(sock);
++    return ret;
++}
++
++static int proxy_data(int sock)
++{
++    int flags;
++    struct pollfd fds[2];
++    char buffer[BUFFER_SIZE];
++    int i;
++    ssize_t res;
++    int ret;
++
+     /* set O_NONBLOCK on the socket */
+     flags = fcntl(sock, F_GETFL);
+     if (flags == -1) {
+@@ -158,8 +170,7 @@ connect_socket(int family, struct sockaddr *addr, size_t addr_len)
+     }
+ 
+ done:
+-    if (sock >= 0) close(sock);
+-
++    close(sock);
+     return ret;
+ }
+ 
+@@ -297,8 +308,11 @@ int main(int argc, const char **argv)
+     } else if (ai) {
+         /* Try all IP addresses before giving up */
+         for (struct addrinfo *ti = ai; ti != NULL; ti = ti->ai_next) {
+-            ret = connect_socket(ti->ai_family, ti->ai_addr, ti->ai_addrlen);
++            int socket_descriptor = -1;
++            ret = connect_socket(ti->ai_family, ti->ai_addr, ti->ai_addrlen,
++                                 &socket_descriptor);
+             if (ret == 0) {
++                ret = proxy_data(socket_descriptor);
+                 break;
+             }
+         }
+-- 
+2.12.2
+

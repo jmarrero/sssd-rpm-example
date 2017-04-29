@@ -1,0 +1,94 @@
+From c9a73bb6ffa010ef206896a0d1c2801bc056fa45 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 19 Apr 2017 17:46:03 +0200
+Subject: [PATCH 115/135] IFP: Use sized_domain_name to format the groups the
+ user is a member of
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves:
+    https://pagure.io/SSSD/sssd/issue/3268
+
+Uses the common function sized_domain_name() to format a group the user
+is a member of to the appropriate format.
+
+To see the code is working correctly, run:
+        dbus-send --system --print-reply --dest=org.freedesktop.sssd.infopipe
+                  /org/freedesktop/sssd/infopipe
+                  org.freedesktop.sssd.infopipe.GetUserGroups
+                  string:trusted_user
+
+Where trusted_user is a user from a trusted domain that is a member of groups
+from the joined domain and a trusted domain as well. The groups from the
+joined domain should not be qualified, the groups from the trusted
+domain should be qualified.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/ifp/ifpsrv_cmd.c | 29 +++++++++++++++--------------
+ 1 file changed, 15 insertions(+), 14 deletions(-)
+
+diff --git a/src/responder/ifp/ifpsrv_cmd.c b/src/responder/ifp/ifpsrv_cmd.c
+index d10f35e41dbb1623a0b9de37a4c43363cbefc1a3..e4d6c42ef35ef372472803d3d26b17d4181021a8 100644
+--- a/src/responder/ifp/ifpsrv_cmd.c
++++ b/src/responder/ifp/ifpsrv_cmd.c
+@@ -369,10 +369,11 @@ ifp_user_get_groups_reply(struct sss_domain_info *domain,
+                           struct ifp_req *ireq,
+                           struct ldb_result *res)
+ {
+-    int i, num;
++    int i, gri, num;
+     const char *name;
+     const char **groupnames;
+-    char *out_name;
++    struct sized_string *group_name;
++    errno_t ret;
+ 
+     /* one less, the first one is the user entry */
+     num = res->count - 1;
+@@ -381,6 +382,7 @@ ifp_user_get_groups_reply(struct sss_domain_info *domain,
+         return sbus_request_finish(ireq->dbus_req, NULL);
+     }
+ 
++    gri = 0;
+     for (i = 0; i < num; i++) {
+         name = sss_view_ldb_msg_find_attr_as_string(domain,
+                                                     res->msgs[i + 1],
+@@ -390,22 +392,21 @@ ifp_user_get_groups_reply(struct sss_domain_info *domain,
+             continue;
+         }
+ 
+-        out_name = sss_output_name(ireq, name, domain->case_preserve,
+-                                   ireq->ifp_ctx->rctx->override_space);
+-        if (out_name == NULL) {
++        ret = sized_domain_name(ireq, ireq->ifp_ctx->rctx, name, &group_name);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  "Unable to get sized name for %s [%d]: %s\n",
++                  name, ret, sss_strerror(ret));
+             continue;
+         }
+ 
+-        if (domain->fqnames) {
+-            groupnames[i] = sss_tc_fqname(groupnames, domain->names,
+-                                          domain, out_name);
+-            if (out_name == NULL) {
+-                DEBUG(SSSDBG_CRIT_FAILURE, "sss_tc_fqname failed\n");
+-                continue;
+-            }
+-        } else {
+-            groupnames[i] = talloc_steal(groupnames, out_name);
++        groupnames[gri] = talloc_strndup(groupnames,
++                                         group_name->str, group_name->len);
++        if (groupnames[gri] == NULL) {
++            DEBUG(SSSDBG_MINOR_FAILURE, "talloc_strndup failed\n");
++            continue;
+         }
++        gri++;
+ 
+         DEBUG(SSSDBG_TRACE_FUNC, "Adding group %s\n", groupnames[i]);
+     }
+-- 
+2.12.2
+

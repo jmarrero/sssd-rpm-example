@@ -1,0 +1,46 @@
+From 5f6232c7e6d9635c1d6b6b09f799309b6094b143 Mon Sep 17 00:00:00 2001
+From: Simo Sorce <simo@redhat.com>
+Date: Tue, 25 Apr 2017 14:00:15 +0000
+Subject: [PATCH 134/135] ssh tools: Fix issues with multiple IP addresses
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Cycle through all resolved address until one succeed or all fail.
+This is needed for dual stack systems where either IPv4 or IPv6 are
+improperly configured or selectively filtered at some point along the
+route.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/1498
+
+Merges: https://pagure.io/SSSD/sssd/pull-request/3383
+
+Signed-off-by: Simo Sorce <simo@redhat.com>
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/sss_client/ssh/sss_ssh_knownhostsproxy.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/sss_client/ssh/sss_ssh_knownhostsproxy.c b/src/sss_client/ssh/sss_ssh_knownhostsproxy.c
+index 310243c2fc8091f711559d4afb412e619af687ad..b7b0c3bb66226be1c6453332a0b3af9fdf4e5a29 100644
+--- a/src/sss_client/ssh/sss_ssh_knownhostsproxy.c
++++ b/src/sss_client/ssh/sss_ssh_knownhostsproxy.c
+@@ -295,7 +295,13 @@ int main(int argc, const char **argv)
+     if (pc_args) {
+         ret = connect_proxy_command(discard_const(pc_args));
+     } else if (ai) {
+-        ret = connect_socket(ai->ai_family, ai->ai_addr, ai->ai_addrlen);
++        /* Try all IP addresses before giving up */
++        for (struct addrinfo *ti = ai; ti != NULL; ti = ti->ai_next) {
++            ret = connect_socket(ti->ai_family, ti->ai_addr, ti->ai_addrlen);
++            if (ret == 0) {
++                break;
++            }
++        }
+     } else {
+         ret = EFAULT;
+     }
+-- 
+2.12.2
+

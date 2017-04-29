@@ -1,0 +1,38 @@
+From 6a611406e805a1707ca0b9e86b6aa96e02e43ecc Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 6 Apr 2017 11:23:43 +0200
+Subject: [PATCH 099/135] DP: Fix typo
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/providers/data_provider/dp_target_id.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/data_provider/dp_target_id.c b/src/providers/data_provider/dp_target_id.c
+index 0bca9bac27b68a8b905a668992cb8f7650023f65..2088f9529cab83794ac793c7fd5a320f479dbf11 100644
+--- a/src/providers/data_provider/dp_target_id.c
++++ b/src/providers/data_provider/dp_target_id.c
+@@ -210,7 +210,7 @@ static errno_t dp_initgroups(struct sbus_request *sbus_req,
+ 
+     ret = sysdb_initgroups(sbus_req, domain, data->filter_value, &res);
+     if (ret == ENOENT || (ret == EOK && res->count == 0)) {
+-        /* There is no point in concacting NSS responder. Proceed as usual. */
++        /* There is no point in contacting NSS responder. Proceed as usual. */
+         return EAGAIN;
+     } else if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to get initgroups [%d]: %s\n",
+@@ -274,7 +274,7 @@ errno_t dp_get_account_info_handler(struct sbus_request *sbus_req,
+     }
+ 
+     if ((data->entry_type & BE_REQ_TYPE_MASK) == BE_REQ_INITGROUPS) {
+-        ret =  dp_initgroups(sbus_req, dp_cli, key, dp_flags, data);
++        ret = dp_initgroups(sbus_req, dp_cli, key, dp_flags, data);
+         if (ret != EAGAIN) {
+             goto done;
+         }
+-- 
+2.12.2
+

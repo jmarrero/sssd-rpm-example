@@ -1,0 +1,49 @@
+From b78febe4c579f86f8007a27599605d1eb9f97a62 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Tue, 25 Apr 2017 14:25:12 +0200
+Subject: [PATCH 123/135] CACHE_REQ_DOMAIN: debug the set domain resolution
+ order
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/common/cache_req/cache_req_domain.c | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/src/responder/common/cache_req/cache_req_domain.c b/src/responder/common/cache_req/cache_req_domain.c
+index 6d37db0f109d5343eb6d7f4272bea522d4c34cf7..2c238c9966d322bb542fa2047313ee9e5144edee 100644
+--- a/src/responder/common/cache_req/cache_req_domain.c
++++ b/src/responder/common/cache_req/cache_req_domain.c
+@@ -191,6 +191,10 @@ cache_req_domain_new_list_from_domain_resolution_order(
+ 
+     if (domain_resolution_order != NULL) {
+         if (strcmp(domain_resolution_order, ":") != 0) {
++            DEBUG(SSSDBG_TRACE_FUNC,
++                  "Domain resolution order list (split by ':'): \"%s\"\n",
++                  domain_resolution_order);
++
+             ret = split_on_separator(tmp_ctx, domain_resolution_order, ':',
+                                      true, true, &list, NULL);
+             if (ret != EOK) {
+@@ -199,7 +203,14 @@ cache_req_domain_new_list_from_domain_resolution_order(
+                         ret, sss_strerror(ret));
+                 goto done;
+             }
++        } else {
++            DEBUG(SSSDBG_TRACE_FUNC,
++                  "Domain resolution order list: ':' "
++                  "(do not use any specific order)\n");
+         }
++    } else {
++        DEBUG(SSSDBG_TRACE_FUNC,
++              "Domain resolution order list: not set\n");
+     }
+ 
+     cr_domains = cache_req_domain_new_list_from_string_list(mem_ctx, domains,
+-- 
+2.12.2
+

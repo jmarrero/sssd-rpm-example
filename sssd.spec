@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.15.3
-Release: 0.beta.2%{?dist}
+Release: 0.beta.3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -141,6 +141,44 @@ Patch0095: 0095-BUILD-Fix-compilation-of-libsss_certmap-with-libcryp.patch
 Patch0096: 0096-responders-do-not-leak-selinux-context-on-clients-de.patch
 Patch0097: 0097-ipa_s2n_get_acct_info_send-provide-correct-req_input.patch
 Patch0098: 0098-selinux-Do-not-fail-if-SELinux-is-not-managed.patch
+Patch0099: 0099-DP-Fix-typo.patch
+Patch0100: 0100-CONFDB-Fix-handling-of-enable_files_domain.patch
+Patch0101: 0101-pam_test_client-add-service-and-environment-to-PAM-t.patch
+Patch0102: 0102-pam_test_client-add-SSSD-getpwnam-lookup.patch
+Patch0103: 0103-sss_sifp-update-method-names.patch
+Patch0104: 0104-pam_test_client-add-InfoPipe-user-lookup.patch
+Patch0105: 0105-sssctl-integrate-pam_test_client-into-sssctl.patch
+Patch0106: 0106-i18n-adding-sssctl-files.patch
+Patch0107: 0107-config-check-Message-when-sssd.conf-is-missing.patch
+Patch0108: 0108-KRB5_LOCATOR-add-env-variable-to-disable-plugin.patch
+Patch0109: 0109-sbus-check-connection-for-NULL-before-unregister-it.patch
+Patch0110: 0110-UTIL-Use-max-15-characters-for-AD-host-UPN.patch
+Patch0111: 0111-minor-typo-fixes.patch
+Patch0112: 0112-SPEC-Drop-conditional-build-for-krb5_local_auth_plug.patch
+Patch0113: 0113-README-Update-links-to-mailing-lists.patch
+Patch0114: 0114-Move-sized_output_name-and-sized_domain_name-into-re.patch
+Patch0115: 0115-IFP-Use-sized_domain_name-to-format-the-groups-the-u.patch
+Patch0116: 0116-SECRETS-remove-unused-variable.patch
+Patch0117: 0117-IPA-Improve-DEBUG-message-if-a-group-has-no-ipaNTSec.patch
+Patch0118: 0118-RESPONDER-Fallback-to-global-domain-resolution-order.patch
+Patch0119: 0119-NSS-TESTS-Improve-non-fqnames-tests.patch
+Patch0120: 0120-CACHE_REQ-Allow-configurationless-shortname-lookups.patch
+Patch0121: 0121-CACHE_REQ_DOMAIN-Add-some-comments-to-cache_req_doma.patch
+Patch0122: 0122-RESPONDER_COMMON-Improve-domaiN_resolution_order-deb.patch
+Patch0123: 0123-CACHE_REQ_DOMAIN-debug-the-set-domain-resolution-ord.patch
+Patch0124: 0124-LDAP-Allow-passing-a-NULL-map-to-sdap_search_bases_e.patch
+Patch0125: 0125-IPA-Use-search-bases-instead-of-domain_to_basedn-whe.patch
+Patch0126: 0126-CONFDB-Fix-standalone-application-domains.patch
+Patch0127: 0127-utils-add-sss_domain_is_forest_root.patch
+Patch0128: 0128-ad-handle-forest-root-not-listed-in-ad_enabled_domai.patch
+Patch0129: 0129-overrides-add-certificates-to-mapped-attribute.patch
+Patch0130: 0130-IPA-Improve-s2n-debug-message-for-missing-ipaNTSecur.patch
+Patch0131: 0131-Use-correct-spelling-of-override.patch
+Patch0132: 0132-cache_req-Avoid-bool-in-switch-case.patch
+Patch0133: 0133-ssh-tools-The-ai-structure-is-not-an-array.patch
+Patch0134: 0134-ssh-tools-Fix-issues-with-multiple-IP-addresses.patch
+Patch0135: 0135-ssh-tools-Split-connect-and-communication-phases.patch
+
 
 Patch0502:  0502-SYSTEMD-Use-capabilities.patch
 
@@ -280,6 +318,7 @@ Group: Development/Libraries
 License: LGPLv3+
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
+Conflicts: sssd-common < %{version}-%{release}
 
 %description -n libsss_sudo
 A utility library to allow communication between SUDO and SSSD
@@ -288,6 +327,7 @@ A utility library to allow communication between SUDO and SSSD
 Summary: A library to allow communication between Autofs and SSSD
 Group: Development/Libraries
 License: LGPLv3+
+Conflicts: sssd-common < %{version}-%{release}
 
 %description -n libsss_autofs
 A utility library to allow communication between Autofs and SSSD
@@ -609,6 +649,7 @@ Summary: The SSSD libwbclient implementation
 Group: Applications/System
 License: GPLv3+ and LGPLv3+
 Conflicts: libwbclient < 4.2.0-0.2.rc2
+Conflicts: sssd-common < %{version}-%{release}
 
 %description libwbclient
 The SSSD libwbclient implementation.
@@ -627,6 +668,7 @@ Development libraries for the SSSD libwbclient implementation.
 Summary: SSSD's idmap_sss Backend for Winbind
 Group:  Applications/System
 License: GPLv3+ and LGPLv3+
+Conflicts: sssd-common < %{version}-%{release}
 
 %description winbind-idmap
 The idmap_sss module provides a way for Winbind to call SSSD to map UIDs/GIDs
@@ -636,6 +678,7 @@ and SIDs.
 Summary: SSSD plug-in for NFSv4 rpc.idmapd
 Group:  Applications/System
 License: GPLv3+
+Conflicts: sssd-common < %{version}-%{release}
 
 %description nfs-idmap
 The libnfsidmap sssd module provides a way for rpc.idmapd to call SSSD to map
@@ -648,6 +691,7 @@ Group: Development/Libraries
 License: LGPLv3+
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
+Conflicts: sssd-common < %{version}-%{release}
 
 %description -n libsss_certmap
 Library to map certificates to users based on rules
@@ -775,10 +819,11 @@ do
 done
 
 touch sssd.lang
-for subpackage in ldap krb5 ipa ad proxy tools client dbus nfs_idmap \
-                  winbind_idmap
+for subpackage in sssd_ldap sssd_krb5 sssd_ipa sssd_ad sssd_proxy sssd_tools \
+                  sssd_client sssd_dbus sssd_nfs_idmap sssd_winbind_idmap \
+                  libsss_certmap sssd_kcm
 do
-    touch sssd_$subpackage.lang
+    touch $subpackage.lang
 done
 
 for man in `find $RPM_BUILD_ROOT/%{_mandir}/??/man?/ -type f | sed -e "s#$RPM_BUILD_ROOT/%{_mandir}/##"`
@@ -824,8 +869,14 @@ do
         sssd-ifp*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_dbus.lang
             ;;
+        sssd-kcm*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_kcm.lang
+            ;;
         idmap_sss*)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd_winbind_idmap.lang
+            ;;
+        sss-certmap*)
+            echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> libsss_certmap.lang
             ;;
         *)
             echo \%lang\(${lang}\) \%{_mandir}/${man}\* >> sssd.lang
@@ -843,11 +894,12 @@ cat python2_sssdconfig.lang
 echo "python3_sssdconfig.lang:"
 cat python3_sssdconfig.lang
 
-for subpackage in ldap krb5 ipa ad proxy tools client dbus nfs_idmap \
-                  winbind_idmap
+for subpackage in sssd_ldap sssd_krb5 sssd_ipa sssd_ad sssd_proxy sssd_tools \
+                  sssd_client sssd_dbus sssd_nfs_idmap sssd_winbind_idmap \
+                  libsss_certmap sssd_kcm
 do
-    echo "sssd_$subpackage.lang:"
-    cat sssd_$subpackage.lang
+    echo "$subpackage.lang:"
+    cat $subpackage.lang
 done
 
 %files
@@ -1183,26 +1235,27 @@ done
 %{_mandir}/man5/sss_rpcidmapd.5*
 %{_libdir}/libnfsidmap/sss.so
 
-%files -n libsss_certmap
+%files -n libsss_certmap -f libsss_certmap.lang
 %defattr(-,root,root,-)
 %license src/sss_client/COPYING src/sss_client/COPYING.LESSER
 %{_libdir}/libsss_certmap.so.*
+%{_mandir}/man5/sss-certmap.5*
 
 %files -n libsss_certmap-devel
 %defattr(-,root,root,-)
 %doc certmap_doc/html
-%{_mandir}/man5/sss-certmap.5*
 %{_includedir}/sss_certmap.h
 %{_libdir}/libsss_certmap.so
 %{_libdir}/pkgconfig/sss_certmap.pc
 
-%files kcm
+%files kcm -f sssd_kcm.lang
 %{_libexecdir}/%{servicename}/sssd_kcm
 %dir %{_sysconfdir}/krb5.conf.d
 %config(noreplace) %{_sysconfdir}/krb5.conf.d/kcm_default_ccache
 %{_unitdir}/sssd-kcm.socket
 %{_unitdir}/sssd-kcm.service
 %{_mandir}/man8/sssd-kcm.8*
+
 %post common
 %systemd_post sssd.service
 %systemd_post sssd-autofs.socket
@@ -1226,7 +1279,6 @@ done
 %systemd_preun sssd-sudo.socket
 
 %postun common
-%systemd_postun_with_restart sssd.service
 %systemd_postun_with_restart sssd-autofs.socket
 %systemd_postun_with_restart sssd-autofs.service
 %systemd_postun_with_restart sssd-nss.socket
@@ -1301,6 +1353,9 @@ fi
 
 %postun -n libsss_certmap -p /sbin/ldconfig
 
+%posttrans common
+%systemd_postun_with_restart sssd.service
+
 %posttrans libwbclient
 %{_sbindir}/update-alternatives \
     --install %{_libdir}/libwbclient.so.%{libwbc_alternatives_version} \
@@ -1325,6 +1380,12 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Sat Apr 29 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-0.beta.3
+- Resolves: rhbz#1445680 - Properly fall back to local Smartcard authentication
+- Resolves: rhbz#1437199 - sssd-nfs-idmap-1.15.2-1.fc25.x86_64 conflicts with
+                           file from package sssd-common-1.15.1-1.fc25.x86_64
+- Resolves: rhbz#1063278 - sss_ssh_knownhostsproxy doesn't fall back to ipv4
+
 * Thu Apr 06 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-0.beta.2
 - Fix issue with IPA + SELinux in containers
 - Resolves: upstream https://fedorahosted.org/sssd/ticket/3297

@@ -1,0 +1,38 @@
+From 955574eeb3a3b937abc3df150e9bbbb79b75c889 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Tue, 14 Mar 2017 15:43:41 +0100
+Subject: [PATCH 107/135] config-check: Message when sssd.conf is missing
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+sssctl config-check should print a message for user
+if no sssd.conf was found.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3330
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/tools/sssctl/sssctl_config.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/tools/sssctl/sssctl_config.c b/src/tools/sssctl/sssctl_config.c
+index 630df3c8ff5368ef253bb9753380e94c8c0a307d..7e3ebf5428ce3fef232eee7334c7fd90e904b2d3 100644
+--- a/src/tools/sssctl/sssctl_config.c
++++ b/src/tools/sssctl/sssctl_config.c
+@@ -63,7 +63,10 @@ errno_t sssctl_config_check(struct sss_cmdline *cmdline,
+ 
+     /* Open config file */
+     ret = sss_ini_config_file_open(init_data, SSSD_CONFIG_FILE);
+-    if (ret != EOK) {
++    if (ret == ENOENT) {
++        ERROR("File %1$s does not exist.\n", SSSD_CONFIG_FILE);
++        goto done;
++    } else if (ret != EOK) {
+         DEBUG(SSSDBG_TRACE_FUNC,
+               "sss_ini_config_file_open failed: %s [%d]\n",
+               sss_strerror(ret),
+-- 
+2.12.2
+

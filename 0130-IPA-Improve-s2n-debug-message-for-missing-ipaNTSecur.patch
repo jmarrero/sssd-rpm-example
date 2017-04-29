@@ -1,0 +1,44 @@
+From 0c5f463e9629ac08d647c70cffb30bccdd57ae96 Mon Sep 17 00:00:00 2001
+From: Justin Stephenson <jstephen@redhat.com>
+Date: Tue, 25 Apr 2017 13:02:10 -0400
+Subject: [PATCH 130/135] IPA: Improve s2n debug message for missing
+ ipaNTSecurityIdentifier
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This patch improves the log message to be more information for
+the SSSD user troubleshooting issues.
+
+If the IDM POSIX group used for AD trust HBAC/SUDO operation is missing
+the ipaNTSecurityIdentifier it can cause client s2n operations failures
+resolving the group which resulted in the inability to login for the AD
+user.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/providers/ipa/ipa_s2n_exop.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index 55ec904ca3188c7cf10ac41972e9ecf94ebf44bb..f5f4401f86615dc7f81f844e1096ad43e965c384 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -2580,7 +2580,13 @@ static errno_t ipa_s2n_save_objects(struct sss_domain_info *dom,
+     ret = sysdb_attrs_get_string(attrs->sysdb_attrs, SYSDB_SID_STR, &sid_str);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+-              "Cannot find SID of object with override.\n");
++              "Cannot find SID of object.\n");
++        if (name != NULL) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "Object [%s] has no SID, please check the "
++                  "ipaNTSecurityIdentifier attribute on the server-side.\n",
++                  name);
++        }
+         goto done;
+     }
+ 
+-- 
+2.12.2
+

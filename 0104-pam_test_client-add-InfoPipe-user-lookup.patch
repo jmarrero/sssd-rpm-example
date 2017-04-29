@@ -1,0 +1,130 @@
+From 9be97c9cc69e5e6e568d7e21f61a46c3ae2dc387 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 16 Mar 2017 11:38:20 +0100
+Subject: [PATCH 104/135] pam_test_client: add InfoPipe user lookup
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Related to https://pagure.io/SSSD/sssd/issue/3292
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                      |  1 +
+ src/sss_client/pam_test_client.c | 71 ++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 72 insertions(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index 6f143000c2459d25f18b013b155248c9ddf93120..05a5ae89cbe5dccf39ce9bdfd95c1b115a64c768 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -3468,6 +3468,7 @@ pam_test_client_LDADD = \
+     $(PAM_LIBS) \
+     $(PAM_MISC_LIBS) \
+     $(LIBADD_DL) \
++    libsss_simpleifp.la \
+     $(NULL)
+ 
+ if BUILD_AUTOFS
+diff --git a/src/sss_client/pam_test_client.c b/src/sss_client/pam_test_client.c
+index 69af612270492968b56d1c11de2bf56ebf57471f..40ef3f6d480c0108c985fce7e34e983d145f237e 100644
+--- a/src/sss_client/pam_test_client.c
++++ b/src/sss_client/pam_test_client.c
+@@ -30,9 +30,12 @@
+ #include <pwd.h>
+ #include <nss.h>
+ #include <errno.h>
++#include <inttypes.h>
+ 
+ #include <security/pam_appl.h>
+ 
++#include "lib/sifp/sss_sifp.h"
++
+ #ifdef HAVE_SECURITY_PAM_MISC_H
+ # include <security/pam_misc.h>
+ #elif defined(HAVE_SECURITY_OPENPAM_H)
+@@ -58,6 +61,69 @@ static struct pam_conv conv = {
+ 
+ #define DEFAULT_BUFSIZE 4096
+ 
++static int get_ifp_user(const char *user)
++{
++    sss_sifp_ctx *sifp;
++    sss_sifp_error error;
++    sss_sifp_object *user_obj;
++    const char *tmp_str;
++    uint32_t tmp_uint32;
++    size_t c;
++
++    struct ifp_user_attr {
++        const char *name;
++        bool is_string;
++    } ifp_user_attr[] = {
++        { "name", true },
++        { "uidNumber", false },
++        { "gidNumber", false },
++        { "gecos", true },
++        { "homeDirectory", true },
++        { "loginShell", true },
++        { NULL, false }
++    };
++
++    error = sss_sifp_init(&sifp);
++    if (error != SSS_SIFP_OK) {
++        fprintf(stderr, "Unable to connect to the InfoPipe");
++        return EFAULT;
++    }
++
++    error = sss_sifp_fetch_user_by_name(sifp, user, &user_obj);
++    if (error != SSS_SIFP_OK) {
++        fprintf(stderr, "Unable to get user object");
++        return EIO;
++    }
++
++    fprintf(stdout, "SSSD InfoPipe user lookup result:\n");
++    for (c = 0; ifp_user_attr[c].name != NULL; c++) {
++        if (ifp_user_attr[c].is_string) {
++            error = sss_sifp_find_attr_as_string(user_obj->attrs,
++                                                 ifp_user_attr[c].name,
++                                                 &tmp_str);
++        } else {
++            error = sss_sifp_find_attr_as_uint32(user_obj->attrs,
++                                                 ifp_user_attr[c].name,
++                                                 &tmp_uint32);
++        }
++        if (error != SSS_SIFP_OK) {
++            fprintf(stderr, "Unable to get user name attr");
++            return EIO;
++        }
++
++        if (ifp_user_attr[c].is_string) {
++            fprintf(stdout, " - %s: %s\n", ifp_user_attr[c].name, tmp_str);
++        } else {
++            fprintf(stdout, " - %s: %"PRIu32"\n", ifp_user_attr[c].name,
++                                                  tmp_uint32);
++        }
++    }
++
++    sss_sifp_free_object(sifp, &user_obj);
++    sss_sifp_free(&sifp);
++    return 0;
++}
++
+ static int sss_getpwnam_check(const char *user)
+ {
+     void *dl_handle = NULL;
+@@ -159,6 +225,11 @@ int main(int argc, char *argv[]) {
+         if (ret != 0) {
+             fprintf(stderr, "User name lookup with [%s] failed.\n", user);
+         }
++
++        ret = get_ifp_user(user);
++        if (ret != 0) {
++            fprintf(stderr, "InforPipe User lookup with [%s] failed.\n", user);
++        }
+     }
+ 
+     ret = pam_start(service, user, &conv, &pamh);
+-- 
+2.12.2
+

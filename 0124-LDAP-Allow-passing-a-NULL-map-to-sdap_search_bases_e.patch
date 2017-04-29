@@ -1,0 +1,36 @@
+From 53e9a5aef4a688f7c81a4a1e77013e05313e5f9a Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 21 Apr 2017 15:30:37 +0200
+Subject: [PATCH 124/135] LDAP: Allow passing a NULL map to
+ sdap_search_bases_ex_send
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+NULL attribute map and a NULL list of attributes should translate into
+"fetch all entry attributes"
+
+Required for:
+    https://pagure.io/SSSD/sssd/issue/3378
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/providers/ldap/sdap_ops.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ldap/sdap_ops.c b/src/providers/ldap/sdap_ops.c
+index 3fc968f0bf6782f91a5f5620bfe34eeeebcdc832..a90857469a4ed6f2cecb935ea70340060952c9df 100644
+--- a/src/providers/ldap/sdap_ops.c
++++ b/src/providers/ldap/sdap_ops.c
+@@ -101,7 +101,7 @@ sdap_search_bases_ex_send(TALLOC_CTX *mem_ctx,
+         state->map_num_attrs = 0;
+     }
+ 
+-    if (state->attrs == NULL) {
++    if (state->attrs == NULL && state->map != NULL) {
+         ret = build_attrs_from_map(state, state->map, state->map_num_attrs,
+                                    NULL, &state->attrs, NULL);
+         if (ret != EOK) {
+-- 
+2.12.2
+

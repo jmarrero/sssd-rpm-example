@@ -1,0 +1,299 @@
+From 7c074ba2f923985ab0d4f9d6a5e01ff3f2f0a7a8 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 19 Apr 2017 17:44:40 +0200
+Subject: [PATCH 114/135] Move sized_output_name() and sized_domain_name() into
+ responder common code
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+These functions are used to format a name into a format that the user
+configured for output, including case sensitiveness, replacing
+whitespace and qualified format. They were used only in the NSS
+responder, which typically returns strings to the NSS client library and
+then the user.
+
+But it makes sense to just reuse the same code in the IFP responder as
+well, since it does essentially the same job.
+
+The patch also renames sized_member_name to sized_domain_name.
+Previously, the function was only used to format a group member, the IFP
+responder would use the same function to format a group the user is a
+member of.
+
+Related to:
+    https://pagure.io/SSSD/sssd/issue/3268
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/common/responder.h        | 21 ++++++++
+ src/responder/common/responder_common.c | 90 +++++++++++++++++++++++++++++++++
+ src/responder/nss/nss_private.h         | 11 ----
+ src/responder/nss/nss_protocol_grent.c  |  2 +-
+ src/responder/nss/nss_utils.c           | 87 -------------------------------
+ 5 files changed, 112 insertions(+), 99 deletions(-)
+
+diff --git a/src/responder/common/responder.h b/src/responder/common/responder.h
+index 4210307489fe25829a1674f254ecc7d185029698..dfe1ec455e355de263c3550306e53fea3ada85df 100644
+--- a/src/responder/common/responder.h
++++ b/src/responder/common/responder.h
+@@ -393,4 +393,25 @@ char *sss_resp_create_fqname(TALLOC_CTX *mem_ctx,
+ 
+ errno_t sss_resp_populate_cr_domains(struct resp_ctx *rctx);
+ 
++/**
++ * Helper functions to format output names
++ */
++
++/* Format orig_name into a sized_string in output format as prescribed
++ * by the name_dom domain
++ */
++int sized_output_name(TALLOC_CTX *mem_ctx,
++                      struct resp_ctx *rctx,
++                      const char *orig_name,
++                      struct sss_domain_info *name_dom,
++                      struct sized_string **_name);
++
++/* Format orig_name into a sized_string in output format as prescribed
++ * by the domain read from the fully qualified name.
++ */
++int sized_domain_name(TALLOC_CTX *mem_ctx,
++                      struct resp_ctx *rctx,
++                      const char *member_name,
++                      struct sized_string **_name);
++
+ #endif /* __SSS_RESPONDER_H__ */
+diff --git a/src/responder/common/responder_common.c b/src/responder/common/responder_common.c
+index 67e1deefdfde19c95a68029b11099579d851513f..ac6320b08de09bc6c7e8dd1af72e0a493a449f7a 100644
+--- a/src/responder/common/responder_common.c
++++ b/src/responder/common/responder_common.c
+@@ -1651,3 +1651,93 @@ done:
+ 
+     return ret;
+ }
++
++/**
++ * Helper functions to format output names
++ */
++int sized_output_name(TALLOC_CTX *mem_ctx,
++                      struct resp_ctx *rctx,
++                      const char *orig_name,
++                      struct sss_domain_info *name_dom,
++                      struct sized_string **_name)
++{
++    TALLOC_CTX *tmp_ctx = NULL;
++    errno_t ret;
++    char *username;
++    struct sized_string *name;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    username = sss_output_name(tmp_ctx, orig_name, name_dom->case_preserve,
++                               rctx->override_space);
++    if (username == NULL) {
++        ret = EIO;
++        goto done;
++    }
++
++    if (name_dom->fqnames) {
++        username = sss_tc_fqname(tmp_ctx, name_dom->names, name_dom, username);
++        if (username == NULL) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "sss_replace_space failed\n");
++            ret = EIO;
++            goto done;
++        }
++    }
++
++    name = talloc_zero(tmp_ctx, struct sized_string);
++    if (name == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    to_sized_string(name, username);
++    name->str = talloc_steal(name, username);
++    *_name = talloc_steal(mem_ctx, name);
++    ret = EOK;
++done:
++    talloc_zfree(tmp_ctx);
++    return ret;
++}
++
++int sized_domain_name(TALLOC_CTX *mem_ctx,
++                      struct resp_ctx *rctx,
++                      const char *member_name,
++                      struct sized_string **_name)
++{
++    TALLOC_CTX *tmp_ctx = NULL;
++    errno_t ret;
++    char *domname;
++    struct sss_domain_info *member_dom;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    ret = sss_parse_internal_fqname(tmp_ctx, member_name, NULL, &domname);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "sss_parse_internal_fqname failed\n");
++        goto done;
++    }
++
++    if (domname == NULL) {
++        ret = ERR_WRONG_NAME_FORMAT;
++        goto done;
++    }
++
++    member_dom = find_domain_by_name(get_domains_head(rctx->domains),
++                                     domname, true);
++    if (member_dom == NULL) {
++        ret = ERR_DOMAIN_NOT_FOUND;
++        goto done;
++    }
++
++    ret = sized_output_name(mem_ctx, rctx, member_name,
++                            member_dom, _name);
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
+diff --git a/src/responder/nss/nss_private.h b/src/responder/nss/nss_private.h
+index acb3c4aa504e538ca56dca8d43ee04b0f60954a9..13de83226177bbaa8b8237e3e27b7e72da369194 100644
+--- a/src/responder/nss/nss_private.h
++++ b/src/responder/nss/nss_private.h
+@@ -140,17 +140,6 @@ const char *
+ nss_get_name_from_msg(struct sss_domain_info *domain,
+                       struct ldb_message *msg);
+ 
+-int sized_output_name(TALLOC_CTX *mem_ctx,
+-                      struct resp_ctx *rctx,
+-                      const char *orig_name,
+-                      struct sss_domain_info *name_dom,
+-                      struct sized_string **_name);
+-
+-int sized_member_name(TALLOC_CTX *mem_ctx,
+-                      struct resp_ctx *rctx,
+-                      const char *member_name,
+-                      struct sized_string **_name);
+-
+ const char *
+ nss_get_pwfield(struct nss_ctx *nctx,
+                 struct sss_domain_info *dom);
+diff --git a/src/responder/nss/nss_protocol_grent.c b/src/responder/nss/nss_protocol_grent.c
+index 283ab9f6731bc4c8261ca79075ab030005bf70db..fae1d47d7b217beafba75740e2e6d9cb8cdbc1d0 100644
+--- a/src/responder/nss/nss_protocol_grent.c
++++ b/src/responder/nss/nss_protocol_grent.c
+@@ -163,7 +163,7 @@ nss_protocol_fill_members(struct sss_packet *packet,
+                 }
+             }
+ 
+-            ret = sized_member_name(tmp_ctx, rctx, member_name, &name);
++            ret = sized_domain_name(tmp_ctx, rctx, member_name, &name);
+             if (ret != EOK) {
+                 DEBUG(SSSDBG_OP_FAILURE, "Unable to get sized name [%d]: %s\n",
+                       ret, sss_strerror(ret));
+diff --git a/src/responder/nss/nss_utils.c b/src/responder/nss/nss_utils.c
+index f839930a275db56e8d729888af870562d7b6f260..2cd9c33b42f7e018ea89d2df206637f35646489e 100644
+--- a/src/responder/nss/nss_utils.c
++++ b/src/responder/nss/nss_utils.c
+@@ -53,93 +53,6 @@ nss_get_name_from_msg(struct sss_domain_info *domain,
+     return ldb_msg_find_attr_as_string(msg, SYSDB_NAME, NULL);
+ }
+ 
+-int sized_output_name(TALLOC_CTX *mem_ctx,
+-                      struct resp_ctx *rctx,
+-                      const char *orig_name,
+-                      struct sss_domain_info *name_dom,
+-                      struct sized_string **_name)
+-{
+-    TALLOC_CTX *tmp_ctx = NULL;
+-    errno_t ret;
+-    char *username;
+-    struct sized_string *name;
+-
+-    tmp_ctx = talloc_new(NULL);
+-    if (tmp_ctx == NULL) {
+-        return ENOMEM;
+-    }
+-
+-    username = sss_output_name(tmp_ctx, orig_name, name_dom->case_preserve,
+-                               rctx->override_space);
+-    if (username == NULL) {
+-        ret = EIO;
+-        goto done;
+-    }
+-
+-    if (name_dom->fqnames) {
+-        username = sss_tc_fqname(tmp_ctx, name_dom->names, name_dom, username);
+-        if (username == NULL) {
+-            DEBUG(SSSDBG_CRIT_FAILURE, "sss_replace_space failed\n");
+-            ret = EIO;
+-            goto done;
+-        }
+-    }
+-
+-    name = talloc_zero(tmp_ctx, struct sized_string);
+-    if (name == NULL) {
+-        ret = ENOMEM;
+-        goto done;
+-    }
+-
+-    to_sized_string(name, username);
+-    name->str = talloc_steal(name, username);
+-    *_name = talloc_steal(mem_ctx, name);
+-    ret = EOK;
+-done:
+-    talloc_zfree(tmp_ctx);
+-    return ret;
+-}
+-
+-int sized_member_name(TALLOC_CTX *mem_ctx,
+-                      struct resp_ctx *rctx,
+-                      const char *member_name,
+-                      struct sized_string **_name)
+-{
+-    TALLOC_CTX *tmp_ctx = NULL;
+-    errno_t ret;
+-    char *domname;
+-    struct sss_domain_info *member_dom;
+-
+-    tmp_ctx = talloc_new(NULL);
+-    if (tmp_ctx == NULL) {
+-        return ENOMEM;
+-    }
+-
+-    ret = sss_parse_internal_fqname(tmp_ctx, member_name, NULL, &domname);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "sss_parse_internal_fqname failed\n");
+-        goto done;
+-    }
+-
+-    if (domname == NULL) {
+-        ret = ERR_WRONG_NAME_FORMAT;
+-        goto done;
+-    }
+-
+-    member_dom = find_domain_by_name(get_domains_head(rctx->domains),
+-                                     domname, true);
+-    if (member_dom == NULL) {
+-        ret = ERR_DOMAIN_NOT_FOUND;
+-        goto done;
+-    }
+-
+-    ret = sized_output_name(mem_ctx, rctx, member_name,
+-                            member_dom, _name);
+-done:
+-    talloc_free(tmp_ctx);
+-    return ret;
+-}
+-
+ const char *
+ nss_get_pwfield(struct nss_ctx *nctx,
+                struct sss_domain_info *dom)
+-- 
+2.12.2
+

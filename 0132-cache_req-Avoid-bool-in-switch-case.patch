@@ -1,0 +1,49 @@
+From b70ec63cca034ce9c638f2dcefbd4358b654d2e1 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Thu, 27 Apr 2017 10:45:30 +0200
+Subject: [PATCH 132/135] cache_req: Avoid bool in switch/case
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Pair-Programmed-With: Michal Židek <mzidek@redhat.com>
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+---
+ src/responder/common/cache_req/cache_req_domain.c | 18 +++++++-----------
+ 1 file changed, 7 insertions(+), 11 deletions(-)
+
+diff --git a/src/responder/common/cache_req/cache_req_domain.c b/src/responder/common/cache_req/cache_req_domain.c
+index 2c238c9966d322bb542fa2047313ee9e5144edee..8bf7fc6dc155123b5525127d6ee23ce98a50f490 100644
+--- a/src/responder/common/cache_req/cache_req_domain.c
++++ b/src/responder/common/cache_req/cache_req_domain.c
+@@ -89,17 +89,13 @@ cache_req_domain_use_fqnames(struct sss_domain_info *domain,
+      *       - false: in this case, the usage of fully-qualified-names will be
+      *                done accordingly to what's set for the domain itself.
+      */
+-    switch (head->fqnames) {
+-    case true:
+-        return true;
+-    case false:
+-        switch (enforce_non_fqnames) {
+-        case true:
+-            return false;
+-        case false:
+-            return domain->fqnames;
+-        }
+-    }
++     if (head->fqnames) {
++         return true;
++     } else if (enforce_non_fqnames) {
++         return false;
++     } else {
++         return domain->fqnames;
++     }
+ }
+ 
+ static struct cache_req_domain *
+-- 
+2.12.2
+

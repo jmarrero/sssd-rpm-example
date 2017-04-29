@@ -1,0 +1,43 @@
+From 35186217d44d0138a1aedf7a4db72249b2c40e66 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 10 Apr 2017 13:45:27 +0200
+Subject: [PATCH 109/135] sbus: check connection for NULL before unregister it
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There seem to be code paths where the data is a added to the hash before
+the connection is properly initialized, to avoid core dump during shut
+down we only call dbus_conection_unregister_object_path() if there is a
+connection.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3367
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/sbus/sssd_dbus_interface.c | 8 +++++++-
+ 1 file changed, 7 insertions(+), 1 deletion(-)
+
+diff --git a/src/sbus/sssd_dbus_interface.c b/src/sbus/sssd_dbus_interface.c
+index 1a11c6abcf23053e3b8c77f4d469d7c202a88eb8..c9007a4814e09e26fedaf605ca7313234d5ebf2c 100644
+--- a/src/sbus/sssd_dbus_interface.c
++++ b/src/sbus/sssd_dbus_interface.c
+@@ -490,7 +490,13 @@ sbus_opath_hash_delete_cb(hash_entry_t *item,
+     conn = talloc_get_type(pvt, struct sbus_connection);
+     path = sbus_opath_get_base_path(NULL, item->key.str);
+ 
+-    dbus_connection_unregister_object_path(conn->dbus.conn, path);
++    /* There seem to be code paths where the data is added to the hash
++     * before the connection is properly initialized, to avoid core dump
++     * during shut down we only call dbus_connection_unregister_object_path()
++     * if there is a connection. */
++    if (conn->dbus.conn != NULL) {
++        dbus_connection_unregister_object_path(conn->dbus.conn, path);
++    }
+ }
+ 
+ hash_table_t *
+-- 
+2.12.2
+

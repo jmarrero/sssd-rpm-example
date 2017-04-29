@@ -1,0 +1,41 @@
+From ef019268d2d112ebff3577e551cd19478d73d93b Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 21 Apr 2017 12:39:44 +0200
+Subject: [PATCH 117/135] IPA: Improve DEBUG message if a group has no
+ ipaNTSecurityIdentifier
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There was an issue in a production deployment where the admin selected a
+GID outside the IDM range for a group that contained a user from the
+trusted domain. This resulted in not adding a SID for the IPA group,
+which in turn meant the group couldn't be resolved on the client.
+
+This patch just improves the DEBUG message so that it's clearer for the
+admins where the issue is.
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/providers/ipa/ipa_s2n_exop.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_s2n_exop.c b/src/providers/ipa/ipa_s2n_exop.c
+index 2173db357700499a6140aa61841e443139981483..55ec904ca3188c7cf10ac41972e9ecf94ebf44bb 100644
+--- a/src/providers/ipa/ipa_s2n_exop.c
++++ b/src/providers/ipa/ipa_s2n_exop.c
+@@ -1308,7 +1308,10 @@ static void ipa_s2n_get_list_next(struct tevent_req *subreq)
+     ret = sysdb_attrs_get_string(state->attrs->sysdb_attrs, SYSDB_SID_STR,
+                                  &sid_str);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_get_string failed.\n");
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Object [%s] has no SID, please check the "
++              "ipaNTSecurityIdentifier attribute on the server-side",
++              state->attrs->a.name);
+         goto fail;
+     }
+ 
+-- 
+2.12.2
+
