@@ -155,7 +155,6 @@ Patch0109: 0109-sbus-check-connection-for-NULL-before-unregister-it.patch
 Patch0110: 0110-UTIL-Use-max-15-characters-for-AD-host-UPN.patch
 Patch0111: 0111-minor-typo-fixes.patch
 Patch0112: 0112-SPEC-Drop-conditional-build-for-krb5_local_auth_plug.patch
-Patch0113: 0113-README-Update-links-to-mailing-lists.patch
 Patch0114: 0114-Move-sized_output_name-and-sized_domain_name-into-re.patch
 Patch0115: 0115-IFP-Use-sized_domain_name-to-format-the-groups-the-u.patch
 Patch0116: 0116-SECRETS-remove-unused-variable.patch
