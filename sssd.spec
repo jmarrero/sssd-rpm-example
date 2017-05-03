@@ -775,8 +775,7 @@ sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
 
 make install DESTDIR=$RPM_BUILD_ROOT
 
-if [ ! -f $RPM_BUILD_ROOT/%{_libdir}/%{name}/modules/libwbclient.so.%{libwbc_lib_version}
-]
+if [ ! -f $RPM_BUILD_ROOT/%{_libdir}/%{name}/modules/libwbclient.so.%{libwbc_lib_version} ]
 then
     echo "Expected libwbclient version not found, please check if version has changed."
     exit -1
