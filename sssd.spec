@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.15.3
-Release: 0.beta.3%{?dist}
+Release: 0.beta.4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -177,6 +177,8 @@ Patch0132: 0132-cache_req-Avoid-bool-in-switch-case.patch
 Patch0133: 0133-ssh-tools-The-ai-structure-is-not-an-array.patch
 Patch0134: 0134-ssh-tools-Fix-issues-with-multiple-IP-addresses.patch
 Patch0135: 0135-ssh-tools-Split-connect-and-communication-phases.patch
+Patch0136: 0136-KCM-include-missing-header-file.patch
+Patch0137: 0137-tests-update-expired-certificate.patch
 
 
 Patch0502:  0502-SYSTEMD-Use-capabilities.patch
@@ -1378,6 +1380,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Jun 27 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-0.beta.4
+- Fix build issues: Update expided certificate in unit tests
+
 * Sat Apr 29 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-0.beta.3
 - Resolves: rhbz#1445680 - Properly fall back to local Smartcard authentication
 - Resolves: rhbz#1437199 - sssd-nfs-idmap-1.15.2-1.fc25.x86_64 conflicts with

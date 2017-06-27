@@ -1,0 +1,42 @@
+From 2186f88e0449f2303dc84e98c88379ccf8e55714 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 8 May 2017 11:56:55 +0200
+Subject: [PATCH] KCM: include missing header file
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+man 2 readv says that the header file "sys/uio.h" must be included
+for the functions readv/writev
+
+Previously, "sys/uio.h" was included in "sys/socket.h" in glibc.
+It worked just by a change. But it will be changed in glibc-2.26.
+https://sourceware.org/bugzilla/show_bug.cgi?id=21426
+
+src/responder/kcm/kcmsrv_cmd.c: In function 'kcm_iovec_op':
+src/responder/kcm/kcmsrv_cmd.c:75:15: error: implicit declaration of function
+    'readv'; did you mean 'read'? [-Werror=implicit-function-declaration]
+
+src/responder/kcm/kcmsrv_cmd.c:77:15: error: implicit declaration of function
+    'writev'; did you mean 'write'? [-Werror=implicit-function-declaration]
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/responder/kcm/kcmsrv_cmd.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/responder/kcm/kcmsrv_cmd.c b/src/responder/kcm/kcmsrv_cmd.c
+index 81015de4a91617de3dca444cde95b636c8d5c0d1..0b933f0b41e41dae1a6c14b1c1298d428c016d24 100644
+--- a/src/responder/kcm/kcmsrv_cmd.c
++++ b/src/responder/kcm/kcmsrv_cmd.c
+@@ -19,6 +19,7 @@
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
++#include <sys/uio.h>
+ #include <krb5/krb5.h>
+ 
+ #include "config.h"
+-- 
+2.13.0
+
