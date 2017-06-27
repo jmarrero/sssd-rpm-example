@@ -1,0 +1,28 @@
+From 5ecc5585fbe2cf8b3f1efb7fe3473dbcb67ff160 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 27 Jun 2017 15:12:27 +0200
+Subject: [PATCH] BUILD: Disable tests with expired certificates
+
+---
+ Makefile.am | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 5635a8c8fd681c4a17d003487e9ea440ab431407..c230d5e69320206778637ee3d30bedf9fe2e000a 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -273,11 +273,9 @@ if HAVE_CMOCKA
+         responder_cache_req-tests \
+         test_sbus_opath \
+         test_fo_srv \
+-        pam-srv-tests \
+         test_ipa_subdom_util \
+         test_tools_colondb \
+         test_krb5_wait_queue \
+-        test_cert_utils \
+         test_ldap_id_cleanup \
+         test_data_provider_be \
+         test_dp_request_table \
+-- 
+2.13.0
+

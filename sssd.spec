@@ -178,10 +178,9 @@ Patch0133: 0133-ssh-tools-The-ai-structure-is-not-an-array.patch
 Patch0134: 0134-ssh-tools-Fix-issues-with-multiple-IP-addresses.patch
 Patch0135: 0135-ssh-tools-Split-connect-and-communication-phases.patch
 Patch0136: 0136-KCM-include-missing-header-file.patch
-Patch0137: 0137-tests-update-expired-certificate.patch
-
 
 Patch0502:  0502-SYSTEMD-Use-capabilities.patch
+Patch0510: 0510-BUILD-Disable-tests-with-expired-certificates.patch
 
 ### Dependencies ###
 
