@@ -12,7 +12,7 @@
 
 # Determine the location of the LDB modules directory
 %global ldb_modulesdir %(pkg-config --variable=modulesdir ldb)
-%global ldb_version 1.1.20
+%global ldb_version 1.2.0
 
     %global with_cifs_utils_plugin 1
 
@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.15.3
-Release: 0.beta.4%{?dist}
+Release: 0.beta.5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -759,6 +759,7 @@ autoreconf -ivf
     --with-syslog=journald \
     --enable-sss-default-nss-plugin \
     --enable-files-domain \
+    --enable-ldb-version-check \
     %{?with_cifs_utils_plugin_option} \
     %{?enable_systemtap_opt} \
 
@@ -1379,6 +1380,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Jun 27 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-0.beta.5
+- Rebuild with libldb-1.2.0
+
 * Tue Jun 27 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-0.beta.4
 - Fix build issues: Update expided certificate in unit tests
 
