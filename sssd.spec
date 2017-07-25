@@ -93,7 +93,7 @@ BuildRequires: libxml2
 BuildRequires: docbook-style-xsl
 BuildRequires: krb5-devel
 BuildRequires: c-ares-devel
-BuildRequires: python-devel
+BuildRequires: python2-devel
 BuildRequires: python3-devel
 BuildRequires: check-devel
 BuildRequires: doxygen
