@@ -25,7 +25,7 @@
 
     %global with_kcm 1
 
-%global libwbc_alternatives_version 0.13
+%global libwbc_alternatives_version 0.14
 %global libwbc_lib_version %{libwbc_alternatives_version}.0
 %global libwbc_alternatives_suffix %nil
 %if 0%{?__isa_bits} == 64
@@ -34,153 +34,17 @@
 
 Name: sssd
 Version: 1.15.3
-Release: 0.beta.5%{?dist}
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
-Source0: https://releases.pagure.org/SSSD/sssd/%{name}-1.15.2.tar.gz
-BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-1.15.2-%{release}-XXXXXX)
+Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
+BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-Updating-the-version-for-the-1.15.3-release.patch
-Patch0002: 0002-UTIL-Typo-in-comment.patch
-Patch0003: 0003-MAN-Mention-sssd-secrets-in-SEE-ALSO-section.patch
-Patch0004: 0004-split_on_separator-move-to-a-separate-file.patch
-Patch0005: 0005-util-move-string_in_list-to-util_ext.patch
-Patch0006: 0006-certmap-add-new-library-libsss_certmap.patch
-Patch0007: 0007-certmap-add-placeholder-for-OpenSSL-implementation.patch
-Patch0008: 0008-sysdb-add-sysdb_attrs_copy.patch
-Patch0009: 0009-sdap_get_users_send-new-argument-mapped_attrs.patch
-Patch0010: 0010-LDAP-always-store-the-certificate-from-the-request.patch
-Patch0011: 0011-sss_cert_derb64_to_ldap_filter-add-sss_certmap-suppo.patch
-Patch0012: 0012-sysdb-add-certmap-related-calls.patch
-Patch0013: 0013-IPA-add-certmap-support.patch
-Patch0014: 0014-nss-idmap-add-sss_nss_getlistbycert.patch
-Patch0015: 0015-nss-allow-larger-buffer-for-certificate-based-reques.patch
-Patch0016: 0016-IPA-Add-s2n-request-to-string-function.patch
-Patch0017: 0017-IPA-Enhance-debug-logging-for-ipa-s2n-operations.patch
-Patch0018: 0018-UTIL-iobuf-Make-input-parameter-for-the-readonly-ope.patch
-Patch0019: 0019-UTIL-Fix-a-typo-in-the-tcurl-test-tool.patch
-Patch0020: 0020-UTIL-Add-SAFEALIGN_COPY_UINT8_CHECK.patch
-Patch0021: 0021-UTIL-Add-utility-macro-cli_creds_get_gid.patch
-Patch0022: 0022-UTIL-Add-type-specific-getsetters-to-sss_iobuf.patch
-Patch0023: 0023-UTIL-krb5-principal-un-marshalling.patch
-Patch0024: 0024-KCM-Initial-responder-build-and-packaging.patch
-Patch0025: 0025-KCM-request-parsing-and-sending-a-reply.patch
-Patch0026: 0026-KCM-Implement-an-internal-ccache-storage-and-retriev.patch
-Patch0027: 0027-KCM-Add-a-in-memory-credential-storage.patch
-Patch0028: 0028-KCM-Implement-KCM-server-operations.patch
-Patch0029: 0029-MAN-Add-a-manual-page-for-sssd-kcm.patch
-Patch0030: 0030-TESTS-Add-integration-tests-for-the-KCM-responder.patch
-Patch0031: 0031-SECRETS-Create-DB-path-before-the-operation-itself.patch
-Patch0032: 0032-SECRETS-Return-a-nicer-error-message-on-request-with.patch
-Patch0033: 0033-SECRETS-Store-ccaches-in-secrets-for-the-KCM-respond.patch
-Patch0034: 0034-TCURL-Support-HTTP-POST-for-creating-containers.patch
-Patch0035: 0035-KCM-Store-ccaches-in-secrets.patch
-Patch0036: 0036-KCM-Make-the-secrets-ccache-back-end-configurable-ma.patch
-Patch0037: 0037-KCM-Queue-requests-by-the-same-UID.patch
-Patch0038: 0038-KCM-Idle-terminate-the-responder-if-the-secrets-back.patch
-Patch0039: 0039-SSSDConfig-Python-3.6-invalid-escape-sequence-deprec.patch
-Patch0040: 0040-CONFIGURE-Fix-fallback-if-pkg-config-for-uuid-is-mis.patch
-Patch0041: 0041-intg-fix-configure-failure-with-strict-cflags.patch
-Patch0042: 0042-intg-Remove-bashism-from-intgcheck-prepare.patch
-Patch0043: 0043-UTIL-Introduce-subdomain_create_conf_path.patch
-Patch0044: 0044-SUBDOMAINS-Allow-use_fully_qualified_names-for-subdo.patch
-Patch0045: 0045-CACHE_REQ-Descend-into-subdomains-on-lookups.patch
-Patch0046: 0046-NSS-TESTS-Fix-subdomains-attribution.patch
-Patch0047: 0047-NSS-TESTS-Improve-setup-teardown-for-subdomains-test.patch
-Patch0048: 0048-NSS-TESTS-Include-searches-for-non-fqnames-members-o.patch
-Patch0049: 0049-SYSDB-Add-methods-to-deal-with-the-domain-s-resoluti.patch
-Patch0050: 0050-SYSDB-TESTS-Add-tests-for-the-domain-s-resolution-or.patch
-Patch0051: 0051-IPA-Get-ipaDomainsResolutionOrder-from-ipaConfig.patch
-Patch0052: 0052-IPA_SUBDOMAINS-Rename-_refresh_view-to-_refresh_view.patch
-Patch0053: 0053-IPA-Get-ipaDomainsResolutionOrder-from-IPA-ID-View.patch
-Patch0054: 0054-DLINKLIST-Add-DLIST_FOR_EACH_SAFE-macro.patch
-Patch0055: 0055-CACHE_REQ-Make-use-of-domainResolutionOrder.patch
-Patch0056: 0056-UTIL-Expose-replace_char-as-sss_replace_char.patch
-Patch0057: 0057-Add-domain_resolution_order-config-option.patch
-Patch0058: 0058-ssh-handle-binary-keys-correctly.patch
-Patch0059: 0059-ssh-add-support-for-certificates-from-non-default-vi.patch
-Patch0060: 0060-krb5-return-to-responder-that-pkinit-is-not-availabl.patch
-Patch0061: 0061-IPA-add-mapped-attributes-to-user-from-trusted-domai.patch
-Patch0062: 0062-IPA-lookup-AD-users-by-certificates-on-IPA-clients.patch
-Patch0063: 0063-IPA-enable-AD-user-lookup-by-certificate.patch
-Patch0064: 0064-CONFDB-Introduce-SSSD-domain-type-to-distinguish-POS.patch
-Patch0065: 0065-CONFDB-Allow-configuring-application-sections-as-non.patch
-Patch0066: 0066-CACHE_REQ-Domain-type-selection-in-cache_req.patch
-Patch0067: 0067-IFP-Search-both-POSIX-and-non-POSIX-domains.patch
-Patch0068: 0068-IFP-ListByName-Don-t-crash-when-no-results-are-found.patch
-Patch0069: 0069-PAM-Remove-unneeded-memory-context.patch
-Patch0070: 0070-PAM-Add-application-services.patch
-Patch0071: 0071-SYSDB-Allow-storing-non-POSIX-users.patch
-Patch0072: 0072-SYSDB-Only-generate-new-UID-in-local-domain.patch
-Patch0073: 0073-LDAP-save-non-POSIX-users-in-application-domains.patch
-Patch0074: 0074-LDAP-Relax-search-filters-in-application-domains.patch
-Patch0075: 0075-KRB5-Authenticate-users-in-a-non-POSIX-domain-using-.patch
-Patch0076: 0076-KCM-Fix-off-by-one-error-in-secrets-key-parsing.patch
-Patch0077: 0077-tcurl-add-support-for-ssl-and-raw-output.patch
-Patch0078: 0078-tcurl-test-refactor-so-new-options-can-be-added-more.patch
-Patch0079: 0079-tcurl-test-add-support-for-raw-output.patch
-Patch0080: 0080-tcurl-test-add-support-for-tls-settings.patch
-Patch0081: 0081-tcurl-add-support-for-http-basic-auth.patch
-Patch0082: 0082-tcurl-test-allow-to-set-custom-headers.patch
-Patch0083: 0083-tcurl-test-add-support-for-client-certificate.patch
-Patch0084: 0084-ci-do-not-build-secrets-on-rhel6.patch
-Patch0085: 0085-build-make-curl-required-by-secrets.patch
-Patch0086: 0086-secrets-use-tcurl-in-proxy-provider.patch
-Patch0087: 0087-secrets-remove-http-parser-code-in-proxy-provider.patch
-Patch0088: 0088-secrets-allow-to-configure-certificate-check.patch
-Patch0089: 0089-secrets-support-HTTP-basic-authentication-with-proxy.patch
-Patch0090: 0090-secrets-fix-debug-message.patch
-Patch0091: 0091-secrets-always-add-Content-Length-header.patch
-Patch0092: 0092-sss_iobuf-fix-read-shadows-a-global-declaration.patch
-Patch0093: 0093-configure-fix-typo.patch
-Patch0094: 0094-libsss_certmap-Accept-certificate-with-data-before-h.patch
-Patch0095: 0095-BUILD-Fix-compilation-of-libsss_certmap-with-libcryp.patch
-Patch0096: 0096-responders-do-not-leak-selinux-context-on-clients-de.patch
-Patch0097: 0097-ipa_s2n_get_acct_info_send-provide-correct-req_input.patch
-Patch0098: 0098-selinux-Do-not-fail-if-SELinux-is-not-managed.patch
-Patch0099: 0099-DP-Fix-typo.patch
-Patch0100: 0100-CONFDB-Fix-handling-of-enable_files_domain.patch
-Patch0101: 0101-pam_test_client-add-service-and-environment-to-PAM-t.patch
-Patch0102: 0102-pam_test_client-add-SSSD-getpwnam-lookup.patch
-Patch0103: 0103-sss_sifp-update-method-names.patch
-Patch0104: 0104-pam_test_client-add-InfoPipe-user-lookup.patch
-Patch0105: 0105-sssctl-integrate-pam_test_client-into-sssctl.patch
-Patch0106: 0106-i18n-adding-sssctl-files.patch
-Patch0107: 0107-config-check-Message-when-sssd.conf-is-missing.patch
-Patch0108: 0108-KRB5_LOCATOR-add-env-variable-to-disable-plugin.patch
-Patch0109: 0109-sbus-check-connection-for-NULL-before-unregister-it.patch
-Patch0110: 0110-UTIL-Use-max-15-characters-for-AD-host-UPN.patch
-Patch0111: 0111-minor-typo-fixes.patch
-Patch0112: 0112-SPEC-Drop-conditional-build-for-krb5_local_auth_plug.patch
-Patch0114: 0114-Move-sized_output_name-and-sized_domain_name-into-re.patch
-Patch0115: 0115-IFP-Use-sized_domain_name-to-format-the-groups-the-u.patch
-Patch0116: 0116-SECRETS-remove-unused-variable.patch
-Patch0117: 0117-IPA-Improve-DEBUG-message-if-a-group-has-no-ipaNTSec.patch
-Patch0118: 0118-RESPONDER-Fallback-to-global-domain-resolution-order.patch
-Patch0119: 0119-NSS-TESTS-Improve-non-fqnames-tests.patch
-Patch0120: 0120-CACHE_REQ-Allow-configurationless-shortname-lookups.patch
-Patch0121: 0121-CACHE_REQ_DOMAIN-Add-some-comments-to-cache_req_doma.patch
-Patch0122: 0122-RESPONDER_COMMON-Improve-domaiN_resolution_order-deb.patch
-Patch0123: 0123-CACHE_REQ_DOMAIN-debug-the-set-domain-resolution-ord.patch
-Patch0124: 0124-LDAP-Allow-passing-a-NULL-map-to-sdap_search_bases_e.patch
-Patch0125: 0125-IPA-Use-search-bases-instead-of-domain_to_basedn-whe.patch
-Patch0126: 0126-CONFDB-Fix-standalone-application-domains.patch
-Patch0127: 0127-utils-add-sss_domain_is_forest_root.patch
-Patch0128: 0128-ad-handle-forest-root-not-listed-in-ad_enabled_domai.patch
-Patch0129: 0129-overrides-add-certificates-to-mapped-attribute.patch
-Patch0130: 0130-IPA-Improve-s2n-debug-message-for-missing-ipaNTSecur.patch
-Patch0131: 0131-Use-correct-spelling-of-override.patch
-Patch0132: 0132-cache_req-Avoid-bool-in-switch-case.patch
-Patch0133: 0133-ssh-tools-The-ai-structure-is-not-an-array.patch
-Patch0134: 0134-ssh-tools-Fix-issues-with-multiple-IP-addresses.patch
-Patch0135: 0135-ssh-tools-Split-connect-and-communication-phases.patch
-Patch0136: 0136-KCM-include-missing-header-file.patch
-
-Patch0502:  0502-SYSTEMD-Use-capabilities.patch
-Patch0510: 0510-BUILD-Disable-tests-with-expired-certificates.patch
+Patch0501: 0501-libwbclient-sssd-update-interface-to-version-0.14.patch
+Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 
 ### Dependencies ###
 
@@ -256,10 +120,8 @@ BuildRequires: samba4-devel
 BuildRequires: libsmbclient-devel
 BuildRequires: systemtap-sdt-devel
 BuildRequires: http-parser-devel
-BuildRequires: jansson-devel
-BuildRequires: libcurl-devel
-BuildRequires: jansson-devel
 BuildRequires: libuuid-devel
+BuildRequires: jansson-devel
 BuildRequires: libcurl-devel
 
 %description
@@ -280,6 +142,8 @@ License: GPLv3+
 Conflicts: selinux-policy < 3.10.0-46
 Conflicts: sssd < 1.10.0-8%{?dist}.beta2
 # Requires
+# due to ABI changes in 1.1.30/1.2.0
+Requires: libldb >= %{ldb_version}
 Requires: sssd-client%{?_isa} = %{version}-%{release}
 Recommends: libsss_sudo = %{version}-%{release}
 Recommends: libsss_autofs%{?_isa} = %{version}-%{release}
@@ -731,7 +595,7 @@ UpdateTimestamps() {
   done
 }
 
-%setup -q -n sssd-1.15.2
+%setup -q
 
 for p in %patches ; do
     %__patch -p1 -i $p
@@ -759,7 +623,6 @@ autoreconf -ivf
     --with-syslog=journald \
     --enable-sss-default-nss-plugin \
     --enable-files-domain \
-    --enable-ldb-version-check \
     %{?with_cifs_utils_plugin_option} \
     %{?enable_systemtap_opt} \
 
@@ -1250,8 +1113,8 @@ done
 
 %files kcm -f sssd_kcm.lang
 %{_libexecdir}/%{servicename}/sssd_kcm
-%dir %{_sysconfdir}/krb5.conf.d
-%config(noreplace) %{_sysconfdir}/krb5.conf.d/kcm_default_ccache
+%dir %{_datadir}/sssd-kcm
+%{_datadir}/sssd-kcm/kcm_default_ccache
 %{_unitdir}/sssd-kcm.socket
 %{_unitdir}/sssd-kcm.service
 %{_mandir}/man8/sssd-kcm.8*
@@ -1380,6 +1243,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Jul 25 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-1
+- New upstream release 1.15.3
+- https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_15_3.html
+
 * Tue Jun 27 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-0.beta.5
 - Rebuild with libldb-1.2.0
 
