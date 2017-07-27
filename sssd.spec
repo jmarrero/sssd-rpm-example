@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.15.3
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1243,6 +1243,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Jul 27 2017 Fedora Release Engineering <releng@fedoraproject.org> - 1.15.3-2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_27_Mass_Rebuild
+
 * Tue Jul 25 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-1
 - New upstream release 1.15.3
 - https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_15_3.html
