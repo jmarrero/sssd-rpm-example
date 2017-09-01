@@ -653,6 +653,11 @@ install -m644 src/examples/logrotate $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/s
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/rwtab.d
 install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
 
+# Kerberos KCM credential cache by default
+mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d
+cp $RPM_BUILD_ROOT/%{_datadir}/sssd-kcm/kcm_default_ccache \
+   $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d/kcm_default_ccache
+
 # Create directory for cifs-idmap alternative
 # Otherwise this directory could not be owned by sssd-client
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/cifs-utils
@@ -1104,6 +1109,7 @@ done
 
 %files kcm -f sssd_kcm.lang
 %{_libexecdir}/%{servicename}/sssd_kcm
+%config(noreplace) %{_sysconfdir}/krb5.conf.d/kcm_default_ccache
 %dir %{_datadir}/sssd-kcm
 %{_datadir}/sssd-kcm/kcm_default_ccache
 %{_unitdir}/sssd-kcm.socket
