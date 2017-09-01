@@ -110,9 +110,7 @@ BuildRequires: uid_wrapper
 BuildRequires: nss_wrapper
 BuildRequires: libnl3-devel
 BuildRequires: systemd-devel
-%if (0%{?with_cifs_utils_plugin} == 1)
 BuildRequires: cifs-utils-devel
-%endif
 BuildRequires: libnfsidmap-devel
 BuildRequires: samba4-devel
 BuildRequires: libsmbclient-devel
@@ -655,11 +653,9 @@ install -m644 src/examples/logrotate $RPM_BUILD_ROOT%{_sysconfdir}/logrotate.d/s
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/rwtab.d
 install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
 
-%if (0%{?with_cifs_utils_plugin} == 1)
 # Create directory for cifs-idmap alternative
 # Otherwise this directory could not be owned by sssd-client
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/cifs-utils
-%endif
 
 # Remove .la files created by libtool
 find $RPM_BUILD_ROOT -name "*.la" -exec rm -f {} \;
@@ -943,12 +939,10 @@ done
 %{_libdir}/security/pam_sss.so
 %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
 %{_libdir}/krb5/plugins/authdata/sssd_pac_plugin.so
-%if (0%{?with_cifs_utils_plugin} == 1)
 %dir %{_libdir}/cifs-utils
 %{_libdir}/cifs-utils/cifs_idmap_sss.so
 %dir %{_sysconfdir}/cifs-utils
 %ghost %{_sysconfdir}/cifs-utils/idmap-plugin
-%endif
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/modules
 %{_libdir}/%{name}/modules/sssd_krb5_localauth_plugin.so
@@ -1174,7 +1168,6 @@ done
 %systemd_postun_with_restart sssd-kcm.socket
 %systemd_postun_with_restart sssd-kcm.service
 
-%if (0%{?with_cifs_utils_plugin} == 1)
 %post client
 /sbin/ldconfig
 /usr/sbin/alternatives --install /etc/cifs-utils/idmap-plugin cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so 20
@@ -1183,9 +1176,6 @@ done
 if [ $1 -eq 0 ] ; then
         /usr/sbin/alternatives --remove cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so
 fi
-%else
-%post client -p /sbin/ldconfig
-%endif
 
 %postun client -p /sbin/ldconfig
 
