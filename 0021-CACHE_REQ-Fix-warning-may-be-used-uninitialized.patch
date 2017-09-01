@@ -1,0 +1,32 @@
+From 9d90396775715de66e735dd55826e35f311450af Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 31 Jul 2017 09:21:31 +0200
+Subject: [PATCH 21/93] CACHE_REQ: Fix warning may be used uninitialized
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Setting ret as EOK in case everything goes well.
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
+---
+ src/responder/common/cache_req/cache_req_sr_overlay.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/responder/common/cache_req/cache_req_sr_overlay.c b/src/responder/common/cache_req/cache_req_sr_overlay.c
+index 4d1111b04938032447e112258873827ddfbe9b2b..6193f7b000ecc2ee29c462325691d11d67bcfa65 100644
+--- a/src/responder/common/cache_req/cache_req_sr_overlay.c
++++ b/src/responder/common/cache_req/cache_req_sr_overlay.c
+@@ -204,6 +204,8 @@ static errno_t cache_req_sr_overlay_match_users(
+         }
+     }
+ 
++    ret = EOK;
++
+ done:
+     talloc_zfree(tmp_ctx);
+     return ret;
+-- 
+2.14.1
+

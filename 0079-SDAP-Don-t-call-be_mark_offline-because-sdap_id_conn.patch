@@ -1,0 +1,44 @@
+From 5a117d36030f589cc04430ea1c6c328a8fdb903f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 28 Aug 2017 16:38:40 +0200
+Subject: [PATCH 79/93] SDAP: Don't call be_mark_offline() because
+ sdap_id_conn_data_set_expire_timer() failed
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Marking the whole backend as offline because
+sdap_id_conn_data_set_expire_timer() failed doesn't look any right and
+from now on let's avoiding doing so.
+
+Related: https://pagure.io/SSSD/sssd/issue/2976
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ldap/sdap_id_op.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/providers/ldap/sdap_id_op.c b/src/providers/ldap/sdap_id_op.c
+index 85622663598d3091f735d56b5c81f9b36506a085..e7ff5464c06fdc3df9bce40315e91af2cc3b85d1 100644
+--- a/src/providers/ldap/sdap_id_op.c
++++ b/src/providers/ldap/sdap_id_op.c
+@@ -592,6 +592,14 @@ static void sdap_id_op_connect_done(struct tevent_req *subreq)
+             }
+         }
+         ret = sdap_id_conn_data_set_expire_timer(conn_data);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  "sdap_id_conn_data_set_expire_timer() failed [%d]: %s",
++                  ret, sss_strerror(ret));
++            /* Avoid causing the whole backend to be marked as offline because
++             * this operation failed. */
++            ret = EOK;
++        }
+         sdap_steal_server_opts(conn_cache->id_conn->id_ctx, &srv_opts);
+     }
+ 
+-- 
+2.14.1
+

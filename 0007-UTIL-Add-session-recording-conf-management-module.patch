@@ -1,0 +1,236 @@
+From 99b96048b79b0228c3f7c431ea12010f7bd5b362 Mon Sep 17 00:00:00 2001
+From: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
+Date: Fri, 17 Mar 2017 12:41:02 +0200
+Subject: [PATCH 07/93] UTIL: Add session recording conf management module
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add an util module for loading session recording configuration.
+To be used by responders and data provider.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                  |   1 +
+ src/util/session_recording.c | 113 +++++++++++++++++++++++++++++++++++++++++++
+ src/util/session_recording.h |  76 +++++++++++++++++++++++++++++
+ 3 files changed, 190 insertions(+)
+ create mode 100644 src/util/session_recording.c
+ create mode 100644 src/util/session_recording.h
+
+diff --git a/Makefile.am b/Makefile.am
+index 7f6c47c5b77f0a7348045565284525233a17e58a..e57d40fb7b1f6fa8fd2662864bcc231e5015e9d7 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -653,6 +653,7 @@ dist_noinst_HEADERS = \
+     src/util/io.h \
+     src/util/util_errors.h \
+     src/util/safe-format-string.h \
++    src/util/session_recording.h \
+     src/util/strtonum.h \
+     src/util/sss_cli_cmd.h \
+     src/util/sss_ptr_hash.h \
+diff --git a/src/util/session_recording.c b/src/util/session_recording.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..fa480c47881ba934ab01fa9acaa67ac3892ec51a
+--- /dev/null
++++ b/src/util/session_recording.c
+@@ -0,0 +1,113 @@
++/*
++    SSSD
++
++    Session recording utilities
++
++    Authors:
++        Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "util/session_recording.h"
++#include "util/debug.h"
++#include <string.h>
++#include <errno.h>
++#include <sys/types.h>
++#include <sys/stat.h>
++#include <unistd.h>
++
++errno_t session_recording_conf_load(TALLOC_CTX *mem_ctx,
++                                    struct confdb_ctx *cdb,
++                                    struct session_recording_conf *pconf)
++{
++    int ret;
++    char *str;
++    struct stat s;
++
++    if (cdb == NULL || pconf == NULL) {
++        ret = EINVAL;
++        goto done;
++    }
++
++    /* Read session_recording/scope option */
++    ret = confdb_get_string(cdb, mem_ctx, CONFDB_SESSION_RECORDING_CONF_ENTRY,
++                            CONFDB_SESSION_RECORDING_SCOPE, "none", &str);
++    if (ret != EOK) goto done;
++    if (strcasecmp(str, "none") == 0) {
++        pconf->scope = SESSION_RECORDING_SCOPE_NONE;
++    } else if (strcasecmp(str, "some") == 0) {
++        pconf->scope = SESSION_RECORDING_SCOPE_SOME;
++    } else if (strcasecmp(str, "all") == 0) {
++        pconf->scope = SESSION_RECORDING_SCOPE_ALL;
++    } else {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Unknown value for session recording scope: %s\n",
++              str);
++        ret = EINVAL;
++        goto done;
++    }
++
++    /* If session recording is enabled at all */
++    if (pconf->scope != SESSION_RECORDING_SCOPE_NONE) {
++        /* Check that the shell exists and is executable */
++        ret = stat(SESSION_RECORDING_SHELL, &s);
++        if (ret != 0) {
++            switch (errno) {
++            case ENOENT:
++                DEBUG(SSSDBG_OP_FAILURE,
++                      "Session recording shell \"%s\" not found\n",
++                      SESSION_RECORDING_SHELL);
++                ret = EINVAL;
++                goto done;
++            case EOK:
++                if ((s.st_mode & 0111) != 0111) {
++                    DEBUG(SSSDBG_OP_FAILURE,
++                          "Session recording shell \"%s\" is not executable\n",
++                          SESSION_RECORDING_SHELL);
++                    ret = EINVAL;
++                    goto done;
++                }
++                break;
++            default:
++                DEBUG(SSSDBG_OP_FAILURE,
++                      "Failed checking for session recording shell "
++                      "\"%s\": %s\n",
++                      SESSION_RECORDING_SHELL, strerror(errno));
++                ret = EINVAL;
++                goto done;
++            }
++        }
++    }
++
++    /* Read session_recording/users option */
++    ret = confdb_get_string_as_list(cdb, mem_ctx,
++                                    CONFDB_SESSION_RECORDING_CONF_ENTRY,
++                                    CONFDB_SESSION_RECORDING_USERS,
++                                    &pconf->users);
++    if (ret != EOK && ret != ENOENT) goto done;
++
++    /* Read session_recording/groups option */
++    ret = confdb_get_string_as_list(cdb, mem_ctx,
++                                    CONFDB_SESSION_RECORDING_CONF_ENTRY,
++                                    CONFDB_SESSION_RECORDING_GROUPS,
++                                    &pconf->groups);
++    if (ret != EOK && ret != ENOENT) goto done;
++
++    ret = EOK;
++done:
++    return ret;
++}
+diff --git a/src/util/session_recording.h b/src/util/session_recording.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..69fb1a8bc48743ef135d8ee0f64ee758f246f9aa
+--- /dev/null
++++ b/src/util/session_recording.h
+@@ -0,0 +1,76 @@
++/*
++    SSSD
++
++    Session recording utilities
++
++    Authors:
++        Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef __SESSION_RECORDING_H__
++#define __SESSION_RECORDING_H__
++
++#include "confdb/confdb.h"
++#include "util/util_errors.h"
++
++/** Scope of users/groups whose session should be recorded */
++enum session_recording_scope {
++    SESSION_RECORDING_SCOPE_NONE,   /**< None, no users/groups */
++    SESSION_RECORDING_SCOPE_SOME,   /**< Some users/groups specified elsewhere */
++    SESSION_RECORDING_SCOPE_ALL     /**< All users/groups */
++};
++
++/** Session recording configuration (from "session_recording" section) */
++struct session_recording_conf {
++    /**
++     * Session recording scope:
++     * whether to record nobody, everyone, or some users/groups
++     */
++    enum session_recording_scope    scope;
++    /**
++     * NULL-terminated list of users whose session should be recorded.
++     * Can be NULL, meaning empty list. Only applicable if scope is "some".
++     */
++    char                          **users;
++    /**
++     * NULL-terminated list of groups, members of which should have their
++     * sessions recorded. Can be NULL, meaning empty list. Only applicable if
++     * scope is "some"
++     */
++    char                          **groups;
++};
++
++/**
++ * Load session recording configuration from configuration database.
++ *
++ * @param mem_ctx   Memory context to allocate data with.
++ * @param cdb       The configuration database connection object to retrieve
++ *                  data from.
++ * @param pconf     Location for the loaded session recording configuration.
++ *
++ * @return Status code:
++ *          ENOMEM - memory allocation failed,
++ *          EINVAL - configuration was invalid,
++ *          EIO - an I/O error occurred while communicating with the ConfDB.
++ */
++extern errno_t session_recording_conf_load(
++                                    TALLOC_CTX *mem_ctx,
++                                    struct confdb_ctx *cdb,
++                                    struct session_recording_conf *pconf);
++
++#endif /* __SESSION_RECORDING_H__ */
+-- 
+2.14.1
+

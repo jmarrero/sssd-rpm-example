@@ -1,0 +1,113 @@
+From 555f43b491f40e0237b8677565a748b929092bee Mon Sep 17 00:00:00 2001
+From: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
+Date: Tue, 20 Dec 2016 10:16:47 +0200
+Subject: [PATCH 05/93] CONFIG: Add session_recording section
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add information on "session_recording" config section, having three
+options: "scope", "users", and "groups".
+
+The section is intended for disabling session recording ("scope = none",
+default), enabling session recording for all users ("scope = all"), and
+enabling it for some specific users and/or groups ("scope = some",
+"users = <users>", "groups = <groups>").
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/confdb/confdb.h          |  6 ++++++
+ src/config/SSSDConfigTest.py |  6 ++++--
+ src/config/cfg_rules.ini     | 10 ++++++++++
+ src/config/etc/sssd.api.conf |  6 ++++++
+ 4 files changed, 26 insertions(+), 2 deletions(-)
+
+diff --git a/src/confdb/confdb.h b/src/confdb/confdb.h
+index 2ba1bc47ee11f699726cefaf7c3335d2a8afee49..3773358374064c68b2ae254fd18f43ca4c43d834 100644
+--- a/src/confdb/confdb.h
++++ b/src/confdb/confdb.h
+@@ -162,6 +162,12 @@
+ #define CONFDB_IFP_USER_ATTR_LIST "user_attributes"
+ #define CONFDB_IFP_WILDCARD_LIMIT "wildcard_limit"
+ 
++/* Session Recording */
++#define CONFDB_SESSION_RECORDING_CONF_ENTRY "config/session_recording"
++#define CONFDB_SESSION_RECORDING_SCOPE "scope"
++#define CONFDB_SESSION_RECORDING_USERS "users"
++#define CONFDB_SESSION_RECORDING_GROUPS "groups"
++
+ /* Domains */
+ #define CONFDB_DOMAIN_PATH_TMPL "config/domain/%s"
+ #define CONFDB_DOMAIN_BASEDN "cn=domain,cn=config"
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index 4f87c52579aebc204671796cc8f3ca13146d3159..5f3ff3958d033dded386850a8653db9872fe4718 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -1417,7 +1417,8 @@ class SSSDConfigTestSSSDConfig(unittest.TestCase):
+             'ssh',
+             'pac',
+             'ifp',
+-            'secrets']
++            'secrets',
++            'session_recording']
+         for section in control_list:
+             self.assertTrue(sssdconfig.has_section(section),
+                             "Section [%s] missing" %
+@@ -1511,7 +1512,8 @@ class SSSDConfigTestSSSDConfig(unittest.TestCase):
+             'ssh',
+             'pac',
+             'ifp',
+-            'secrets']
++            'secrets',
++            'session_recording']
+         service_list = sssdconfig.list_services()
+         for service in control_list:
+             self.assertTrue(service in service_list,
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index 4643467718bb99b608c89b3762f08fb9779dae4b..4537d0fe87d7084cdff5e591451298393b7f632f 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -10,6 +10,7 @@ section = pac
+ section = ifp
+ section = secrets
+ section = kcm
++section = session_recording
+ section_re = ^secrets/users/[0-9]\+$
+ section_re = ^domain/[^/\@]\+$
+ section_re = ^domain/[^/\@]\+/[^/\@]\+$
+@@ -294,6 +295,15 @@ option = socket_path
+ option = ccache_storage
+ option = responder_idle_timeout
+ 
++# Session recording
++[rule/allowed_session_recording_options]
++validator = ini_allowed_options
++section_re = ^session_recording$
++
++option = scope
++option = users
++option = groups
++
+ [rule/allowed_domain_options]
+ validator = ini_allowed_options
+ section_re = ^\(domain\|application\)/[^/]\+$
+diff --git a/src/config/etc/sssd.api.conf b/src/config/etc/sssd.api.conf
+index 48d3b53f611621711e3be3c50f909f9fc61408f4..ef910f0dfc96241feca6db241219783d774891ef 100644
+--- a/src/config/etc/sssd.api.conf
++++ b/src/config/etc/sssd.api.conf
+@@ -121,6 +121,12 @@ cacert = str, None, false
+ cert = str, None, false
+ key = str, None, false
+ 
++[session_recording]
++# Session recording service
++scope = str, None, false
++users = list, str, false
++groups = list, str, false
++
+ [provider]
+ #Available provider types
+ id_provider = str, None, true
+-- 
+2.14.1
+

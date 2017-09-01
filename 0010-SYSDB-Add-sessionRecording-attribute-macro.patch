@@ -1,0 +1,40 @@
+From 90fb7d3e61423ff1375e9f552f4b58e5173ad3d1 Mon Sep 17 00:00:00 2001
+From: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
+Date: Fri, 17 Mar 2017 12:35:51 +0200
+Subject: [PATCH 10/93] SYSDB: Add sessionRecording attribute macro
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add a macro for sessionRecording attribute to sysdb.h.
+To be used for storing a boolean attribute signifying if session
+recording is enabled for the user.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/db/sysdb.h | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/src/db/sysdb.h b/src/db/sysdb.h
+index b045684db0c8e6e68842b72b3830481b73cf2cbe..f4cad577b97e737613e11d063fe7a8664faed624 100644
+--- a/src/db/sysdb.h
++++ b/src/db/sysdb.h
+@@ -186,6 +186,7 @@
+ #define SYSDB_OVERRIDE_OBJECT_DN "overrideObjectDN"
+ #define SYSDB_USE_DOMAIN_RESOLUTION_ORDER "useDomainResolutionOrder"
+ #define SYSDB_DOMAIN_RESOLUTION_ORDER "domainResolutionOrder"
++#define SYSDB_SESSION_RECORDING "sessionRecording"
+ 
+ #define SYSDB_NEXTID_FILTER "("SYSDB_NEXTID"=*)"
+ 
+@@ -238,6 +239,7 @@
+                         SYSDB_OVERRIDE_DN, \
+                         SYSDB_OVERRIDE_OBJECT_DN, \
+                         SYSDB_DEFAULT_OVERRIDE_NAME, \
++                        SYSDB_SESSION_RECORDING, \
+                         SYSDB_UUID, \
+                         SYSDB_ORIG_DN, \
+                         NULL}
+-- 
+2.14.1
+

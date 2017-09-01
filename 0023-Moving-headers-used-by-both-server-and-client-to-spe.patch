@@ -1,0 +1,350 @@
+From 3996e391054a1c02ab62e1541ae21a8204bd5d0a Mon Sep 17 00:00:00 2001
+From: AmitKumar <amitkuma@redhat.com>
+Date: Sun, 23 Jul 2017 05:19:27 +0530
+Subject: [PATCH 23/93] Moving headers used by both server and client to
+ special folder
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+These are the header files which are used by both client and server:
+src/util/io.h
+src/util/murmurhash3.h
+src/util/util_safealign.h
+
+This patch is about moving these header files to special folder
+(src/shared). It will be easier to identify these headers when looking
+for them in the src tree.
+util_safalign.h is renamed as safalign.h because util_ namespace is
+appropriate when this file belonged to the util's folder which is no
+longer the case.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/1898
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ Makefile.am                                       |  6 +++---
+ src/lib/idmap/sss_idmap.c                         |  2 +-
+ src/providers/ldap/sdap_idmap.c                   |  2 +-
+ src/python/pysss_murmur.c                         |  2 +-
+ src/{util => shared}/io.h                         |  5 -----
+ src/{util => shared}/murmurhash3.h                |  4 ----
+ src/{util/util_safealign.h => shared/safealign.h} | 12 +++---------
+ src/sss_client/nss_mc_common.c                    |  2 +-
+ src/sss_client/nss_mc_group.c                     |  2 +-
+ src/sss_client/nss_mc_initgr.c                    |  2 +-
+ src/sss_client/sss_cli.h                          |  2 +-
+ src/tests/cmocka/test_inotify.c                   |  2 +-
+ src/tests/cmocka/test_io.c                        |  2 +-
+ src/tests/util-tests.c                            |  2 +-
+ src/util/io.c                                     |  2 +-
+ src/util/mmap_cache.h                             |  2 +-
+ src/util/murmurhash3.c                            |  2 +-
+ src/util/util.h                                   |  4 ++--
+ 18 files changed, 21 insertions(+), 36 deletions(-)
+ rename src/{util => shared}/io.h (85%)
+ rename src/{util => shared}/murmurhash3.h (77%)
+ rename src/{util/util_safealign.h => shared/safealign.h} (95%)
+
+diff --git a/Makefile.am b/Makefile.am
+index 62e0baf76df2a99329f7f9c77b2e9267b7dfca91..faa2fbabab1ac727edbb1b5bdcbbebebc4a9fbf2 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -652,7 +652,6 @@ dist_noinst_HEADERS = \
+     src/util/dlinklist.h \
+     src/util/debug.h \
+     src/util/util.h \
+-    src/util/io.h \
+     src/util/util_errors.h \
+     src/util/safe-format-string.h \
+     src/util/session_recording.h \
+@@ -673,13 +672,11 @@ dist_noinst_HEADERS = \
+     src/util/refcount.h \
+     src/util/find_uid.h \
+     src/util/user_info_msg.h \
+-    src/util/murmurhash3.h \
+     src/util/mmap_cache.h \
+     src/util/atomic_io.h \
+     src/util/auth_utils.h \
+     src/util/authtok.h \
+     src/util/authtok-utils.h \
+-    src/util/util_safealign.h \
+     src/util/util_sss_idmap.h \
+     src/util/util_creds.h \
+     src/util/inotify.h \
+@@ -849,6 +846,9 @@ dist_noinst_HEADERS = \
+     src/tools/common/sss_colondb.h \
+     src/tools/sssctl/sssctl.h \
+     src/util/probes.h \
++    src/shared/io.h \
++    src/shared/murmurhash3.h \
++    src/shared/safealign.h \
+     $(NULL)
+ 
+ 
+diff --git a/src/lib/idmap/sss_idmap.c b/src/lib/idmap/sss_idmap.c
+index 51338c58777d402fbdf93b8dea4d155f95117233..56ba904bce01d08f822b1ca019439c73087b85c9 100644
+--- a/src/lib/idmap/sss_idmap.c
++++ b/src/lib/idmap/sss_idmap.c
+@@ -29,7 +29,7 @@
+ 
+ #include "lib/idmap/sss_idmap.h"
+ #include "lib/idmap/sss_idmap_private.h"
+-#include "util/murmurhash3.h"
++#include "shared/murmurhash3.h"
+ 
+ #define SID_FMT "%s-%d"
+ #define SID_STR_MAX_LEN 1024
+diff --git a/src/providers/ldap/sdap_idmap.c b/src/providers/ldap/sdap_idmap.c
+index 0fda815224b5ce278e6fae4a5264f82cd1ea4a9d..f5ac511c71e28d0db20f440df09c470a4dcc9c4d 100644
+--- a/src/providers/ldap/sdap_idmap.c
++++ b/src/providers/ldap/sdap_idmap.c
+@@ -20,9 +20,9 @@
+     along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
++#include "shared/murmurhash3.h"
+ #include "util/util.h"
+ #include "util/dlinklist.h"
+-#include "util/murmurhash3.h"
+ #include "providers/ldap/sdap_idmap.h"
+ #include "util/util_sss_idmap.h"
+ 
+diff --git a/src/python/pysss_murmur.c b/src/python/pysss_murmur.c
+index a7519e85672028f631ac333950b850c26c610347..060d29df35a97c38fe7b03a655be25d255f6a896 100644
+--- a/src/python/pysss_murmur.c
++++ b/src/python/pysss_murmur.c
+@@ -23,7 +23,7 @@
+ #include <Python.h>
+ 
+ #include "util/sss_python.h"
+-#include "util/murmurhash3.h"
++#include "shared/murmurhash3.h"
+ 
+ PyDoc_STRVAR(murmurhash3_doc,
+ "murmurhash3(key, key_len, seed) -> 32bit integer hash\n\
+diff --git a/src/util/io.h b/src/shared/io.h
+similarity index 85%
+rename from src/util/io.h
+rename to src/shared/io.h
+index 8d10ed9c2c6b66b7488cc0c8c5ced83f40ef434b..5a545b60818195d43ebbfe20611a1a2520b98195 100644
+--- a/src/util/io.h
++++ b/src/shared/io.h
+@@ -22,11 +22,6 @@
+ #ifndef _UTIL_IO_H_
+ #define _UTIL_IO_H_
+ 
+-/* CAUTION:
+- * This file is also used in sss_client (pam, nss). Therefore it have to be
+- * minimalist and cannot include DEBUG macros or header file util.h.
+- */
+-
+ int sss_open_cloexec(const char *pathname, int flags, int *ret);
+ int sss_openat_cloexec(int dir_fd, const char *pathname, int flags, int *ret);
+ 
+diff --git a/src/util/murmurhash3.h b/src/shared/murmurhash3.h
+similarity index 77%
+rename from src/util/murmurhash3.h
+rename to src/shared/murmurhash3.h
+index 6910e596be10c9adef90177559ad3e6efe9f18de..3cea68ed3e5e4e891fa742e25f7d89a8eaea8fb3 100644
+--- a/src/util/murmurhash3.h
++++ b/src/shared/murmurhash3.h
+@@ -11,10 +11,6 @@
+ 
+ #include <stdint.h>
+ 
+-/* CAUTION:
+- * This file is also used in sss_client (pam, nss). Therefore it have to be
+- * minimalist and cannot include DEBUG macros or header file util.h.
+- */
+ uint32_t murmurhash3(const char *key, int len, uint32_t seed);
+ 
+ #endif /* _UTIL_MURMURHASH3_H_ */
+diff --git a/src/util/util_safealign.h b/src/shared/safealign.h
+similarity index 95%
+rename from src/util/util_safealign.h
+rename to src/shared/safealign.h
+index 57f04a17d4a38300b959c1593d756b351ebd89e8..cffc1c5d3591454ae17ad62f2e2f73db80b6dae8 100644
+--- a/src/util/util_safealign.h
++++ b/src/shared/safealign.h
+@@ -20,14 +20,8 @@
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-/* CAUTION:
+- * This file is also used in sss_client (pam, nss). Therefore it has to be
+- * minimalist and cannot include DEBUG macros or header file util.h.
+- */
+-
+-
+-#ifndef _UTIL_SAFEALIGN_H
+-#define _UTIL_SAFEALIGN_H
++#ifndef _SAFEALIGN_H
++#define _SAFEALIGN_H
+ 
+ #include <string.h>
+ #include <stdint.h>
+@@ -144,4 +138,4 @@ safealign_memcpy(void *dest, const void *src, size_t n, size_t *counter)
+ #define SAFEALIGN_SET_UINT16 SAFEALIGN_SETMEM_UINT16
+ #define SAFEALIGN_SET_STRING SAFEALIGN_SETMEM_STRING
+ 
+-#endif /* _UTIL_SAFEALIGN_H */
++#endif /* _SAFEALIGN_H */
+diff --git a/src/sss_client/nss_mc_common.c b/src/sss_client/nss_mc_common.c
+index 6cff2e1b9f640ee81850be86f458597bdb3a6bfb..696d6724630bc36c61da3682af60eddda3f5a964 100644
+--- a/src/sss_client/nss_mc_common.c
++++ b/src/sss_client/nss_mc_common.c
+@@ -32,7 +32,7 @@
+ #include <stdlib.h>
+ #include "nss_mc.h"
+ #include "sss_cli.h"
+-#include "util/io.h"
++#include "shared/io.h"
+ 
+ /* FIXME: hook up to library destructor to avoid leaks */
+ /* FIXME: temporarily open passwd file on our own, later we will probably
+diff --git a/src/sss_client/nss_mc_group.c b/src/sss_client/nss_mc_group.c
+index aacf59d9fd8b81ea895f4660de08f3e44f0ce645..ce88d42fdaf4f19e78fc43e187bc28651cdc3c4e 100644
+--- a/src/sss_client/nss_mc_group.c
++++ b/src/sss_client/nss_mc_group.c
+@@ -27,7 +27,7 @@
+ #include <sys/mman.h>
+ #include <time.h>
+ #include "nss_mc.h"
+-#include "util/util_safealign.h"
++#include "shared/safealign.h"
+ 
+ struct sss_cli_mc_ctx gr_mc_ctx = { UNINITIALIZED, -1, 0, NULL, 0, NULL, 0,
+                                     NULL, 0, 0 };
+diff --git a/src/sss_client/nss_mc_initgr.c b/src/sss_client/nss_mc_initgr.c
+index 74143d9fb3c674c3116d7f4cf0b4c03d993743a2..a77088d849ad3601cb3edb55fc5ea4ae4c52fe38 100644
+--- a/src/sss_client/nss_mc_initgr.c
++++ b/src/sss_client/nss_mc_initgr.c
+@@ -30,7 +30,7 @@
+ #include <sys/mman.h>
+ #include <time.h>
+ #include "nss_mc.h"
+-#include "util/util_safealign.h"
++#include "shared/safealign.h"
+ 
+ struct sss_cli_mc_ctx initgr_mc_ctx = { UNINITIALIZED, -1, 0, NULL, 0, NULL, 0,
+                                         NULL, 0, 0 };
+diff --git a/src/sss_client/sss_cli.h b/src/sss_client/sss_cli.h
+index d4198407f2f86c6594aee6a2a43775e429692df0..038406deca1c03376d00495b16b94a39f4f4d39e 100644
+--- a/src/sss_client/sss_cli.h
++++ b/src/sss_client/sss_cli.h
+@@ -32,7 +32,7 @@
+ #include <stdint.h>
+ #include <limits.h>
+ 
+-#include "util/util_safealign.h"
++#include "shared/safealign.h"
+ 
+ #ifndef HAVE_ERRNO_T
+ #define HAVE_ERRNO_T
+diff --git a/src/tests/cmocka/test_inotify.c b/src/tests/cmocka/test_inotify.c
+index 1f8561df1d1254a1535151f09986a49338d8e846..43e36e8cec058dcfca3f3ea6959e6ca9470c9d0a 100644
+--- a/src/tests/cmocka/test_inotify.c
++++ b/src/tests/cmocka/test_inotify.c
+@@ -26,7 +26,7 @@
+ #include <popt.h>
+ 
+ #include "limits.h"
+-#include "util/io.h"
++#include "shared/io.h"
+ #include "util/inotify.h"
+ #include "util/util.h"
+ #include "tests/common.h"
+diff --git a/src/tests/cmocka/test_io.c b/src/tests/cmocka/test_io.c
+index 8d29a05cde98f2d9c42b78d0064224e707855a18..20475a01e322f5d42e43dcb75a333d08cbc15fe1 100644
+--- a/src/tests/cmocka/test_io.c
++++ b/src/tests/cmocka/test_io.c
+@@ -36,7 +36,7 @@
+ #include <libgen.h>
+ 
+ #include "limits.h"
+-#include "util/io.h"
++#include "shared/io.h"
+ #include "util/util.h"
+ #include "tests/common.h"
+ 
+diff --git a/src/tests/util-tests.c b/src/tests/util-tests.c
+index a1b3fddce733ae03e2fca20733c3cb6cd20d68ac..d9f2b91c6bfbca5fccb8e2169cdc89fc6a32fbf8 100644
+--- a/src/tests/util-tests.c
++++ b/src/tests/util-tests.c
+@@ -34,7 +34,7 @@
+ 
+ #include "util/util.h"
+ #include "util/sss_utf8.h"
+-#include "util/murmurhash3.h"
++#include "shared/murmurhash3.h"
+ #include "tests/common_check.h"
+ 
+ #define FILENAME_TEMPLATE "tests-atomicio-XXXXXX"
+diff --git a/src/util/io.c b/src/util/io.c
+index 42e7563c91461d13d9158e72ed03d2a588e0aa36..4d442b47aefd1745a3d523c7ff1324aab947264a 100644
+--- a/src/util/io.c
++++ b/src/util/io.c
+@@ -28,7 +28,7 @@
+ #include <fcntl.h>
+ #include <errno.h>
+ 
+-#include "util/io.h"
++#include "shared/io.h"
+ 
+ /* CAUTION:
+  * This file have to be minimalist and cannot include DEBUG macros
+diff --git a/src/util/mmap_cache.h b/src/util/mmap_cache.h
+index 22c1ae62d1ff0c816c23bd8b26140990d692134c..63e096027f5ba9b5eceff77b0ed1e42cd852f8b9 100644
+--- a/src/util/mmap_cache.h
++++ b/src/util/mmap_cache.h
+@@ -22,7 +22,7 @@
+ #ifndef _MMAP_CACHE_H_
+ #define _MMAP_CACHE_H_
+ 
+-#include "util/murmurhash3.h"
++#include "shared/murmurhash3.h"
+ 
+ 
+ /* NOTE: all the code here assumes that writing a uint32_t nto mmapped
+diff --git a/src/util/murmurhash3.c b/src/util/murmurhash3.c
+index 061e64e990aa4d91d4a300e116d2fb1193e33392..f8db9d2ee3699b60d1c4111b4b345644d8e60a13 100644
+--- a/src/util/murmurhash3.c
++++ b/src/util/murmurhash3.c
+@@ -11,7 +11,7 @@
+ #include <string.h>
+ 
+ #include "config.h"
+-#include "util/murmurhash3.h"
++#include "shared/murmurhash3.h"
+ #include "util/sss_endian.h"
+ 
+ static uint32_t rotl(uint32_t x, int8_t r)
+diff --git a/src/util/util.h b/src/util/util.h
+index 934fae37dffff1e477772d6ac7bc90f45ed4c043..81d5e9b67495dcaafd0194bce700a0d2ae32b72e 100644
+--- a/src/util/util.h
++++ b/src/util/util.h
+@@ -39,9 +39,10 @@
+ #include <dhash.h>
+ 
+ #include "confdb/confdb.h"
++#include "shared/io.h"
++#include "shared/safealign.h"
+ #include "util/atomic_io.h"
+ #include "util/util_errors.h"
+-#include "util/util_safealign.h"
+ #include "util/sss_format.h"
+ #include "util/debug.h"
+ 
+@@ -591,7 +592,6 @@ errno_t get_dom_names(TALLOC_CTX *mem_ctx,
+ /* from util_lock.c */
+ errno_t sss_br_lock_file(int fd, size_t start, size_t len,
+                          int num_tries, useconds_t wait);
+-#include "io.h"
+ 
+ #ifdef HAVE_PAC_RESPONDER
+ #define BUILD_WITH_PAC_RESPONDER true
+-- 
+2.14.1
+

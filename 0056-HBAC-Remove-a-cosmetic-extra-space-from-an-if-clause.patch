@@ -1,0 +1,32 @@
+From c9e104f17b6c4cf5741dea9fdbe864619125fab1 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Thu, 3 Aug 2017 00:22:42 +0200
+Subject: [PATCH 56/93] HBAC: Remove a cosmetic extra space from an if clause
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ipa/ipa_hbac_rules.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_hbac_rules.c b/src/providers/ipa/ipa_hbac_rules.c
+index cb5a716aa809ebd80891cb8508bc136a788e49f1..404778da338f872c2b51c3d3539e7394e97385ab 100644
+--- a/src/providers/ipa/ipa_hbac_rules.c
++++ b/src/providers/ipa/ipa_hbac_rules.c
+@@ -201,7 +201,7 @@ ipa_hbac_rule_info_next(struct tevent_req *req,
+     struct sdap_search_base *base;
+ 
+     base = state->search_bases[state->search_base_iter];
+-    if (base  == NULL) {
++    if (base == NULL) {
+         return EOK;
+     }
+ 
+-- 
+2.14.1
+

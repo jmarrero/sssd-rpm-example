@@ -1,0 +1,74 @@
+From 5ea60d18ddb8eaff25d274c22c7db7df57b6ec4d Mon Sep 17 00:00:00 2001
+From: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
+Date: Fri, 17 Mar 2017 12:33:53 +0200
+Subject: [PATCH 09/93] DP: Add session recording conf loading
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add session recording configuration loading to the data provider
+initialization. To be used for matching users and groups with session
+recording enabled.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                      | 1 +
+ src/providers/backend.h          | 2 ++
+ src/providers/data_provider_be.c | 9 +++++++++
+ 3 files changed, 12 insertions(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index a1cb848e060111a1a19a558db57a2e0e55cea771..9e6a43110ebbcbd310af2b5efc2b5d00cb21d24e 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1572,6 +1572,7 @@ sssd_be_SOURCES = \
+     src/providers/data_provider/dp_target_subdomains.c \
+     src/providers/data_provider/dp_target_id.c \
+     src/providers/data_provider/dp_target_auth.c \
++    src/util/session_recording.c \
+     $(SSSD_FAILOVER_OBJ)
+ sssd_be_LDADD = \
+     $(LIBADD_DL) \
+diff --git a/src/providers/backend.h b/src/providers/backend.h
+index 30541366033ad621bf59ac67a264a87cc29c2df4..42e80373d0413a994e9cacb897de261ff9d10c91 100644
+--- a/src/providers/backend.h
++++ b/src/providers/backend.h
+@@ -27,6 +27,7 @@
+ #include "providers/be_refresh.h"
+ #include "providers/data_provider/dp.h"
+ #include "util/child_common.h"
++#include "util/session_recording.h"
+ #include "db/sysdb.h"
+ 
+ /* a special token, if used in place of the hostname, denotes that real
+@@ -83,6 +84,7 @@ struct be_ctx {
+     const char *conf_path;
+     uid_t uid;
+     gid_t gid;
++    struct session_recording_conf sr_conf;
+     struct be_failover_ctx *be_fo;
+     struct be_resolv_ctx *be_res;
+ 
+diff --git a/src/providers/data_provider_be.c b/src/providers/data_provider_be.c
+index 0ccbb6e33a363d0a88f3f99b83cc270458d98852..dbf78aa19bd20b470f1304a13fdb5923895f9664 100644
+--- a/src/providers/data_provider_be.c
++++ b/src/providers/data_provider_be.c
+@@ -428,6 +428,15 @@ errno_t be_process_init(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
++    /* Read session_recording section */
++    ret = session_recording_conf_load(be_ctx, cdb, &be_ctx->sr_conf);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_FATAL_FAILURE,
++              "Failed loading session recording configuration: %s\n",
++              strerror(ret));
++        goto done;
++    }
++
+     /* Initialize be_refresh periodic task. */
+     be_ctx->refresh_ctx = be_refresh_ctx_init(be_ctx);
+     if (be_ctx->refresh_ctx == NULL) {
+-- 
+2.14.1
+

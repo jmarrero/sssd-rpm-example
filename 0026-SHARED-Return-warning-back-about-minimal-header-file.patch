@@ -1,0 +1,94 @@
+From eec0b39ed884814c124bfec2060b779023f8b200 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Thu, 3 Aug 2017 14:29:52 +0200
+Subject: [PATCH 26/93] SHARED: Return warning back about minimal header files
+
+The warning still make a sense and should be there.
+Patch also fixes header guards due t changed location.
+
+Related to:
+https://pagure.io/SSSD/sssd/issue/1898
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/shared/io.h          | 11 ++++++++---
+ src/shared/murmurhash3.h | 11 ++++++++---
+ src/shared/safealign.h   | 11 ++++++++---
+ 3 files changed, 24 insertions(+), 9 deletions(-)
+
+diff --git a/src/shared/io.h b/src/shared/io.h
+index 5a545b60818195d43ebbfe20611a1a2520b98195..26caa52872e2fc8d4ecd1be242e0c41f786abd2b 100644
+--- a/src/shared/io.h
++++ b/src/shared/io.h
+@@ -19,10 +19,15 @@
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#ifndef _UTIL_IO_H_
+-#define _UTIL_IO_H_
++#ifndef _SHARED_IO_H_
++#define _SHARED_IO_H_
++
++/* CAUTION:
++ * This file is also used in sss_client (pam, nss). Therefore it have to be
++ * minimalist and cannot include DEBUG macros or header file util.h.
++ */
+ 
+ int sss_open_cloexec(const char *pathname, int flags, int *ret);
+ int sss_openat_cloexec(int dir_fd, const char *pathname, int flags, int *ret);
+ 
+-#endif /* _UTIL_IO_H_ */
++#endif /* _SHARED_IO_H_ */
+diff --git a/src/shared/murmurhash3.h b/src/shared/murmurhash3.h
+index 3cea68ed3e5e4e891fa742e25f7d89a8eaea8fb3..27671831c4795aa32f2f1c64ec23f8d226d51223 100644
+--- a/src/shared/murmurhash3.h
++++ b/src/shared/murmurhash3.h
+@@ -6,11 +6,16 @@
+  * clients can be both 64 or 32 bit at the same time.
+  */
+ 
+-#ifndef _UTIL_MURMURHASH3_H_
+-#define _UTIL_MURMURHASH3_H_
++#ifndef _SHARED_MURMURHASH3_H_
++#define _SHARED_MURMURHASH3_H_
++
++/* CAUTION:
++ * This file is also used in sss_client (pam, nss). Therefore it have to be
++ * minimalist and cannot include DEBUG macros or header file util.h.
++ */
+ 
+ #include <stdint.h>
+ 
+ uint32_t murmurhash3(const char *key, int len, uint32_t seed);
+ 
+-#endif /* _UTIL_MURMURHASH3_H_ */
++#endif /* _SHARED_MURMURHASH3_H_ */
+diff --git a/src/shared/safealign.h b/src/shared/safealign.h
+index cffc1c5d3591454ae17ad62f2e2f73db80b6dae8..2316ed14245c4469171f9eb4a42e70fc6b3fd8a8 100644
+--- a/src/shared/safealign.h
++++ b/src/shared/safealign.h
+@@ -20,8 +20,13 @@
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#ifndef _SAFEALIGN_H
+-#define _SAFEALIGN_H
++#ifndef _SHARED_SAFEALIGN_H
++#define _SHARED_SAFEALIGN_H
++
++/* CAUTION:
++ * This file is also used in sss_client (pam, nss). Therefore it have to be
++ * minimalist and cannot include DEBUG macros or header file util.h.
++ */
+ 
+ #include <string.h>
+ #include <stdint.h>
+@@ -138,4 +143,4 @@ safealign_memcpy(void *dest, const void *src, size_t n, size_t *counter)
+ #define SAFEALIGN_SET_UINT16 SAFEALIGN_SETMEM_UINT16
+ #define SAFEALIGN_SET_STRING SAFEALIGN_SETMEM_STRING
+ 
+-#endif /* _SAFEALIGN_H */
++#endif /* _SHARED_SAFEALIGN_H */
+-- 
+2.14.1
+

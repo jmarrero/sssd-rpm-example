@@ -1,0 +1,75 @@
+From b0b9222f7dd62b19ec702afe295ec71624888e87 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Tue, 9 May 2017 13:08:55 +0200
+Subject: [PATCH 41/93] IFP: Don't pre-allocate the amount of entries requested
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+By allocating the number of entries when actually copying the list we
+can avoid situations where users request an enourmous amount of results
+but the number of results got from the backend are just a few.
+
+With this new approach we end up allocating the whole list more
+frequently but we avoid not returning valid results because the
+requested number of enties is too big (note that if the amount of
+results is too big as well, there's nothing much we can do).
+
+A simple reproducer for this issue can be the really extreme call:
+$ dbus-send --system --print-reply  --dest=org.freedesktop.sssd.infopipe \
+  /org/freedesktop/sssd/infopipe/Users \
+  org.freedesktop.sssd.infopipe.Users.ListByName string:"*" uint32:"-1"
+
+The example pasted above would try to allocate an array of MAX_UINT32
+size, which would fail directly.
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/ifp/ifpsrv_util.c | 16 +++++++++-------
+ 1 file changed, 9 insertions(+), 7 deletions(-)
+
+diff --git a/src/responder/ifp/ifpsrv_util.c b/src/responder/ifp/ifpsrv_util.c
+index 6eea3354c0d07fe9605f5788f50524115de4b46c..1df646339526186e862dcd09cddd971b77c20a8b 100644
+--- a/src/responder/ifp/ifpsrv_util.c
++++ b/src/responder/ifp/ifpsrv_util.c
+@@ -372,7 +372,7 @@ struct ifp_list_ctx *ifp_list_ctx_new(struct sbus_request *sbus_req,
+     list_ctx->ctx = ctx;
+     list_ctx->dom = ctx->rctx->domains;
+     list_ctx->filter = filter;
+-    list_ctx->paths = talloc_zero_array(list_ctx, const char *, limit);
++    list_ctx->paths = talloc_zero_array(list_ctx, const char *, 1);
+     if (list_ctx->paths == NULL) {
+         talloc_free(list_ctx);
+         return NULL;
+@@ -389,12 +389,6 @@ errno_t ifp_list_ctx_remaining_capacity(struct ifp_list_ctx *list_ctx,
+     errno_t ret;
+ 
+     if (list_ctx->limit == 0) {
+-        list_ctx->paths = talloc_zero_array(list_ctx, const char *, entries);
+-        if (list_ctx->paths == NULL) {
+-            DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero_array() failed\n");
+-            ret = ENOMEM;
+-            goto done;
+-        }
+         capacity = entries;
+         goto immediately;
+     }
+@@ -408,6 +402,14 @@ errno_t ifp_list_ctx_remaining_capacity(struct ifp_list_ctx *list_ctx,
+     }
+ 
+ immediately:
++    talloc_zfree(list_ctx->paths);
++    list_ctx->paths = talloc_zero_array(list_ctx, const char *, capacity);
++    if (list_ctx->paths == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero_array() failed\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
+     *_capacity = capacity;
+     ret = EOK;
+ 
+-- 
+2.14.1
+

@@ -1,0 +1,37 @@
+From 47f73fbf39b75b1a6c816206c384f83f78535677 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 25 Jul 2017 10:44:30 +0200
+Subject: [PATCH 20/93] MAN: Don't tell the user to autostart sssd-kcm.service;
+ it's socket-enabled
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/man/sssd-kcm.8.xml | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/src/man/sssd-kcm.8.xml b/src/man/sssd-kcm.8.xml
+index db50ed8b49294057da99b01655a4b158f2908dcb..78d3551d442f01adfab224b4f25a1217496eea57 100644
+--- a/src/man/sssd-kcm.8.xml
++++ b/src/man/sssd-kcm.8.xml
+@@ -112,7 +112,6 @@
+             <programlisting>
+ systemctl start sssd-kcm.socket
+ systemctl enable sssd-kcm.socket
+-systemctl enable sssd-kcm.service
+             </programlisting>
+             Please note your distribution may already configure the units
+             for you.
+@@ -131,7 +130,6 @@ systemctl enable sssd-kcm.service
+             <programlisting>
+ systemctl start sssd-secrets.socket
+ systemctl enable sssd-secrets.socket
+-systemctl enable sssd-secrets.service
+             </programlisting>
+             Your distribution should already set the dependencies between the services.
+         </para>
+-- 
+2.14.1
+

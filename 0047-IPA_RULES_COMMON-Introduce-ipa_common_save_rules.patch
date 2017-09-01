@@ -1,0 +1,311 @@
+From 0f623456437c96f50330fe0ff21afd9638d14e57 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 10 Apr 2017 15:29:35 +0200
+Subject: [PATCH 47/93] IPA_RULES_COMMON: Introduce ipa_common_save_rules()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This method is kind of a replacement for ipa_save_hbac() one.
+
+While ipa_save_hbac() wasn't removed, its porpuse has been totally
+changed. Now it just prepare the ground and calls
+ipa_common_save_rules() which is a more generic function that can be
+reused for new backend modules.
+
+In order to make the code cleaner a new structure has also been
+introduced: struct ipa_common_entries; which contains the values that
+will be used to save the entry and the entrygroup to sysdb.
+
+Related:
+https://pagure.io/SSSD/sssd/issue/2995
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ipa/ipa_access.c       | 99 +++++++++++++++---------------------
+ src/providers/ipa/ipa_rules_common.c | 90 ++++++++++++++++++++++++++++++++
+ src/providers/ipa/ipa_rules_common.h | 18 +++++++
+ 3 files changed, 148 insertions(+), 59 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_access.c b/src/providers/ipa/ipa_access.c
+index 28d46fecfd8897e63cc4e5ead142f3aeff9f34c2..fe475a25f9fb5e6ce3bbc68b01e222939f0bfd56 100644
+--- a/src/providers/ipa/ipa_access.c
++++ b/src/providers/ipa/ipa_access.c
+@@ -118,7 +118,8 @@ static errno_t ipa_fetch_hbac_hostinfo(struct tevent_req *req);
+ static void ipa_fetch_hbac_hostinfo_done(struct tevent_req *subreq);
+ static void ipa_fetch_hbac_services_done(struct tevent_req *subreq);
+ static void ipa_fetch_hbac_rules_done(struct tevent_req *subreq);
+-static errno_t ipa_save_hbac(struct sss_domain_info *domain,
++static errno_t ipa_save_hbac(TALLOC_CTX *mem_ctx,
++                             struct sss_domain_info *domain,
+                              struct ipa_fetch_hbac_state *state);
+ 
+ static struct tevent_req *
+@@ -446,7 +447,7 @@ static void ipa_fetch_hbac_rules_done(struct tevent_req *subreq)
+         goto done;
+     }
+ 
+-    ret = ipa_save_hbac(state->be_ctx->domain, state);
++    ret = ipa_save_hbac(state, state->be_ctx->domain, state);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to save HBAC rules\n");
+         goto done;
+@@ -470,83 +471,63 @@ static errno_t ipa_fetch_hbac_recv(struct tevent_req *req)
+     return EOK;
+ }
+ 
+-static errno_t ipa_save_hbac(struct sss_domain_info *domain,
++static errno_t ipa_save_hbac(TALLOC_CTX *mem_ctx,
++                             struct sss_domain_info *domain,
+                              struct ipa_fetch_hbac_state *state)
+ {
+-    bool in_transaction = false;
++    struct ipa_common_entries *hosts;
++    struct ipa_common_entries *services;
++    struct ipa_common_entries *rules;
+     errno_t ret;
+-    errno_t sret;
+ 
+-    ret = sysdb_transaction_start(domain->sysdb);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_FATAL_FAILURE, "Could not start transaction\n");
++    hosts = talloc_zero(mem_ctx, struct ipa_common_entries);
++    if (hosts == NULL) {
++        ret = ENOMEM;
+         goto done;
+     }
+-    in_transaction = true;
+ 
+-    /* Save the hosts */
+-    ret = ipa_common_entries_and_groups_sysdb_save(domain,
+-                                                   HBAC_HOSTS_SUBDIR,
+-                                                   SYSDB_FQDN,
+-                                                   state->host_count,
+-                                                   state->hosts,
+-                                                   HBAC_HOSTGROUPS_SUBDIR,
+-                                                   SYSDB_NAME,
+-                                                   state->hostgroup_count,
+-                                                   state->hostgroups);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Error saving hosts [%d]: %s\n",
+-              ret, sss_strerror(ret));
+-        goto done;
+-    }
++    hosts->entry_subdir = HBAC_HOSTS_SUBDIR;
++    hosts->entry_count = state->host_count;
++    hosts->entries = state->hosts;
++    hosts->group_subdir = HBAC_HOSTGROUPS_SUBDIR;
++    hosts->group_count = state->hostgroup_count;
++    hosts->groups = state->hostgroups;
+ 
+-    /* Save the services */
+-    ret = ipa_common_entries_and_groups_sysdb_save(domain,
+-                                                   HBAC_SERVICES_SUBDIR,
+-                                                   IPA_CN,
+-                                                   state->service_count,
+-                                                   state->services,
+-                                                   HBAC_SERVICEGROUPS_SUBDIR,
+-                                                   IPA_CN,
+-                                                   state->servicegroup_count,
+-                                                   state->servicegroups);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Error saving services [%d]: %s\n",
+-              ret, sss_strerror(ret));
++    services = talloc_zero(mem_ctx, struct ipa_common_entries);
++    if (services == NULL) {
++        ret = ENOMEM;
+         goto done;
+     }
+-    /* Save the rules */
+-    ret = ipa_common_entries_and_groups_sysdb_save(domain,
+-                                                   HBAC_RULES_SUBDIR,
+-                                                   IPA_UNIQUE_ID,
+-                                                   state->rule_count,
+-                                                   state->rules,
+-                                                   NULL, NULL, 0, NULL);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Error saving rules [%d]: %s\n",
+-              ret, sss_strerror(ret));
++
++    services->entry_subdir = HBAC_SERVICES_SUBDIR;
++    services->entry_count = state->service_count;
++    services->entries = state->services;
++    services->group_subdir = HBAC_SERVICEGROUPS_SUBDIR;
++    services->group_count = state->servicegroup_count;
++    services->groups = state->servicegroups;
++
++    rules = talloc_zero(mem_ctx, struct ipa_common_entries);
++    if (rules == NULL) {
++        ret = ENOMEM;
+         goto done;
+     }
+ 
+-    ret = sysdb_transaction_commit(domain->sysdb);
++    rules->entry_subdir = HBAC_RULES_SUBDIR;
++    rules->entry_count = state->rule_count;
++    rules->entries = state->rules;
++
++    ret = ipa_common_save_rules(domain, hosts, services, rules,
++                                &state->access_ctx->last_update);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to commit transaction\n");
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "ipa_common_save_rules() failed [%d]: [%s]\n",
++              ret, sss_strerror(ret));
+         goto done;
+     }
+-    in_transaction = false;
+-
+-    state->access_ctx->last_update = time(NULL);
+ 
+     ret = EOK;
+ 
+ done:
+-    if (in_transaction) {
+-        sret = sysdb_transaction_cancel(domain->sysdb);
+-        if (sret != EOK) {
+-            DEBUG(SSSDBG_OP_FAILURE, "Could not cancel transaction\n");
+-        }
+-    }
+-
+     return ret;
+ }
+ 
+diff --git a/src/providers/ipa/ipa_rules_common.c b/src/providers/ipa/ipa_rules_common.c
+index 971870c48ddb8f48a199d8fef7bd34204299743c..9765bac1892c75b8d21ef3bb54032a53004fc04a 100644
+--- a/src/providers/ipa/ipa_rules_common.c
++++ b/src/providers/ipa/ipa_rules_common.c
+@@ -254,3 +254,93 @@ done:
+     talloc_free(tmp_ctx);
+     return ret;
+ }
++
++errno_t ipa_common_save_rules(struct sss_domain_info *domain,
++                              struct ipa_common_entries *hosts,
++                              struct ipa_common_entries *services,
++                              struct ipa_common_entries *rules,
++                              time_t *last_update)
++{
++    bool in_transaction = false;
++    errno_t ret;
++    errno_t sret;
++
++    ret = sysdb_transaction_start(domain->sysdb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_FATAL_FAILURE, "Could not start transaction\n");
++        goto done;
++    }
++    in_transaction = true;
++
++    /* Save the hosts */
++    if (hosts != NULL) {
++        ret = ipa_common_entries_and_groups_sysdb_save(domain,
++                                                       hosts->entry_subdir,
++                                                       SYSDB_FQDN,
++                                                       hosts->entry_count,
++                                                       hosts->entries,
++                                                       hosts->group_subdir,
++                                                       SYSDB_NAME,
++                                                       hosts->group_count,
++                                                       hosts->groups);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Error saving hosts [%d]: %s\n",
++                  ret, sss_strerror(ret));
++            goto done;
++        }
++    }
++
++    /* Save the services */
++    if (services != NULL) {
++        ret = ipa_common_entries_and_groups_sysdb_save(domain,
++                                                       services->entry_subdir,
++                                                       IPA_CN,
++                                                       services->entry_count,
++                                                       services->entries,
++                                                       services->group_subdir,
++                                                       IPA_CN,
++                                                       services->group_count,
++                                                       services->groups);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Error saving services [%d]: %s\n",
++                  ret, sss_strerror(ret));
++            goto done;
++        }
++    }
++
++    /* Save the rules */
++    if (rules != NULL) {
++        ret = ipa_common_entries_and_groups_sysdb_save(domain,
++                                                       rules->entry_subdir,
++                                                       IPA_UNIQUE_ID,
++                                                       rules->entry_count,
++                                                       rules->entries,
++                                                       NULL, NULL, 0, NULL);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Error saving rules [%d]: %s\n",
++                  ret, sss_strerror(ret));
++            goto done;
++        }
++    }
++
++    ret = sysdb_transaction_commit(domain->sysdb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to commit transaction\n");
++        goto done;
++    }
++    in_transaction = false;
++
++    *last_update = time(NULL);
++
++    ret = EOK;
++
++done:
++    if (in_transaction) {
++        sret = sysdb_transaction_cancel(domain->sysdb);
++        if (sret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "Could not cancel transaction\n");
++        }
++    }
++
++    return ret;
++}
+diff --git a/src/providers/ipa/ipa_rules_common.h b/src/providers/ipa/ipa_rules_common.h
+index 7c62f453815657a22dab00131359161d877bc392..7882ce21309d26a573345edd3d2baeabbe063235 100644
+--- a/src/providers/ipa/ipa_rules_common.h
++++ b/src/providers/ipa/ipa_rules_common.h
+@@ -38,6 +38,17 @@
+ #define IPA_TRUE_VALUE "TRUE"
+ 
+ /* From ipa_rules_common.c */
++
++struct ipa_common_entries {
++    const char *entry_subdir;
++    size_t entry_count;
++    struct sysdb_attrs **entries;
++
++    const char *group_subdir;
++    size_t group_count;
++    struct sysdb_attrs **groups;
++};
++
+ errno_t
+ ipa_common_entries_and_groups_sysdb_save(struct sss_domain_info *domain,
+                                          const char *primary_subdir,
+@@ -62,4 +73,11 @@ errno_t
+ ipa_common_purge_rules(struct sss_domain_info *domain,
+                        const char *subtree_name);
+ 
++errno_t
++ipa_common_save_rules(struct sss_domain_info *domain,
++                      struct ipa_common_entries *hosts,
++                      struct ipa_common_entries *services,
++                      struct ipa_common_entries *rules,
++                      time_t *last_update);
++
+ #endif /* IPA_RULES_COMMON_H_ */
+-- 
+2.14.1
+

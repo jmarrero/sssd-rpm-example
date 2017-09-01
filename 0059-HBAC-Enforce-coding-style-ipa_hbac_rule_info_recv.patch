@@ -1,0 +1,61 @@
+From 684a13e8de1526257ca2e40b6bf2e05585d4eaca Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Thu, 3 Aug 2017 00:32:59 +0200
+Subject: [PATCH 59/93] HBAC: Enforce coding style ipa_hbac_rule_info_recv()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+By convention, the output variables are prefixed with a underscore.
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ipa/ipa_hbac_rules.c | 8 ++++----
+ src/providers/ipa/ipa_hbac_rules.h | 4 ++--
+ 2 files changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_hbac_rules.c b/src/providers/ipa/ipa_hbac_rules.c
+index 5a52a8362662ac6457f3578dc25e74aec2e4ddd4..2a30750b6b54a1e68ae435f12d8bf21d178025f0 100644
+--- a/src/providers/ipa/ipa_hbac_rules.c
++++ b/src/providers/ipa/ipa_hbac_rules.c
+@@ -297,16 +297,16 @@ fail:
+ errno_t
+ ipa_hbac_rule_info_recv(struct tevent_req *req,
+                         TALLOC_CTX *mem_ctx,
+-                        size_t *rule_count,
+-                        struct sysdb_attrs ***rules)
++                        size_t *_rule_count,
++                        struct sysdb_attrs ***_rules)
+ {
+     struct ipa_hbac_rule_state *state =
+             tevent_req_data(req, struct ipa_hbac_rule_state);
+ 
+     TEVENT_REQ_RETURN_ON_ERROR(req);
+ 
+-    *rule_count = state->rule_count;
+-    *rules = talloc_steal(mem_ctx, state->rules);
++    *_rule_count = state->rule_count;
++    *_rules = talloc_steal(mem_ctx, state->rules);
+ 
+     return EOK;
+ }
+diff --git a/src/providers/ipa/ipa_hbac_rules.h b/src/providers/ipa/ipa_hbac_rules.h
+index 732ea483e5385d20a7874370fa7b07270e562b98..d8e5a147c948461c63af9a379b21815ecd015bd4 100644
+--- a/src/providers/ipa/ipa_hbac_rules.h
++++ b/src/providers/ipa/ipa_hbac_rules.h
+@@ -35,7 +35,7 @@ ipa_hbac_rule_info_send(TALLOC_CTX *mem_ctx,
+ errno_t
+ ipa_hbac_rule_info_recv(struct tevent_req *req,
+                         TALLOC_CTX *mem_ctx,
+-                        size_t *rule_count,
+-                        struct sysdb_attrs ***rules);
++                        size_t *_rule_count,
++                        struct sysdb_attrs ***_rules);
+ 
+ #endif /* IPA_HBAC_RULES_H_ */
+-- 
+2.14.1
+

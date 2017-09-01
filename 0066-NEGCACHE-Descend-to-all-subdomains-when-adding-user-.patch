@@ -1,0 +1,50 @@
+From 9908bdc9755e744c3e2c7c746a4edf95f9083ef5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 14 Aug 2017 12:15:42 +0200
+Subject: [PATCH 66/93] NEGCACHE: Descend to all subdomains when adding
+ user/groups
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When a user or group is added to the negative cache, we should descend
+to all subdomains as well.
+
+Related: https://pagure.io/SSSD/sssd/issue/3460
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/common/negcache.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/responder/common/negcache.c b/src/responder/common/negcache.c
+index fc5ae76bce2daf0575d19c89fcd4682f771cc0a2..00487a2245b12f084714c60d850dc837d43d9d43 100644
+--- a/src/responder/common/negcache.c
++++ b/src/responder/common/negcache.c
+@@ -887,7 +887,9 @@ errno_t sss_ncache_prepopulate(struct sss_nc_ctx *ncache,
+                 continue;
+             }
+         } else {
+-            for (dom = domain_list; dom; dom = get_next_domain(dom, 0)) {
++            for (dom = domain_list;
++                 dom != NULL;
++                 dom = get_next_domain(dom, SSS_GND_ALL_DOMAINS)) {
+                 fqname = sss_create_internal_fqname(tmpctx, name, dom->name);
+                 if (fqname == NULL) {
+                     continue;
+@@ -1000,7 +1002,9 @@ errno_t sss_ncache_prepopulate(struct sss_nc_ctx *ncache,
+                 continue;
+             }
+         } else {
+-            for (dom = domain_list; dom; dom = get_next_domain(dom, 0)) {
++            for (dom = domain_list;
++                 dom != NULL;
++                 dom = get_next_domain(dom, SSS_GND_ALL_DOMAINS)) {
+                 fqname = sss_create_internal_fqname(tmpctx, name, dom->name);
+                 if (fqname == NULL) {
+                     continue;
+-- 
+2.14.1
+

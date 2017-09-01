@@ -1,0 +1,192 @@
+From ba2fb2c7b74a5247737da051b38e7889b7b44d5d Mon Sep 17 00:00:00 2001
+From: Yuri Chornoivan <yurchor@ukr.net>
+Date: Mon, 31 Jul 2017 17:51:28 +0000
+Subject: [PATCH 30/93] Fix minor typos in docs
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Merges: https://pagure.io/SSSD/sssd/pull-request/3456
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+---
+ src/man/idmap_sss.8.xml   |  2 +-
+ src/man/sss-certmap.5.xml | 22 +++++++++++-----------
+ src/man/sssd-ad.5.xml     |  2 +-
+ src/man/sssd-ldap.5.xml   |  2 +-
+ src/man/sssd.conf.5.xml   | 10 +++++-----
+ 5 files changed, 19 insertions(+), 19 deletions(-)
+
+diff --git a/src/man/idmap_sss.8.xml b/src/man/idmap_sss.8.xml
+index 0b73966e5952705a0f340ac169775c30153c392d..b819304fb43490c7c6dd3040e675b9e14e80574a 100644
+--- a/src/man/idmap_sss.8.xml
++++ b/src/man/idmap_sss.8.xml
+@@ -13,7 +13,7 @@
+ 
+     <refnamediv id='name'>
+         <refname>idmap_sss</refname>
+-        <refpurpose>SSSSD's idmap_sss Backend for Winbind</refpurpose>
++        <refpurpose>SSSD's idmap_sss Backend for Winbind</refpurpose>
+     </refnamediv>
+ 
+     <refsect1 id='description'>
+diff --git a/src/man/sss-certmap.5.xml b/src/man/sss-certmap.5.xml
+index 12df6a7936dfe4346a05d7baffe6f44fed8e1879..9b70c1b27e6f76142cc7a04b3494dad5f47454b6 100644
+--- a/src/man/sss-certmap.5.xml
++++ b/src/man/sss-certmap.5.xml
+@@ -42,7 +42,7 @@
+     <refsect2 id='priority'>
+         <title>PRIORITY</title>
+         <para>
+-            The rules are process by priority while the number '0' (zero)
++            The rules are processed by priority while the number '0' (zero)
+             indicates the highest priority. The higher the number the lower is
+             the priority. A missing value indicates the lowest priority.
+         </para>
+@@ -110,8 +110,8 @@
+                     <listitem>
+                     <para>
+                         This option can be used to specify which key usage
+-                        values the certificate should have. The following value
+-                        can be used in a comma separate list:
++                        values the certificate should have. The following values
++                        can be used in a comma separated list:
+                         <itemizedlist>
+                             <listitem><para>digitalSignature</para></listitem>
+                             <listitem><para>nonRepudiation</para></listitem>
+@@ -345,7 +345,7 @@
+             relevance here). Because of this the mapping rule is based on LDAP
+             search filter syntax with templates to add certificate content to
+             the filter. It is expected that the filter will only contain the
+-            specific data needed for the mapping an that the caller will embed
++            specific data needed for the mapping and that the caller will embed
+             it in another filter to do the actual search. Because of this the
+             filter string should start and stop with '(' and ')' respectively.
+         </para>
+@@ -365,7 +365,7 @@
+         </para>
+         <para>
+             The templates to add certificate data to the search filter are based
+-            on Python-style formatting strings. They consists of a keyword in
++            on Python-style formatting strings. They consist of a keyword in
+             curly braces with an optional sub-component specifier separated by a
+             '.' or an optional conversion/formatting option separated by a '!'.
+             Allowed values are:
+@@ -444,7 +444,7 @@
+                     <para>
+                         This template will add the Kerberos principal which is
+                         taken either from the SAN used by pkinit or the one used
+-                        by AD. The 'short_name' component represent the first
++                        by AD. The 'short_name' component represents the first
+                         part of the principal before the '@' sign.
+                     </para>
+                     <para>
+@@ -457,8 +457,8 @@
+                     <listitem>
+                     <para>
+                         This template will add the Kerberos principal which is
+-                        given by then SAN used by pkinit. The 'short_name'
+-                        component represent the first part of the principal
++                        given by the SAN used by pkinit. The 'short_name'
++                        component represents the first part of the principal
+                         before the '@' sign.
+                     </para>
+                     <para>
+@@ -471,7 +471,7 @@
+                     <listitem>
+                     <para>
+                         This template will add the Kerberos principal which is
+-                        given by then SAN used by AD. The 'short_name' component
++                        given by the SAN used by AD. The 'short_name' component
+                         represent the first part of the principal before the '@'
+                         sign.
+                     </para>
+@@ -486,7 +486,7 @@
+                     <para>
+                         This template will add the string which is stored in the
+                         rfc822Name component of the SAN, typically an email
+-                        address. The 'short_name' component represent the first
++                        address. The 'short_name' component represents the first
+                         part of the address before the '@' sign.
+                     </para>
+                     <para>
+@@ -500,7 +500,7 @@
+                     <para>
+                         This template will add the string which is stored in the
+                         dNSName component of the SAN, typically a fully-qualified host name.
+-                        The 'short_name' component represent the first
++                        The 'short_name' component represents the first
+                         part of the name before the first '.' sign.
+                     </para>
+                     <para>
+diff --git a/src/man/sssd-ad.5.xml b/src/man/sssd-ad.5.xml
+index 59c23e68123d7b83c19ed6ba256989ab4e643b6d..08c1dd09fb829c6cffb416250b9b518668ec5790 100644
+--- a/src/man/sssd-ad.5.xml
++++ b/src/man/sssd-ad.5.xml
+@@ -826,7 +826,7 @@ ad_gpo_map_deny = +my_pam_service
+                     <listitem>
+                         <para>
+                             This option should only be used to test the machine
+-                            account renewal task. The option expect 2 integers
++                            account renewal task. The option expects 2 integers
+                             separated by a colon (':'). The first integer
+                             defines the interval in seconds how often the task
+                             is run. The second specifies the initial timeout in
+diff --git a/src/man/sssd-ldap.5.xml b/src/man/sssd-ldap.5.xml
+index 739ae15c359da4e8dad9bc225ea60cff9dc96b91..a12f52797e67a3cca75ad7f6a10539ca08324d8f 100644
+--- a/src/man/sssd-ldap.5.xml
++++ b/src/man/sssd-ldap.5.xml
+@@ -2631,7 +2631,7 @@ ldap_access_filter = (employeeType=admin)
+                 <note>
+                     <para>
+                         If the option <quote>ldap_use_tokengroups</quote> is
+-                        enabled. The searches against Active Directory will
++                        enabled, the searches against Active Directory will
+                         not be restricted and return all groups memberships,
+                         even with no GID mapping. It is recommended to disable
+                         this feature, if group names are not being displayed
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index b9eaf5eddb5c39125f7ce1c7a988c374378bbb32..7cd6ffd7a632449e23672da14586560500b9d185 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -1100,7 +1100,7 @@ fallback_homedir = /home/%u
+                             A comma separated list of strings which allows to
+                             remove (filter) data sent by the PAM responder to
+                             pam_sss PAM module. There are different kind of
+-                            responses send to pam_sss e.g. messages displayed to
++                            responses sent to pam_sss e.g. messages displayed to
+                             the user or environment variables which should be
+                             set by pam_sss.
+                         </para>
+@@ -1113,16 +1113,16 @@ fallback_homedir = /home/%u
+                             Currently the following filters are supported:
+                             <variablelist>
+                                 <varlistentry><term>ENV</term>
+-                                    <listitem><para>Do not sent any environment
++                                    <listitem><para>Do not send any environment
+                                     variables to any service.</para></listitem>
+                                 </varlistentry>
+                                 <varlistentry><term>ENV:var_name</term>
+-                                    <listitem><para>Do not sent environment
++                                    <listitem><para>Do not send environment
+                                     variable var_name to any
+                                     service.</para></listitem>
+                                 </varlistentry>
+                                 <varlistentry><term>ENV:var_name:service</term>
+-                                    <listitem><para>Do not sent environment
++                                    <listitem><para>Do not send environment
+                                     variable var_name to
+                                     service.</para></listitem>
+                                 </varlistentry>
+@@ -2862,7 +2862,7 @@ subdomain_inherit = ldap_purge_cache_timeout
+                 The following example illustrates the use of an application
+                 domain. In this setup, the POSIX domain is connected to an LDAP
+                 server and is used by the OS through the NSS responder. In addition,
+-                the application domains also requests the telephoneNumber attribute,
++                the application domain also requests the telephoneNumber attribute,
+                 stores it as the phone attribute in the cache and makes the phone
+                 attribute reachable through the D-Bus interface.
+             </para>
+-- 
+2.14.1
+

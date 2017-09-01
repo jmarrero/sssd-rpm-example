@@ -1,0 +1,43 @@
+From ed7767aa1e3a9bc2027aa6f5f8bdc2c928e9958e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Fri, 25 Aug 2017 12:17:36 +0200
+Subject: [PATCH 37/93] IFP: fix typo in option name in man pages
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/man/sssd-ifp.5.xml  | 2 +-
+ src/man/sssd-ldap.5.xml | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/man/sssd-ifp.5.xml b/src/man/sssd-ifp.5.xml
+index da247f89dd2d9d08e0b1591d4c89f52197b278df..acb3e341eb046b1c4376d7f629536140ce596b21 100644
+--- a/src/man/sssd-ifp.5.xml
++++ b/src/man/sssd-ifp.5.xml
+@@ -133,7 +133,7 @@ user_attributes = +telephoneNumber, -loginShell
+                 </varlistentry>
+ 
+                 <varlistentry>
+-                    <term>wildcart_limit (integer)</term>
++                    <term>wildcard_limit (integer)</term>
+                     <listitem>
+                         <para>
+                             Specifies an upper limit on the number of entries
+diff --git a/src/man/sssd-ldap.5.xml b/src/man/sssd-ldap.5.xml
+index a12f52797e67a3cca75ad7f6a10539ca08324d8f..3159fdde63da143017d90172a61b9a659dcda40c 100644
+--- a/src/man/sssd-ldap.5.xml
++++ b/src/man/sssd-ldap.5.xml
+@@ -2184,7 +2184,7 @@ ldap_access_filter = (employeeType=admin)
+                 </varlistentry>
+ 
+                 <varlistentry>
+-                    <term>wildcart_limit (integer)</term>
++                    <term>wildcard_limit (integer)</term>
+                     <listitem>
+                         <para>
+                             Specifies an upper limit on the number of entries
+-- 
+2.14.1
+

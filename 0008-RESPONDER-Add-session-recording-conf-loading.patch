@@ -1,0 +1,112 @@
+From 29dd456102dc995aa59a56483363087071bb84d6 Mon Sep 17 00:00:00 2001
+From: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
+Date: Thu, 12 Jan 2017 19:10:25 +0200
+Subject: [PATCH 08/93] RESPONDER: Add session recording conf loading
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add session recording configuration loading to the common responder
+initialization. To be used for substituting the user shell when
+session recording is enabled.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                             | 3 +++
+ src/responder/common/responder.h        | 3 +++
+ src/responder/common/responder_common.c | 9 +++++++++
+ src/tests/cwrap/Makefile.am             | 2 ++
+ 4 files changed, 17 insertions(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index e57d40fb7b1f6fa8fd2662864bcc231e5015e9d7..a1cb848e060111a1a19a558db57a2e0e55cea771 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -574,6 +574,7 @@ SSSD_RESPONDER_OBJ = \
+     src/responder/common/data_provider/rdp_client.c \
+     src/monitor/monitor_iface_generated.c \
+     src/providers/data_provider_req.c \
++    src/util/session_recording.c \
+     $(SSSD_RESPONDER_IFACE_OBJ) \
+     $(SSSD_CACHE_REQ_OBJ) \
+     $(NULL)
+@@ -2215,6 +2216,7 @@ responder_socket_access_tests_SOURCES = \
+     src/responder/common/cache_req/cache_req_domain.c \
+     src/responder/common/data_provider/rdp_message.c \
+     src/responder/common/data_provider/rdp_client.c \
++    src/util/session_recording.c \
+     $(SSSD_RESPONDER_IFACE_OBJ) \
+     $(NULL)
+ responder_socket_access_tests_CFLAGS = \
+@@ -2303,6 +2305,7 @@ TEST_MOCK_RESP_OBJ = \
+      src/responder/common/data_provider/rdp_message.c \
+      src/responder/common/data_provider/rdp_client.c \
+      src/responder/common/responder_utils.c \
++     src/util/session_recording.c \
+      $(SSSD_CACHE_REQ_OBJ) \
+      $(SSSD_RESPONDER_IFACE_OBJ) \
+      $(NULL)
+diff --git a/src/responder/common/responder.h b/src/responder/common/responder.h
+index ba5b73bcc3f3d3bc3cd0cfc19381ef08a046771a..a97476ca745a731e10574265bcc00cd733532984 100644
+--- a/src/responder/common/responder.h
++++ b/src/responder/common/responder.h
+@@ -38,6 +38,7 @@
+ #include "responder/common/negcache.h"
+ #include "sss_client/sss_cli.h"
+ #include "responder/common/cache_req/cache_req_domain.h"
++#include "util/session_recording.h"
+ 
+ extern hash_table_t *dp_requests;
+ 
+@@ -146,6 +147,8 @@ struct resp_ctx {
+     char *shell_fallback;
+     char *default_shell;
+ 
++    struct session_recording_conf sr_conf;
++
+     uint32_t cache_req_num;
+ 
+     void *pvt_ctx;
+diff --git a/src/responder/common/responder_common.c b/src/responder/common/responder_common.c
+index edf6a34bda9730f32fac503ae88951390da51612..6b4d2d9e5936c79944b6f883e9fe46fd03ff32f6 100644
+--- a/src/responder/common/responder_common.c
++++ b/src/responder/common/responder_common.c
+@@ -1301,6 +1301,15 @@ int sss_process_init(TALLOC_CTX *mem_ctx,
+                             &rctx->default_shell);
+     if (ret != EOK) goto fail;
+ 
++    /* Read session_recording section */
++    ret = session_recording_conf_load(rctx, rctx->cdb, &rctx->sr_conf);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Failed loading session recording configuration: %s\n",
++              strerror(ret));
++        goto fail;
++    }
++
+     ret = sss_monitor_init(rctx, rctx->ev, monitor_intf,
+                            svc_name, svc_version, MT_SVC_SERVICE,
+                            rctx, &rctx->last_request_time,
+diff --git a/src/tests/cwrap/Makefile.am b/src/tests/cwrap/Makefile.am
+index c99ebde5f0fc18d1283392cbb307434579d5d811..6c499cb94a5945b789d36ab98aa6a67459df52ce 100644
+--- a/src/tests/cwrap/Makefile.am
++++ b/src/tests/cwrap/Makefile.am
+@@ -86,6 +86,7 @@ SSSD_RESPONDER_OBJ = \
+     ../../../src/responder/common/data_provider/rdp_client.c \
+     ../../../src/monitor/monitor_iface_generated.c \
+     ../../../src/providers/data_provider_req.c \
++    ../../../src/util/session_recording.c \
+     $(SSSD_RESPONDER_IFACE_OBJ) \
+     $(SSSD_CACHE_REQ_OBJ) \
+     $(NULL)
+@@ -180,6 +181,7 @@ responder_common_tests_SOURCES =\
+     ../../../src/responder/common/responder_packet.c \
+     ../../../src/responder/common/responder_cmd.c \
+     ../../../src/tests/cmocka/common_mock_resp_dp.c \
++    ../../../src/util/session_recording.c \
+     $(SSSD_CACHE_REQ_OBJ) \
+     $(NULL)
+ responder_common_tests_CFLAGS = \
+-- 
+2.14.1
+

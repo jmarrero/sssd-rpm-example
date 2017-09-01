@@ -1,0 +1,29 @@
+From 7ecf21b359167fc76355940b511dbc4475954939 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 25 Jul 2017 15:12:35 +0200
+Subject: [PATCH 19/93] SPEC: Use language file for sssd-kcm
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ contrib/sssd.spec.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index 74affd39f39908510394970ab8dadae87b4a7aaf..c65d4e66178e6b1ccec7835f4518a9fbe2a6336a 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -1263,7 +1263,7 @@ done
+ %{_libdir}/pkgconfig/sss_certmap.pc
+ 
+ %if (0%{?with_kcm} == 1)
+-%files kcm
++%files kcm -f sssd_kcm.lang
+ %{_libexecdir}/%{servicename}/sssd_kcm
+ %dir %{_datadir}/sssd-kcm
+ %{_datadir}/sssd-kcm/kcm_default_ccache
+-- 
+2.14.1
+

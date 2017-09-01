@@ -1,0 +1,41 @@
+From d84e841ede0a372a879531b2b7df6905e363b4ee Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20=C4=8Cech?= <pcech@redhat.com>
+Date: Wed, 15 Mar 2017 14:23:31 +0100
+Subject: [PATCH 25/93] IFP: Do not fail when a GHOST group is not found
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Usually is okay that there are no ghost attributes for a group as it
+basically just means that the group either has no members or all members
+have been previously fully resolved.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3315
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+---
+ src/responder/ifp/ifp_groups.c | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/src/responder/ifp/ifp_groups.c b/src/responder/ifp/ifp_groups.c
+index c568c62009cd4b777919dea048fd381a91bd3460..f03c3e4b3720068db4c8266d65ea03a82a7beb62 100644
+--- a/src/responder/ifp/ifp_groups.c
++++ b/src/responder/ifp/ifp_groups.c
+@@ -607,12 +607,7 @@ static void resolv_ghosts_group_done(struct tevent_req *subreq)
+     }
+ 
+     el = ldb_msg_find_element(group, SYSDB_GHOST);
+-    if (el == NULL) {
+-        ret = ENOMEM;
+-        goto done;
+-    }
+-
+-    if (el->num_values == 0) {
++    if (el == NULL || el->num_values == 0) {
+         ret = EOK;
+         goto done;
+     }
+-- 
+2.14.1
+

@@ -1,0 +1,316 @@
+From ee164913f9c12a557044eb469f4498b9be9a8f50 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 7 Aug 2017 11:40:31 +0200
+Subject: [PATCH 48/93] IPA_RULES_COMMON: Introduce
+ ipa_common_get_hostgroupname()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+By moving the get_ipa_hostgroupname() method from ipa_hbac_hosts.[ch] to
+ipa_rules_common.[ch] it can be used by both HBAC and, in the future,
+for new backend modules.
+
+The method got renamed to ipa_common_get_hostgroupname() and some coding
+style changes have been made in order to match with what SSSD follows.
+
+Related:
+https://pagure.io/SSSD/sssd/issue/2995
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ipa/ipa_hbac_common.c  |   6 +-
+ src/providers/ipa/ipa_hbac_hosts.c   | 109 -----------------------------------
+ src/providers/ipa/ipa_hbac_private.h |   5 --
+ src/providers/ipa/ipa_rules_common.c | 109 +++++++++++++++++++++++++++++++++++
+ src/providers/ipa/ipa_rules_common.h |   6 ++
+ 5 files changed, 118 insertions(+), 117 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_hbac_common.c b/src/providers/ipa/ipa_hbac_common.c
+index 9414419122a201c00dccf65e6ee88a0bcaa38477..31e53d24d4ff73489d2137ff3df3931b08e3e117 100644
+--- a/src/providers/ipa/ipa_hbac_common.c
++++ b/src/providers/ipa/ipa_hbac_common.c
+@@ -686,9 +686,9 @@ hbac_eval_host_element(TALLOC_CTX *mem_ctx,
+     }
+ 
+     for (i = j = 0; i < el->num_values; i++) {
+-        ret = get_ipa_hostgroupname(tmp_ctx, domain->sysdb,
+-                                    (const char *)el->values[i].data,
+-                                    &name);
++        ret = ipa_common_get_hostgroupname(tmp_ctx, domain->sysdb,
++                                           (const char *)el->values[i].data,
++                                           &name);
+         if (ret != EOK && ret != ERR_UNEXPECTED_ENTRY_TYPE) {
+             DEBUG(SSSDBG_MINOR_FAILURE, "Skipping malformed entry [%s]\n",
+                                         (const char *)el->values[i].data);
+diff --git a/src/providers/ipa/ipa_hbac_hosts.c b/src/providers/ipa/ipa_hbac_hosts.c
+index 74d91e513cb93f936b7ca09149343cee9b7fda82..f85ce533fae8efd995bc2c5cf6d6f7a1703fca52 100644
+--- a/src/providers/ipa/ipa_hbac_hosts.c
++++ b/src/providers/ipa/ipa_hbac_hosts.c
+@@ -333,112 +333,3 @@ done:
+     talloc_free(tmp_ctx);
+     return ret;
+ }
+-
+-errno_t
+-get_ipa_hostgroupname(TALLOC_CTX *mem_ctx,
+-                      struct sysdb_ctx *sysdb,
+-                      const char *host_dn,
+-                      char **hostgroupname)
+-{
+-    errno_t ret;
+-    struct ldb_dn *dn;
+-    const char *rdn_name;
+-    const char *hostgroup_comp_name;
+-    const char *account_comp_name;
+-    const struct ldb_val *rdn_val;
+-    const struct ldb_val *hostgroup_comp_val;
+-    const struct ldb_val *account_comp_val;
+-
+-    /* This is an IPA-specific hack. It may not
+-     * work for non-IPA servers and will need to
+-     * be changed if SSSD ever supports HBAC on
+-     * a non-IPA server.
+-     */
+-    *hostgroupname = NULL;
+-
+-    dn = ldb_dn_new(mem_ctx, sysdb_ctx_get_ldb(sysdb), host_dn);
+-    if (dn == NULL) {
+-        ret = ENOMEM;
+-        goto done;
+-    }
+-
+-    if (!ldb_dn_validate(dn)) {
+-        ret = ERR_MALFORMED_ENTRY;
+-        goto done;
+-    }
+-
+-    if (ldb_dn_get_comp_num(dn) < 4) {
+-        /* RDN, hostgroups, accounts, and at least one DC= */
+-        /* If it's fewer, it's not a group DN */
+-        ret = ERR_UNEXPECTED_ENTRY_TYPE;
+-        goto done;
+-    }
+-
+-    /* If the RDN name is 'cn' */
+-    rdn_name = ldb_dn_get_rdn_name(dn);
+-    if (rdn_name == NULL) {
+-        /* Shouldn't happen if ldb_dn_validate()
+-         * passed, but we'll be careful.
+-         */
+-        ret = ERR_MALFORMED_ENTRY;
+-        goto done;
+-    }
+-
+-    if (strcasecmp("cn", rdn_name) != 0) {
+-        /* RDN has the wrong attribute name.
+-         * It's not a host.
+-         */
+-        ret = ERR_UNEXPECTED_ENTRY_TYPE;
+-        goto done;
+-    }
+-
+-    /* and the second component is "cn=hostgroups" */
+-    hostgroup_comp_name = ldb_dn_get_component_name(dn, 1);
+-    if (strcasecmp("cn", hostgroup_comp_name) != 0) {
+-        /* The second component name is not "cn" */
+-        ret = ERR_UNEXPECTED_ENTRY_TYPE;
+-        goto done;
+-    }
+-
+-    hostgroup_comp_val = ldb_dn_get_component_val(dn, 1);
+-    if (strncasecmp("hostgroups",
+-                    (const char *) hostgroup_comp_val->data,
+-                    hostgroup_comp_val->length) != 0) {
+-        /* The second component value is not "hostgroups" */
+-        ret = ERR_UNEXPECTED_ENTRY_TYPE;
+-        goto done;
+-    }
+-
+-    /* and the third component is "accounts" */
+-    account_comp_name = ldb_dn_get_component_name(dn, 2);
+-    if (strcasecmp("cn", account_comp_name) != 0) {
+-        /* The third component name is not "cn" */
+-        ret = ERR_UNEXPECTED_ENTRY_TYPE;
+-        goto done;
+-    }
+-
+-    account_comp_val = ldb_dn_get_component_val(dn, 2);
+-    if (strncasecmp("accounts",
+-                    (const char *) account_comp_val->data,
+-                    account_comp_val->length) != 0) {
+-        /* The third component value is not "accounts" */
+-        ret = ERR_UNEXPECTED_ENTRY_TYPE;
+-        goto done;
+-    }
+-
+-    /* Then the value of the RDN is the group name */
+-    rdn_val = ldb_dn_get_rdn_val(dn);
+-    *hostgroupname = talloc_strndup(mem_ctx,
+-                                    (const char *)rdn_val->data,
+-                                    rdn_val->length);
+-    if (*hostgroupname == NULL) {
+-        ret = ENOMEM;
+-        goto done;
+-    }
+-
+-    ret = EOK;
+-
+-done:
+-    talloc_free(dn);
+-    return ret;
+-}
+diff --git a/src/providers/ipa/ipa_hbac_private.h b/src/providers/ipa/ipa_hbac_private.h
+index b11814b83cc7498476d8624b3b2e298437738299..8ca7d09c9a4a7b0c91c03d7cbc48ffd06ce25ed7 100644
+--- a/src/providers/ipa/ipa_hbac_private.h
++++ b/src/providers/ipa/ipa_hbac_private.h
+@@ -83,11 +83,6 @@ hbac_shost_attrs_to_rule(TALLOC_CTX *mem_ctx,
+                          struct sysdb_attrs *rule_attrs,
+                          bool support_srchost,
+                          struct hbac_rule_element **source_hosts);
+-errno_t
+-get_ipa_hostgroupname(TALLOC_CTX *mem_ctx,
+-                      struct sysdb_ctx *sysdb,
+-                      const char *host_dn,
+-                      char **hostgroupname);
+ 
+ const char **
+ hbac_get_attrs_to_get_cached_rules(TALLOC_CTX *mem_ctx);
+diff --git a/src/providers/ipa/ipa_rules_common.c b/src/providers/ipa/ipa_rules_common.c
+index 9765bac1892c75b8d21ef3bb54032a53004fc04a..11823476bb908bcf2f073e0697a54c6a119958c9 100644
+--- a/src/providers/ipa/ipa_rules_common.c
++++ b/src/providers/ipa/ipa_rules_common.c
+@@ -344,3 +344,112 @@ done:
+ 
+     return ret;
+ }
++
++errno_t
++ipa_common_get_hostgroupname(TALLOC_CTX *mem_ctx,
++                             struct sysdb_ctx *sysdb,
++                             const char *host_dn,
++                             char **_hostgroupname)
++{
++    errno_t ret;
++    struct ldb_dn *dn;
++    const char *rdn_name;
++    const char *hostgroup_comp_name;
++    const char *account_comp_name;
++    const struct ldb_val *rdn_val;
++    const struct ldb_val *hostgroup_comp_val;
++    const struct ldb_val *account_comp_val;
++
++    /* This is an IPA-specific hack. It may not
++     * work for non-IPA servers and will need to
++     * be changed if SSSD ever supports HBAC on
++     * a non-IPA server.
++     */
++    *_hostgroupname = NULL;
++
++    dn = ldb_dn_new(mem_ctx, sysdb_ctx_get_ldb(sysdb), host_dn);
++    if (dn == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    if (!ldb_dn_validate(dn)) {
++        ret = ERR_MALFORMED_ENTRY;
++        goto done;
++    }
++
++    if (ldb_dn_get_comp_num(dn) < 4) {
++        /* RDN, hostgroups, accounts, and at least one DC= */
++        /* If it's fewer, it's not a group DN */
++        ret = ERR_UNEXPECTED_ENTRY_TYPE;
++        goto done;
++    }
++
++    /* If the RDN name is 'cn' */
++    rdn_name = ldb_dn_get_rdn_name(dn);
++    if (rdn_name == NULL) {
++        /* Shouldn't happen if ldb_dn_validate()
++         * passed, but we'll be careful.
++         */
++        ret = ERR_MALFORMED_ENTRY;
++        goto done;
++    }
++
++    if (strcasecmp("cn", rdn_name) != 0) {
++        /* RDN has the wrong attribute name.
++         * It's not a host.
++         */
++        ret = ERR_UNEXPECTED_ENTRY_TYPE;
++        goto done;
++    }
++
++    /* and the second component is "cn=hostgroups" */
++    hostgroup_comp_name = ldb_dn_get_component_name(dn, 1);
++    if (strcasecmp("cn", hostgroup_comp_name) != 0) {
++        /* The second component name is not "cn" */
++        ret = ERR_UNEXPECTED_ENTRY_TYPE;
++        goto done;
++    }
++
++    hostgroup_comp_val = ldb_dn_get_component_val(dn, 1);
++    if (strncasecmp("hostgroups",
++                    (const char *) hostgroup_comp_val->data,
++                    hostgroup_comp_val->length) != 0) {
++        /* The second component value is not "hostgroups" */
++        ret = ERR_UNEXPECTED_ENTRY_TYPE;
++        goto done;
++    }
++
++    /* and the third component is "accounts" */
++    account_comp_name = ldb_dn_get_component_name(dn, 2);
++    if (strcasecmp("cn", account_comp_name) != 0) {
++        /* The third component name is not "cn" */
++        ret = ERR_UNEXPECTED_ENTRY_TYPE;
++        goto done;
++    }
++
++    account_comp_val = ldb_dn_get_component_val(dn, 2);
++    if (strncasecmp("accounts",
++                    (const char *) account_comp_val->data,
++                    account_comp_val->length) != 0) {
++        /* The third component value is not "accounts" */
++        ret = ERR_UNEXPECTED_ENTRY_TYPE;
++        goto done;
++    }
++
++    /* Then the value of the RDN is the group name */
++    rdn_val = ldb_dn_get_rdn_val(dn);
++    *_hostgroupname = talloc_strndup(mem_ctx,
++                                     (const char *)rdn_val->data,
++                                     rdn_val->length);
++    if (*_hostgroupname == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(dn);
++    return ret;
++}
+diff --git a/src/providers/ipa/ipa_rules_common.h b/src/providers/ipa/ipa_rules_common.h
+index 7882ce21309d26a573345edd3d2baeabbe063235..6cf57eb29d8a522c5280d8df1e8d73c1e84c6eca 100644
+--- a/src/providers/ipa/ipa_rules_common.h
++++ b/src/providers/ipa/ipa_rules_common.h
+@@ -80,4 +80,10 @@ ipa_common_save_rules(struct sss_domain_info *domain,
+                       struct ipa_common_entries *rules,
+                       time_t *last_update);
+ 
++errno_t
++ipa_common_get_hostgroupname(TALLOC_CTX *mem_ctx,
++                             struct sysdb_ctx *sysdb,
++                             const char *host_dn,
++                             char **_hostgroupname);
++
+ #endif /* IPA_RULES_COMMON_H_ */
+-- 
+2.14.1
+

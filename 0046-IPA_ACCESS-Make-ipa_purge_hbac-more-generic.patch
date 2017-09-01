@@ -1,0 +1,143 @@
+From d2a0b4a6a220bf9a58c7306c3f673891efc419eb Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 10 Apr 2017 14:36:34 +0200
+Subject: [PATCH 46/93] IPA_ACCESS: Make ipa_purge_hbac() more generic
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This mothod can also be reused in the future for new backend modules.
+
+In order to make it more generic, let's just move it to
+ipa_rules_common.[ch], rename it to ipa_common_purge_rules() and make
+the subtreename to be purged a new paramether of this method.
+
+Related:
+https://pagure.io/SSSD/sssd/issue/2995
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ipa/ipa_access.c       | 35 ++---------------------------------
+ src/providers/ipa/ipa_rules_common.c | 32 ++++++++++++++++++++++++++++++++
+ src/providers/ipa/ipa_rules_common.h |  4 ++++
+ 3 files changed, 38 insertions(+), 33 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_access.c b/src/providers/ipa/ipa_access.c
+index 58c4992e0381f443d942c9c8a63216587de5ac1d..28d46fecfd8897e63cc4e5ead142f3aeff9f34c2 100644
+--- a/src/providers/ipa/ipa_access.c
++++ b/src/providers/ipa/ipa_access.c
+@@ -118,7 +118,6 @@ static errno_t ipa_fetch_hbac_hostinfo(struct tevent_req *req);
+ static void ipa_fetch_hbac_hostinfo_done(struct tevent_req *subreq);
+ static void ipa_fetch_hbac_services_done(struct tevent_req *subreq);
+ static void ipa_fetch_hbac_rules_done(struct tevent_req *subreq);
+-static errno_t ipa_purge_hbac(struct sss_domain_info *domain);
+ static errno_t ipa_save_hbac(struct sss_domain_info *domain,
+                              struct ipa_fetch_hbac_state *state);
+ 
+@@ -436,7 +435,8 @@ static void ipa_fetch_hbac_rules_done(struct tevent_req *subreq)
+ 
+     if (found == false) {
+         /* No rules were found that apply to this host. */
+-        ret = ipa_purge_hbac(state->be_ctx->domain);
++        ret = ipa_common_purge_rules(state->be_ctx->domain,
++                                     HBAC_RULES_SUBDIR);
+         if (ret != EOK) {
+             DEBUG(SSSDBG_CRIT_FAILURE, "Unable to remove HBAC rules\n");
+             goto done;
+@@ -470,37 +470,6 @@ static errno_t ipa_fetch_hbac_recv(struct tevent_req *req)
+     return EOK;
+ }
+ 
+-static errno_t ipa_purge_hbac(struct sss_domain_info *domain)
+-{
+-    TALLOC_CTX *tmp_ctx;
+-    struct ldb_dn *base_dn;
+-    errno_t ret;
+-
+-    tmp_ctx = talloc_new(NULL);
+-    if (tmp_ctx == NULL) {
+-        return ENOMEM;
+-    }
+-
+-    /* Delete any rules in the sysdb so offline logins are also denied. */
+-    base_dn = sysdb_custom_subtree_dn(tmp_ctx, domain, HBAC_RULES_SUBDIR);
+-    if (base_dn == NULL) {
+-        ret = ENOMEM;
+-        goto done;
+-    }
+-
+-    ret = sysdb_delete_recursive(domain->sysdb, base_dn, true);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "sysdb_delete_recursive failed.\n");
+-        goto done;
+-    }
+-
+-    ret = EOK;
+-
+-done:
+-    talloc_free(tmp_ctx);
+-    return ret;
+-}
+-
+ static errno_t ipa_save_hbac(struct sss_domain_info *domain,
+                              struct ipa_fetch_hbac_state *state)
+ {
+diff --git a/src/providers/ipa/ipa_rules_common.c b/src/providers/ipa/ipa_rules_common.c
+index 6964e93fb338fd17916a7130eea55b98974837ec..971870c48ddb8f48a199d8fef7bd34204299743c 100644
+--- a/src/providers/ipa/ipa_rules_common.c
++++ b/src/providers/ipa/ipa_rules_common.c
+@@ -222,3 +222,35 @@ done:
+     talloc_free(tmp_ctx);
+     return ret;
+ }
++
++errno_t
++ipa_common_purge_rules(struct sss_domain_info *domain,
++                       const char *subtree_name)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct ldb_dn *base_dn;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    base_dn = sysdb_custom_subtree_dn(tmp_ctx, domain, subtree_name);
++    if (base_dn == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = sysdb_delete_recursive(domain->sysdb, base_dn, true);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "sysdb_delete_recursive failed.\n");
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
+diff --git a/src/providers/ipa/ipa_rules_common.h b/src/providers/ipa/ipa_rules_common.h
+index 9ccff7f71c73417cf9c3897d202009c54dc471d4..7c62f453815657a22dab00131359161d877bc392 100644
+--- a/src/providers/ipa/ipa_rules_common.h
++++ b/src/providers/ipa/ipa_rules_common.h
+@@ -58,4 +58,8 @@ ipa_common_get_cached_rules(TALLOC_CTX *mem_ctx,
+                             size_t *_rule_count,
+                             struct sysdb_attrs ***_rules);
+ 
++errno_t
++ipa_common_purge_rules(struct sss_domain_info *domain,
++                       const char *subtree_name);
++
+ #endif /* IPA_RULES_COMMON_H_ */
+-- 
+2.14.1
+

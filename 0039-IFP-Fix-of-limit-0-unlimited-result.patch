@@ -1,0 +1,45 @@
+From 3c31ce392ad9da4ac7c3d8190db89efcdbbc8b85 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Petr=20=C4=8Cech?= <pcech@redhat.com>
+Date: Tue, 28 Mar 2017 12:07:55 +0200
+Subject: [PATCH 39/93] IFP: Fix of limit = 0 (unlimited result)
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If we set limit to 0 it means that result is unlimited. Internally we
+restrict number of result by allocation of result array.
+In unlimited case there was a bug and zero array was allocated.
+This fix allocates neccessary array when we know real result size.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3306
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/ifp/ifpsrv_util.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/src/responder/ifp/ifpsrv_util.c b/src/responder/ifp/ifpsrv_util.c
+index 643881515fb4805ae93ba56c3bca9d1da7796319..33a49f4b4653af3b2e4e8bc01f3ec2397095e880 100644
+--- a/src/responder/ifp/ifpsrv_util.c
++++ b/src/responder/ifp/ifpsrv_util.c
+@@ -386,6 +386,15 @@ size_t ifp_list_ctx_remaining_capacity(struct ifp_list_ctx *list_ctx,
+ {
+     size_t capacity = list_ctx->limit - list_ctx->path_count;
+ 
++    if (list_ctx->limit == 0) {
++        list_ctx->paths = talloc_zero_array(list_ctx, const char *, entries);
++        if (list_ctx->paths == NULL) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero_array() failed\n");
++            return 0;
++        }
++        return entries;
++    }
++
+     if (capacity < entries) {
+         DEBUG(SSSDBG_MINOR_FAILURE,
+               "IFP list request has limit of %"PRIu32" entries but back end "
+-- 
+2.14.1
+

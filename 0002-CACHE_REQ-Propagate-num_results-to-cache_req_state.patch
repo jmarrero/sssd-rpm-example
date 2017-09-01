@@ -1,0 +1,54 @@
+From cb89693cf5ccdedf69fa304c6d43d618a7bc18b2 Mon Sep 17 00:00:00 2001
+From: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
+Date: Fri, 24 Mar 2017 16:24:22 +0200
+Subject: [PATCH 02/93] CACHE_REQ: Propagate num_results to cache_req_state
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The num_results field in struct cache_req_state was only set in case of
+well-known objects, set it also for the regular results for uniformity,
+and for later use by session recording code.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/common/cache_req/cache_req.c | 9 +++++++--
+ 1 file changed, 7 insertions(+), 2 deletions(-)
+
+diff --git a/src/responder/common/cache_req/cache_req.c b/src/responder/common/cache_req/cache_req.c
+index 7d77eb7dd72a7ccf3d687eee8f746ab84176b487..84a9b1cb0ad22a9d6fcb31bc1ac1d013098e62df 100644
+--- a/src/responder/common/cache_req/cache_req.c
++++ b/src/responder/common/cache_req/cache_req.c
+@@ -614,7 +614,8 @@ done:
+ static errno_t
+ cache_req_search_domains_recv(TALLOC_CTX *mem_ctx,
+                               struct tevent_req *req,
+-                              struct cache_req_result ***_results)
++                              struct cache_req_result ***_results,
++                              size_t *_num_results)
+ {
+     struct cache_req_search_domains_state *state;
+ 
+@@ -625,6 +626,9 @@ cache_req_search_domains_recv(TALLOC_CTX *mem_ctx,
+     if (_results != NULL) {
+         *_results = talloc_steal(mem_ctx, state->results);
+     }
++    if (_num_results != NULL) {
++        *_num_results = state->num_results;
++    }
+ 
+     return EOK;
+ }
+@@ -1010,7 +1014,8 @@ static void cache_req_done(struct tevent_req *subreq)
+     req = tevent_req_callback_data(subreq, struct tevent_req);
+     state = tevent_req_data(req, struct cache_req_state);
+ 
+-    ret = cache_req_search_domains_recv(state, subreq, &state->results);
++    ret = cache_req_search_domains_recv(state, subreq,
++                                        &state->results, &state->num_results);
+     talloc_zfree(subreq);
+ 
+     if (ret == ENOENT && state->first_iteration) {
+-- 
+2.14.1
+

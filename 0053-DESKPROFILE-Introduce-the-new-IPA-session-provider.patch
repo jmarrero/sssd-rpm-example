@@ -1,0 +1,3147 @@
+From f982039c75ec064894deb676ae53ee57de868590 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Wed, 2 Nov 2016 00:15:16 +0100
+Subject: [PATCH 53/93] DESKPROFILE: Introduce the new IPA session provider
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In order to provide FleetCommander[0] integration, a session provider
+has been introduced for IPA. The design of this feature and more
+technical details can be found at [1] and [2], which are the design
+pages of both freeIPA and SSSD parts.
+
+As there's no way to test freeIPA integration with our upstream tests,
+no test has been provided yet.
+
+Is also worth to mention that the name "deskprofile" has been chosen
+instead of "fleetcmd" in order to match with the freeIPA plugin. It
+means that, for consistence, all source files, directories created,
+options added, functions prefixes and so on are following the choice
+accordingly.
+
+[0]: https://wiki.gnome.org/Projects/FleetCommander
+[1]: https://github.com/abbra/freeipa-desktop-profile/blob/master/plugin/Feature.mediawiki
+[2]: https://docs.pagure.org/SSSD.sssd/design_pages/fleet_commander_integration.html
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/2995
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ Makefile.am                                    |  11 +
+ contrib/sssd.spec.in                           |   2 +
+ src/confdb/confdb.h                            |   1 +
+ src/config/SSSDConfig/__init__.py.in           |   3 +
+ src/config/SSSDConfig/sssd_upgrade_config.py   |   1 +
+ src/config/SSSDConfigTest.py                   |   3 +
+ src/config/cfg_rules.ini                       |   3 +
+ src/config/etc/sssd.api.conf                   |   1 +
+ src/config/etc/sssd.api.d/sssd-ipa.conf        |   2 +
+ src/man/sssd-ipa.5.xml                         |  29 +
+ src/man/sssd.conf.5.xml                        |  24 +
+ src/providers/data_provider/dp.h               |   2 +
+ src/providers/data_provider/dp_target_auth.c   |  10 +-
+ src/providers/data_provider/dp_targets.c       |   2 +
+ src/providers/ipa/ipa_common.c                 |  26 +
+ src/providers/ipa/ipa_common.h                 |   3 +
+ src/providers/ipa/ipa_deskprofile_config.c     | 156 +++++
+ src/providers/ipa/ipa_deskprofile_config.h     |  45 ++
+ src/providers/ipa/ipa_deskprofile_private.h    |  50 ++
+ src/providers/ipa/ipa_deskprofile_rules.c      | 367 ++++++++++
+ src/providers/ipa/ipa_deskprofile_rules.h      |  43 ++
+ src/providers/ipa/ipa_deskprofile_rules_util.c | 932 +++++++++++++++++++++++++
+ src/providers/ipa/ipa_deskprofile_rules_util.h |  57 ++
+ src/providers/ipa/ipa_init.c                   |  49 ++
+ src/providers/ipa/ipa_opts.c                   |   2 +
+ src/providers/ipa/ipa_session.c                | 833 ++++++++++++++++++++++
+ src/providers/ipa/ipa_session.h                |  52 ++
+ src/responder/ifp/ifp_components.c             |   3 +-
+ 28 files changed, 2709 insertions(+), 3 deletions(-)
+ create mode 100644 src/providers/ipa/ipa_deskprofile_config.c
+ create mode 100644 src/providers/ipa/ipa_deskprofile_config.h
+ create mode 100644 src/providers/ipa/ipa_deskprofile_private.h
+ create mode 100644 src/providers/ipa/ipa_deskprofile_rules.c
+ create mode 100644 src/providers/ipa/ipa_deskprofile_rules.h
+ create mode 100644 src/providers/ipa/ipa_deskprofile_rules_util.c
+ create mode 100644 src/providers/ipa/ipa_deskprofile_rules_util.h
+ create mode 100644 src/providers/ipa/ipa_session.c
+ create mode 100644 src/providers/ipa/ipa_session.h
+
+diff --git a/Makefile.am b/Makefile.am
+index c292c1317ae45ae73cc3e86eb464d72e77eaf1fe..6cda729d381948d27fae702a557b5f3aab423683 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -88,6 +88,7 @@ polkitdir = @polkitdir@
+ pamconfdir = $(sysconfdir)/pam.d
+ systemtap_tapdir = @tapset_dir@
+ sssdkcmdatadir = $(datadir)/sssd-kcm
++deskprofilepath = $(sss_statedir)/deskprofile
+ 
+ if HAVE_SYSTEMD_UNIT
+ ifp_exec_cmd = $(sssdlibexecdir)/sssd_ifp --uid 0 --gid 0 --debug-to-files --dbus-activated
+@@ -801,6 +802,7 @@ dist_noinst_HEADERS = \
+     src/providers/ipa/ipa_srv.h \
+     src/providers/ipa/ipa_dn.h \
+     src/providers/ipa/ipa_sudo.h \
++    src/providers/ipa/ipa_session.h \
+     src/providers/ad/ad_srv.h \
+     src/providers/ad/ad_common.h \
+     src/providers/ad/ad_pac.h \
+@@ -3892,6 +3894,14 @@ libsss_ipa_la_SOURCES = \
+     src/providers/ipa/ipa_hbac_common.c \
+     src/providers/ipa/ipa_rules_common.c \
+     src/providers/ipa/ipa_rules_common.h \
++    src/providers/ipa/ipa_session.c \
++    src/providers/ipa/ipa_deskprofile_private.h \
++    src/providers/ipa/ipa_deskprofile_config.c \
++    src/providers/ipa/ipa_deskprofile_config.h \
++    src/providers/ipa/ipa_deskprofile_rules.c \
++    src/providers/ipa/ipa_deskprofile_rules.h \
++    src/providers/ipa/ipa_deskprofile_rules_util.c \
++    src/providers/ipa/ipa_deskprofile_rules_util.h \
+     src/providers/ipa/ipa_srv.c \
+     src/providers/ipa/ipa_idmap.c \
+     src/providers/ipa/ipa_dn.c \
+@@ -4617,6 +4627,7 @@ SSSD_USER_DIRS = \
+     $(DESTDIR)$(sssdconfdir)/conf.d \
+     $(DESTDIR)$(sssddefaultconfdir) \
+     $(DESTDIR)$(logpath) \
++    $(DESTDIR)$(deskprofilepath) \
+     $(NULL)
+ 
+ installsssddirs::
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index 0b7a6115778a185eae78be0f5447e6d883be6eb9..942d57f8eae88eec477e1e344412f1a92404e0f0 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -156,6 +156,7 @@ Requires: python2-sssdconfig = %{version}-%{release}
+ %global pubconfpath %{sssdstatedir}/pubconf
+ %global gpocachepath %{sssdstatedir}/gpo_cache
+ %global secdbpath %{sssdstatedir}/secrets
++%global deskprofilepath %{sssdstatedir}/deskprofile
+ 
+ ### Build Dependencies ###
+ 
+@@ -958,6 +959,7 @@ done
+ %if (0%{?with_secrets} == 1)
+ %attr(700,root,root) %dir %{secdbpath}
+ %endif
++%attr(700,root,root) %dir %{deskprofilepath}
+ %ghost %attr(0644,sssd,sssd) %verify(not md5 size mtime) %{mcpath}/passwd
+ %ghost %attr(0644,sssd,sssd) %verify(not md5 size mtime) %{mcpath}/group
+ %ghost %attr(0644,sssd,sssd) %verify(not md5 size mtime) %{mcpath}/initgroups
+diff --git a/src/confdb/confdb.h b/src/confdb/confdb.h
+index 66ecc041398fda973c0f30a47a3f5944c88d19c2..da725fb667afea6747d22d1d3a4315fb7a7bace2 100644
+--- a/src/confdb/confdb.h
++++ b/src/confdb/confdb.h
+@@ -183,6 +183,7 @@
+ #define CONFDB_DOMAIN_SELINUX_PROVIDER "selinux_provider"
+ #define CONFDB_DOMAIN_HOSTID_PROVIDER "hostid_provider"
+ #define CONFDB_DOMAIN_SUBDOMAINS_PROVIDER "subdomains_provider"
++#define CONFDB_DOMAIN_SESSION_PROVIDER "session_provider"
+ #define CONFDB_DOMAIN_COMMAND "command"
+ #define CONFDB_DOMAIN_TIMEOUT "timeout"
+ #define CONFDB_DOMAIN_ATTR "cn"
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index de757521cff58460049bb8c4873efaf6bf0b8d95..2a19b60a987c5f2c5c59ac2466f8f6821803e146 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -154,6 +154,7 @@ option_strings = {
+     'autofs_provider' : _('Autofs provider'),
+     'hostid_provider' : _('Host identity provider'),
+     'selinux_provider' : _('SELinux provider'),
++    'session_provider' : _('Session management provider'),
+ 
+     # [domain]
+     'domain_type' : _('Whether the domain is usable by the OS or by applications'),
+@@ -217,6 +218,8 @@ option_strings = {
+     'ipa_anchor_uuid': _("Attribute with the reference to the original object"),
+     'ipa_user_override_object_class': _("Objectclass for user override objects"),
+     'ipa_group_override_object_class': _("Objectclass for group override objects"),
++    'ipa_deskprofile_search_base': _("Search base for Desktop Profile related objects"),
++    'ipa_deskprofile_refresh': _("The amount of time in seconds between lookups of the Desktop Profile rules against the IPA server"),
+ 
+     # [provider/ad]
+     'ad_domain' : _('Active Directory domain'),
+diff --git a/src/config/SSSDConfig/sssd_upgrade_config.py b/src/config/SSSDConfig/sssd_upgrade_config.py
+index 767d06ddc18b16f1a1af65805516518f5a3f8ad6..d2d94b21e87920c76065462e4ccb10606c3aca93 100644
+--- a/src/config/SSSDConfig/sssd_upgrade_config.py
++++ b/src/config/SSSDConfig/sssd_upgrade_config.py
+@@ -148,6 +148,7 @@ class SSSDConfigFile(SSSDChangeConf):
+                        'auth_provider' : 'auth-module',
+                        'access_provider' : 'access-module',
+                        'chpass_provider' : 'chpass-module',
++                       'session_provider' : 'session-module',
+                        'use_fully_qualified_names' : 'useFullyQualifiedNames',
+                        'store_legacy_passwords' : 'store-legacy-passwords',
+                       }
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index 5f3ff3958d033dded386850a8653db9872fe4718..d0e97f02beaf5695149702c5c029197634ab8923 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -616,6 +616,7 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+             'hostid_provider',
+             'subdomains_provider',
+             'selinux_provider',
++            'session_provider',
+             'realmd_tags',
+             'subdomain_refresh_interval',
+             'subdomain_inherit',
+@@ -986,6 +987,7 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+             'hostid_provider',
+             'subdomains_provider',
+             'selinux_provider',
++            'session_provider',
+             'realmd_tags',
+             'subdomain_refresh_interval',
+             'subdomain_inherit',
+@@ -1381,6 +1383,7 @@ class SSSDConfigTestSSSDConfig(unittest.TestCase):
+             'id_provider',
+             'auth_provider',
+             'access_provider',
++            'session_provider',
+             'default_shell',
+             'fallback_homedir',
+             'cache_credentials',
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index cba59d2c3813f44b8ab85b4c246108232f9d8fd4..3ebd39e93cec6d1ddf547d7ebdb49884e637f8c7 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -330,6 +330,7 @@ option = autofs_provider
+ option = hostid_provider
+ option = subdomains_provider
+ option = selinux_provider
++option = session_provider
+ 
+ # Options available to all domains
+ option = domain_type
+@@ -438,6 +439,8 @@ option = ad_site
+ option = ipa_anchor_uuid
+ option = ipa_automount_location
+ option = ipa_backup_server
++option = ipa_deskprofile_refresh
++option = ipa_deskprofile_search_base
+ option = ipa_domain
+ option = ipa_dyndns_iface
+ option = ipa_dyndns_ttl
+diff --git a/src/config/etc/sssd.api.conf b/src/config/etc/sssd.api.conf
+index 0d11771ae3df50ba9f380e44747a5385a224544d..9eb6aeb83bbc1989cec7465e6442a1bf7762d9d8 100644
+--- a/src/config/etc/sssd.api.conf
++++ b/src/config/etc/sssd.api.conf
+@@ -139,6 +139,7 @@ autofs_provider = str, None, false
+ hostid_provider = str, None, false
+ subdomains_provider = str, None, false
+ selinux_provider = str, None, false
++session_provider = str, None, false
+ 
+ [domain]
+ # Options available to all domains
+diff --git a/src/config/etc/sssd.api.d/sssd-ipa.conf b/src/config/etc/sssd.api.d/sssd-ipa.conf
+index f36b568c3ea813db3f46fdd69059957f6373801e..8178b123e3b42cb92029db8b879d26f1fd16cf3e 100644
+--- a/src/config/etc/sssd.api.d/sssd-ipa.conf
++++ b/src/config/etc/sssd.api.d/sssd-ipa.conf
+@@ -3,6 +3,7 @@ ipa_domain = str, None, false
+ ipa_server = str, None, false
+ ipa_backup_server = str, None, false
+ ipa_hostname = str, None, false
++ipa_deskprofile_search_base = str, None, false
+ ipa_dyndns_update = bool, None, false
+ ipa_dyndns_ttl = int, None, false
+ ipa_dyndns_iface = str, None, false
+@@ -193,6 +194,7 @@ ldap_autofs_search_base = str, None, false
+ [provider/ipa/chpass]
+ 
+ [provider/ipa/session]
++ipa_deskprofile_refresh = int, None, false
+ ipa_host_object_class = str, None, false
+ ipa_host_name = str, None, false
+ ipa_host_fqdn = str, None, false
+diff --git a/src/man/sssd-ipa.5.xml b/src/man/sssd-ipa.5.xml
+index 5e7f8ff1a581cf206c9aec99ba8084e3de56a7e6..4d1c3c8a11dea956c31be690f5bdceea94252fd2 100644
+--- a/src/man/sssd-ipa.5.xml
++++ b/src/man/sssd-ipa.5.xml
+@@ -306,6 +306,19 @@
+                     </listitem>
+                 </varlistentry>
+ 
++                <varlistentry>
++                    <term>ipa_deskprofile_search_base (string)</term>
++                    <listitem>
++                        <para>
++                            Optional. Use the given string as search base for
++                            Desktop Profile related objects.
++                        </para>
++                        <para>
++                            Default: Use base DN
++                        </para>
++                    </listitem>
++                </varlistentry>
++
+                 <varlistentry>
+                     <term>ipa_hbac_search_base (string)</term>
+                     <listitem>
+@@ -447,6 +460,22 @@
+                     </listitem>
+                 </varlistentry>
+ 
++                <varlistentry>
++                    <term>ipa_deskprofile_refresh (integer)</term>
++                    <listitem>
++                        <para>
++                            The amount of time between lookups of the Desktop
++                            Profile rules against the IPA server. This will
++                            reduce the latency and load on the IPA server if
++                            there are many desktop profiles requests made in a
++                            short period.
++                        </para>
++                        <para>
++                            Default: 5 (seconds)
++                        </para>
++                    </listitem>
++                </varlistentry>
++
+                 <varlistentry>
+                     <term>ipa_hbac_refresh (integer)</term>
+                     <listitem>
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index 7b5abebbf68a832c3b0af9bcff9c535eca77778a..c26f4a3bac1f009d19d9a5a3a49ad7370ac72791 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -2387,6 +2387,30 @@ pam_account_locked_message = Account locked, please contact help desk.
+                         </para>
+                     </listitem>
+                 </varlistentry>
++                <varlistentry>
++                    <term>session_provider (string)</term>
++                    <listitem>
++                        <para>
++                            The provider which configures and manages user session
++                            related tasks. The only user session task currently
++                            provided is the integration with Fleet Commander, which
++                            works only with IPA.
++                            Supported session providers are:
++                        </para>
++                        <para>
++                            <quote>ipa</quote> to allow performing user session
++                            related tasks.
++                        </para>
++                        <para>
++                            <quote>none</quote> does not perform any kind of user
++                            session related tasks.
++                        </para>
++                        <para>
++                            Default: <quote>id_provider</quote> is used if it
++                            is set and can perform session related tasks.
++                        </para>
++                    </listitem>
++                </varlistentry>
+ 
+                 <varlistentry condition="with_autofs">
+                     <term>autofs_provider (string)</term>
+diff --git a/src/providers/data_provider/dp.h b/src/providers/data_provider/dp.h
+index e80a6c3398784dfc176baeff2daf7203c52fc072..9cdbe5b3a56ba159f9a10df6e010e616e4aefcac 100644
+--- a/src/providers/data_provider/dp.h
++++ b/src/providers/data_provider/dp.h
+@@ -66,6 +66,7 @@ enum dp_targets {
+     DPT_SELINUX,
+     DPT_HOSTID,
+     DPT_SUBDOMAINS,
++    DPT_SESSION,
+ 
+     DP_TARGET_SENTINEL
+ };
+@@ -80,6 +81,7 @@ enum dp_methods {
+     DPM_AUTOFS_HANDLER,
+     DPM_HOSTID_HANDLER,
+     DPM_DOMAINS_HANDLER,
++    DPM_SESSION_HANDLER,
+ 
+     DP_METHOD_SENTINEL
+ };
+diff --git a/src/providers/data_provider/dp_target_auth.c b/src/providers/data_provider/dp_target_auth.c
+index 78c4cce7ee76e3e169a3aac48c11399bc3d05ce1..6bb3313b2de002466e5ca84464c962acd2412bfa 100644
+--- a/src/providers/data_provider/dp_target_auth.c
++++ b/src/providers/data_provider/dp_target_auth.c
+@@ -126,9 +126,15 @@ static void choose_target(struct data_provider *provider,
+             name = "PAM Chpass 2nd";
+             break;
+         case SSS_PAM_OPEN_SESSION:
+-            target = DP_TARGET_SENTINEL;
+-            method = DP_METHOD_SENTINEL;
+             name = "PAM Open Session";
++            if (dp_method_enabled(provider, DPT_SESSION, DPM_SESSION_HANDLER)) {
++                target = DPT_SESSION;
++                method = DPM_SESSION_HANDLER;
++                break;
++            }
++
++            target = DP_TARGET_SENTINEL;
++            method = DP_METHOD_SENTINEL;
+             pd->pam_status = PAM_SUCCESS;
+             break;
+         case SSS_PAM_SETCRED:
+diff --git a/src/providers/data_provider/dp_targets.c b/src/providers/data_provider/dp_targets.c
+index e2a45bbac969ca7b9b13729f26b8cded8ab7eebc..2dd15d80d7094aa760f8767588dc096d1482052b 100644
+--- a/src/providers/data_provider/dp_targets.c
++++ b/src/providers/data_provider/dp_targets.c
+@@ -114,6 +114,8 @@ const char *dp_target_to_string(enum dp_targets target)
+         return "hostid";
+     case DPT_SUBDOMAINS:
+         return "subdomains";
++    case DPT_SESSION:
++        return "session";
+     case DP_TARGET_SENTINEL:
+         return NULL;
+     }
+diff --git a/src/providers/ipa/ipa_common.c b/src/providers/ipa/ipa_common.c
+index 6b29f2fde31f3866bb62b5c03e47e6c24f837550..6bb1e679c4b5abcb7bb74fa17cdbd296f6eaef59 100644
+--- a/src/providers/ipa/ipa_common.c
++++ b/src/providers/ipa/ipa_common.c
+@@ -152,6 +152,9 @@ static errno_t ipa_parse_search_base(TALLOC_CTX *mem_ctx,
+     case IPA_VIEWS_SEARCH_BASE:
+         class_name = "IPA_VIEWS";
+         break;
++    case IPA_DESKPROFILE_SEARCH_BASE:
++        class_name = "IPA_DESKPROFILE";
++        break;
+     default:
+         DEBUG(SSSDBG_CONF_SETTINGS,
+               "Unknown search base type: [%d]\n", class);
+@@ -398,6 +401,29 @@ int ipa_get_id_options(struct ipa_options *ipa_opts,
+                                 &ipa_opts->selinux_search_bases);
+     if (ret != EOK) goto done;
+ 
++    if (NULL == dp_opt_get_string(ipa_opts->basic,
++                                  IPA_DESKPROFILE_SEARCH_BASE)) {
++        value = talloc_asprintf(tmpctx, "cn=desktop-profile,%s", basedn);
++        if (!value) {
++            ret = ENOMEM;
++            goto done;
++        }
++
++        ret = dp_opt_set_string(ipa_opts->basic, IPA_DESKPROFILE_SEARCH_BASE, value);
++        if (ret != EOK) {
++            goto done;
++        }
++
++        DEBUG(SSSDBG_TRACE_FUNC, "Option %s set to %s\n",
++                  ipa_opts->basic[IPA_DESKPROFILE_SEARCH_BASE].opt_name,
++                  dp_opt_get_string(ipa_opts->basic,
++                                    IPA_DESKPROFILE_SEARCH_BASE));
++    }
++    ret = ipa_parse_search_base(ipa_opts->basic, ipa_opts->basic,
++                                IPA_DESKPROFILE_SEARCH_BASE,
++                                &ipa_opts->deskprofile_search_bases);
++    if (ret != EOK) goto done;
++
+     value = dp_opt_get_string(ipa_opts->id->basic, SDAP_DEREF);
+     if (value != NULL) {
+         ret = deref_string_to_val(value, &i);
+diff --git a/src/providers/ipa/ipa_common.h b/src/providers/ipa/ipa_common.h
+index b1d90d3624b5bc6a126709e6bd6fb1fdbbaafad8..5b3507cd47aab75a4a7bbc16a8146d82411f2d16 100644
+--- a/src/providers/ipa/ipa_common.h
++++ b/src/providers/ipa/ipa_common.h
+@@ -56,6 +56,8 @@ enum ipa_basic_opt {
+     IPA_SERVER_MODE,
+     IPA_VIEWS_SEARCH_BASE,
+     IPA_KRB5_CONFD_PATH,
++    IPA_DESKPROFILE_SEARCH_BASE,
++    IPA_DESKPROFILE_REFRESH,
+ 
+     IPA_OPTS_BASIC /* opts counter */
+ };
+@@ -218,6 +220,7 @@ struct ipa_options {
+     struct sdap_search_base **master_domain_search_bases;
+     struct sdap_search_base **ranges_search_bases;
+     struct sdap_search_base **views_search_bases;
++    struct sdap_search_base **deskprofile_search_bases;
+     struct ipa_service *service;
+ 
+     /* id provider */
+diff --git a/src/providers/ipa/ipa_deskprofile_config.c b/src/providers/ipa/ipa_deskprofile_config.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..8c66dda7550f200887ab99932b8be4c00e9785c0
+--- /dev/null
++++ b/src/providers/ipa/ipa_deskprofile_config.c
+@@ -0,0 +1,156 @@
++/*
++    SSSD
++
++    Authors:
++        Fabiano Fidêncio <fidencio@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "util/util.h"
++#include "providers/ipa/ipa_common.h"
++#include "providers/ipa/ipa_deskprofile_private.h"
++#include "providers/ipa/ipa_deskprofile_config.h"
++#include "providers/ldap/sdap_async.h"
++
++struct ipa_deskprofile_config_state {
++    struct sysdb_attrs *config;
++};
++
++static void
++ipa_deskprofile_get_config_done(struct tevent_req *subreq);
++
++struct tevent_req *
++ipa_deskprofile_get_config_send(TALLOC_CTX *mem_ctx,
++                                struct tevent_context *ev,
++                                struct sdap_handle *sh,
++                                struct sdap_options *opts,
++                                struct dp_option *ipa_opts)
++{
++    struct tevent_req *req = NULL;
++    struct tevent_req *subreq;
++    struct ipa_deskprofile_rule_state *state;
++    char *rule_filter;
++    const char *attrs[] = { IPA_DESKPROFILE_PRIORITY, NULL };
++    errno_t ret;
++
++    req = tevent_req_create(mem_ctx, &state,
++                            struct ipa_deskprofile_config_state);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "tevent_req_create() failed.\n");
++        return NULL;
++    }
++
++    rule_filter = talloc_asprintf(state, "(objectclass=%s)",
++                                  IPA_DESKPROFILE_CONFIG);
++    if (rule_filter == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    subreq = sdap_get_generic_send(state, ev, opts, sh,
++                                   dp_opt_get_string(ipa_opts,
++                                                     IPA_DESKPROFILE_SEARCH_BASE),
++                                   LDAP_SCOPE_BASE, rule_filter,
++                                   attrs, NULL, 0,
++                                   dp_opt_get_int(opts->basic,
++                                                  SDAP_ENUM_SEARCH_TIMEOUT),
++                                   false);
++    if (subreq == NULL) {
++        ret = ENOMEM;
++        DEBUG(SSSDBG_CRIT_FAILURE, "sdap_get_generic_send failed.\n");
++        goto done;
++    }
++
++    tevent_req_set_callback(subreq, ipa_deskprofile_get_config_done, req);
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        tevent_req_post(req, ev);
++    }
++
++    return req;
++}
++
++static void
++ipa_deskprofile_get_config_done(struct tevent_req *subreq)
++{
++    struct tevent_req *req;
++    struct ipa_deskprofile_config_state *state;
++    size_t reply_count;
++    struct sysdb_attrs **reply = NULL;
++    errno_t ret;
++
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_deskprofile_config_state);
++
++    ret = sdap_get_generic_recv(subreq, state, &reply_count, &reply);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "Could not retrieve Desktop Profile config\n");
++        goto done;
++    }
++
++    if (reply_count == 0) {
++        /*
++         * When connecting to an old server that doesn't support Desktop
++         * Profile, the reply_count will be zero.
++         * In order to not throw a unnecessary error and fail let's just
++         * return ENOENT and print a debug message about it.
++         */
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "Server doesn't support Desktop Profile.\n");
++        ret = ENOENT;
++        goto done;
++    } else if (reply_count != 1) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Unexpected number of results, expected 1, got %zu.\n",
++              reply_count);
++        ret = EINVAL;
++        goto done;
++    }
++
++    state->config = reply[0];
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    tevent_req_done(req);
++}
++
++errno_t
++ipa_deskprofile_get_config_recv(struct tevent_req *req,
++                                TALLOC_CTX *mem_ctx,
++                                struct sysdb_attrs **config)
++{
++    struct ipa_deskprofile_config_state *state;
++
++    state = tevent_req_data(req, struct ipa_deskprofile_config_state);
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    *config = talloc_steal(mem_ctx, state->config);
++
++    return EOK;
++}
+diff --git a/src/providers/ipa/ipa_deskprofile_config.h b/src/providers/ipa/ipa_deskprofile_config.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..c4a05b2152beac95691e38c513b464bd5ab5becc
+--- /dev/null
++++ b/src/providers/ipa/ipa_deskprofile_config.h
+@@ -0,0 +1,45 @@
++/*
++    SSSD
++
++    Authors:
++        Fabiano Fidêncio <fidencio@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef IPA_DESKPROFILE_CONFIG_H_
++#define IPA_DESKPROFILE_CONFIG_H_
++
++#include <talloc.h>
++#include <tevent.h>
++
++#include "providers/ldap/ldap_common.h"
++#include "db/sysdb.h"
++
++/* From ipa_deskprofile_config.c */
++struct tevent_req *
++ipa_deskprofile_get_config_send(TALLOC_CTX *mem_ctx,
++                                struct tevent_context *ev,
++                                struct sdap_handle *sh,
++                                struct sdap_options *opts,
++                                struct dp_option *ipa_opts);
++
++errno_t
++ipa_deskprofile_get_config_recv(struct tevent_req *req,
++                                TALLOC_CTX *mem_ctx,
++                                struct sysdb_attrs **config);
++
++#endif /* IPA_DESKPROFILE_CONFIG_H_ */
+diff --git a/src/providers/ipa/ipa_deskprofile_private.h b/src/providers/ipa/ipa_deskprofile_private.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..1db154b76a7bbe3114c2a4fc28eddc3fa16d9460
+--- /dev/null
++++ b/src/providers/ipa/ipa_deskprofile_private.h
+@@ -0,0 +1,50 @@
++/*
++   SSSD
++
++   Authors:
++       Fabiano Fidêncio <fidencio@redhat.com>
++
++   Copyright (C) 2017 Red Hat
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef IPA_DESKPROFILE_PRIVATE_H_
++#define IPA_DESKPROFILE_PRIVATE_H_
++
++#define IPA_DESKPROFILE_CONFIG "ipaDeskProfileConfig"
++#define IPA_DESKPROFILE_RULE "ipaDeskProfileRule"
++#define IPA_DESKPROFILE_PRIORITY "ipaDeskProfilePriority"
++#define IPA_DESKPROFILE_DATA "ipaDeskData"
++
++#define DESKPROFILE_HOSTS_SUBDIR "deskprofile_hosts"
++#define DESKPROFILE_HOSTGROUPS_SUBDIR "deskprofile_hostgroups"
++
++#define IPA_SESSION_RULE_TYPE "sessionRuleType"
++
++#define IPA_DESKPROFILE_BASE_TMPL "cn=desktop-profile,%s"
++
++#define SYSDB_DESKPROFILE_BASE_TMPL "cn=desktop-profile,"SYSDB_TMPL_CUSTOM_BASE
++
++#define DESKPROFILE_RULES_SUBDIR "deskprofile_rules"
++
++#define DESKPROFILE_CONFIG_SUBDIR "deskprofile_config"
++
++struct deskprofile_rule {
++    const char *name;
++    int priority;
++    const char *data;
++};
++
++#endif /* IPA_DESKPROFILE_PRIVATE_H_ */
+diff --git a/src/providers/ipa/ipa_deskprofile_rules.c b/src/providers/ipa/ipa_deskprofile_rules.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..65994356e82515611dc13c214d5a504b1009870d
+--- /dev/null
++++ b/src/providers/ipa/ipa_deskprofile_rules.c
+@@ -0,0 +1,367 @@
++/*
++    SSSD
++
++    Authors:
++        Fabiano Fidêncio <fidencio@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "util/util.h"
++#include "providers/ldap/ldap_common.h"
++#include "providers/ldap/sdap_async_private.h"
++#include "providers/ipa/ipa_rules_common.h"
++#include "providers/ipa/ipa_deskprofile_private.h"
++#include "providers/ipa/ipa_deskprofile_rules.h"
++#include "providers/ipa/ipa_deskprofile_rules_util.h"
++
++struct ipa_deskprofile_rule_state {
++    struct tevent_context *ev;
++    struct sdap_handle *sh;
++    struct sdap_options *opts;
++
++    int search_base_iter;
++    struct sdap_search_base **search_bases;
++
++    const char **attrs;
++    char *rules_filter;
++    char *cur_filter;
++
++    size_t rule_count;
++    struct sysdb_attrs **rules;
++};
++
++static errno_t
++ipa_deskprofile_rule_info_next(struct tevent_req *req,
++                               struct ipa_deskprofile_rule_state *state);
++static void
++ipa_deskprofile_rule_info_done(struct tevent_req *subreq);
++
++struct tevent_req *
++ipa_deskprofile_rule_info_send(TALLOC_CTX *mem_ctx,
++                               struct tevent_context *ev,
++                               struct sdap_handle *sh,
++                               struct sdap_options *opts,
++                               struct sdap_search_base **search_bases,
++                               struct sysdb_attrs *ipa_host,
++                               struct sss_domain_info *domain,
++                               const char *username)
++{
++    struct tevent_req *req = NULL;
++    struct ipa_deskprofile_rule_state *state;
++    char *user;
++    char *group;
++    char *host_dn_clean;
++    char *group_clean;
++    char *host_group_clean;
++    char *rule_filter;
++    const char *host_dn;
++    const char **memberof_list;
++    char **groups_list;
++    errno_t ret;
++
++    req = tevent_req_create(mem_ctx, &state, struct ipa_deskprofile_rule_state);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "tevent_req_create failed.\n");
++        return NULL;
++    }
++
++    if (ipa_host == NULL) {
++        ret = EINVAL;
++        DEBUG(SSSDBG_CRIT_FAILURE, "Missing host\n");
++        goto immediate;
++    }
++
++    ret = sysdb_attrs_get_string(ipa_host, SYSDB_ORIG_DN, &host_dn);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Could not identify IPA hostname\n");
++        goto immediate;
++    }
++
++    ret = sss_filter_sanitize(state, host_dn, &host_dn_clean);
++    if (ret != EOK) {
++        goto immediate;
++    }
++
++    state->ev = ev;
++    state->sh = sh;
++    state->opts = opts;
++    state->search_bases = search_bases;
++    state->search_base_iter = 0;
++    state->attrs = deskprofile_get_attrs_to_get_cached_rules(state);
++    if (state->attrs == NULL) {
++        ret = ENOMEM;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "deskprofile_get_attrs_get_cached_rules() failed\n");
++        goto immediate;
++    }
++
++    rule_filter = talloc_asprintf(state,
++                                  "(&(objectclass=%s)"
++                                  "(%s=%s)"
++                                  "(|(%s=%s)(%s=%s)(%s=%s)",
++                                  IPA_DESKPROFILE_RULE,
++                                  IPA_ENABLED_FLAG, IPA_TRUE_VALUE,
++                                  IPA_HOST_CATEGORY, "all",
++                                  IPA_USER_CATEGORY, "all",
++                                  IPA_MEMBER_HOST, host_dn_clean);
++    if (rule_filter == NULL) {
++        ret = ENOMEM;
++        goto immediate;
++    }
++
++    /* Add all parent groups of ipa_hostname to the filter */
++    ret = sysdb_attrs_get_string_array(ipa_host, SYSDB_ORIG_MEMBEROF,
++                                       state, &memberof_list);
++    if (ret != EOK && ret != ENOENT) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Could not identify.\n");
++    } else if (ret == ENOENT) {
++        /* This host is not a member of any hostgroups */
++        memberof_list = talloc_array(state, const char *, 1);
++        if (memberof_list == NULL) {
++            ret = ENOMEM;
++            goto immediate;
++        }
++        memberof_list[0] = NULL;
++    }
++
++    for (size_t i = 0; memberof_list[i] != NULL; i++) {
++        ret = sss_filter_sanitize(state,
++                                  memberof_list[i],
++                                  &host_group_clean);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "sss_filter_sanitize() failed [%d]: %s\n",
++                  ret, sss_strerror(ret));
++            goto immediate;
++        }
++
++        rule_filter = talloc_asprintf_append(rule_filter, "(%s=%s)",
++                                             IPA_MEMBER_HOST,
++                                             host_group_clean);
++        if (rule_filter == NULL) {
++            ret = ENOMEM;
++            goto immediate;
++        }
++    }
++
++    /* Add the username to the filter */
++    ret = sss_parse_internal_fqname(state, username, &user, NULL);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "sss_parse_internal_fqname() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto immediate;
++    }
++
++    rule_filter = talloc_asprintf_append(rule_filter, "(%s=%s)",
++                                         IPA_MEMBER_USER, user);
++    if (rule_filter == NULL) {
++        ret = ENOMEM;
++        goto immediate;
++    }
++
++    /* Add all parent groups of `username` to the filter */
++    ret = get_sysdb_grouplist(state, domain->sysdb, domain, username,
++                              &groups_list);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "get_sysdb_grouplist() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto immediate;
++    }
++
++    for (size_t i = 0; groups_list[i] != NULL; i++) {
++        ret = sss_filter_sanitize(state, groups_list[i], &group_clean);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "sss_filter_sanitize() failed [%d]: %s\n",
++                  ret, sss_strerror(ret));
++            goto immediate;
++        }
++
++        ret = sss_parse_internal_fqname(state, group_clean, &group, NULL);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "sss_parse_internal_fqname() failed [%d]: %s\n",
++                  ret, sss_strerror(ret));
++            goto immediate;
++        }
++
++        rule_filter = talloc_asprintf_append(rule_filter, "(%s=%s)",
++                                             IPA_MEMBER_USER, group);
++        if (rule_filter == NULL) {
++            ret = ENOMEM;
++            goto immediate;
++        }
++    }
++
++    rule_filter = talloc_asprintf_append(rule_filter, "))");
++    if (rule_filter == NULL) {
++        ret = ENOMEM;
++        goto immediate;
++    }
++    state->rules_filter = talloc_steal(state, rule_filter);
++
++    ret = ipa_deskprofile_rule_info_next(req, state);
++    if (ret != EAGAIN) {
++        if (ret == EOK) {
++            /* ipa_deskprofile_rule_info_next should always have a search base
++             * when called for the first time.
++             *
++             * For the subsequent iterations, not finding any more search bases
++             * is fine though (thus the function returns EOK).
++             *
++             * As, here, it's the first case happening, let's return EINVAL.
++             */
++            DEBUG(SSSDBG_CRIT_FAILURE, "No search base found\n");
++            ret = EINVAL;
++        }
++        goto immediate;
++    }
++
++    return req;
++
++immediate:
++    if (ret == EOK) {
++        tevent_req_done(req);
++    } else {
++        tevent_req_error(req, ret);
++    }
++    tevent_req_post(req, ev);
++    return req;
++}
++
++static errno_t
++ipa_deskprofile_rule_info_next(struct tevent_req *req,
++                               struct ipa_deskprofile_rule_state *state)
++{
++    struct tevent_req *subreq;
++    struct sdap_search_base *base;
++
++    base = state->search_bases[state->search_base_iter];
++    if (base == NULL) {
++        return EOK;
++    }
++
++    talloc_zfree(state->cur_filter);
++    state->cur_filter = sdap_combine_filters(state, state->rules_filter,
++                                             base->filter);
++    if (state->cur_filter == NULL) {
++        return ENOMEM;
++    }
++
++    DEBUG(SSSDBG_TRACE_FUNC,
++          "Sending request for next search base: [%s][%d][%s]\n",
++          base->basedn, base->scope, state->cur_filter);
++
++    subreq = sdap_get_generic_send(state, state->ev, state->opts, state->sh,
++                                   base->basedn, base->scope,
++                                   state->cur_filter, state->attrs,
++                                   NULL, 0,
++                                   dp_opt_get_int(state->opts->basic,
++                                                  SDAP_ENUM_SEARCH_TIMEOUT),
++                                   true);
++    if (subreq == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "sdap_get_generic_send failed.\n");
++        return ENOMEM;
++    }
++    tevent_req_set_callback(subreq, ipa_deskprofile_rule_info_done, req);
++
++    return EAGAIN;
++}
++
++static void
++ipa_deskprofile_rule_info_done(struct tevent_req *subreq)
++{
++    errno_t ret;
++    struct tevent_req *req;
++    struct ipa_deskprofile_rule_state *state;
++    size_t rule_count;
++    size_t total_count;
++    struct sysdb_attrs **rules;
++    struct sysdb_attrs **target;
++    int i;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_deskprofile_rule_state);
++
++    ret = sdap_get_generic_recv(subreq, state,
++                                &rule_count,
++                                &rules);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "Could not retrieve Desktop Profile rules\n");
++        goto fail;
++    }
++
++    if (rule_count > 0) {
++        total_count = rule_count + state->rule_count;
++        state->rules = talloc_realloc(state, state->rules,
++                                      struct sysdb_attrs *,
++                                      total_count);
++        if (state->rules == NULL) {
++            ret = ENOMEM;
++            goto fail;
++        }
++
++        i = 0;
++        while (state->rule_count < total_count) {
++            target = &state->rules[state->rule_count];
++            *target = talloc_steal(state->rules, rules[i]);
++
++            state->rule_count++;
++            i++;
++        }
++    }
++
++    state->search_base_iter++;
++    ret = ipa_deskprofile_rule_info_next(req, state);
++    if (ret == EAGAIN) {
++        return;
++    } else if (ret != EOK) {
++        goto fail;
++    } else if (ret == EOK && state->rule_count == 0) {
++        DEBUG(SSSDBG_TRACE_FUNC, "No rules apply to this host\n");
++        tevent_req_error(req, ENOENT);
++        return;
++    }
++
++    /* We went through all search bases and we have some results */
++    tevent_req_done(req);
++
++    return;
++
++fail:
++    tevent_req_error(req, ret);
++}
++
++errno_t
++ipa_deskprofile_rule_info_recv(struct tevent_req *req,
++                               TALLOC_CTX *mem_ctx,
++                               size_t *_rule_count,
++                               struct sysdb_attrs ***_rules)
++{
++    struct ipa_deskprofile_rule_state *state;
++
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    state = tevent_req_data(req, struct ipa_deskprofile_rule_state);
++
++    *_rule_count = state->rule_count;
++    *_rules = talloc_steal(mem_ctx, state->rules);
++
++    return EOK;
++}
+diff --git a/src/providers/ipa/ipa_deskprofile_rules.h b/src/providers/ipa/ipa_deskprofile_rules.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..313e526780c0780bce667fb459b27de7cc6fe9e9
+--- /dev/null
++++ b/src/providers/ipa/ipa_deskprofile_rules.h
+@@ -0,0 +1,43 @@
++/*
++    SSSD
++
++    Authors:
++        Fabiano Fidêncio <fidencio@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef IPA_DESKPROFILE_RULES_H_
++#define IPA_DESKPROFILE_RULES_H_
++
++/* From ipa_deskprofile_rules.c */
++struct tevent_req *
++ipa_deskprofile_rule_info_send(TALLOC_CTX *mem_ctx,
++                               struct tevent_context *ev,
++                               struct sdap_handle *sh,
++                               struct sdap_options *opts,
++                               struct sdap_search_base **search_bases,
++                               struct sysdb_attrs *ipa_host,
++                               struct sss_domain_info *domain,
++                               const char *username);
++
++errno_t
++ipa_deskprofile_rule_info_recv(struct tevent_req *req,
++                               TALLOC_CTX *mem_ctx,
++                               size_t *rule_count,
++                               struct sysdb_attrs ***rules);
++
++#endif /* IPA_DESKPROFILE_RULES_H_ */
+diff --git a/src/providers/ipa/ipa_deskprofile_rules_util.c b/src/providers/ipa/ipa_deskprofile_rules_util.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..1f5b7f9c5244c5863dec4096e2af58914425c37c
+--- /dev/null
++++ b/src/providers/ipa/ipa_deskprofile_rules_util.c
+@@ -0,0 +1,932 @@
++/*
++    SSSD
++
++    Authors:
++        Fabiano Fidêncio <fidencio@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "providers/ipa/ipa_deskprofile_rules_util.h"
++#include "providers/ipa/ipa_deskprofile_private.h"
++#include "providers/ipa/ipa_rules_common.h"
++#include <ctype.h>
++#include <fcntl.h>
++
++#define DESKPROFILE_GLOBAL_POLICY_MIN_VALUE 1
++#define DESKPROFILE_GLOBAL_POLICY_MAX_VALUE 24
++
++enum deskprofile_name {
++    RULES_DIR = 0,
++    DOMAIN,
++    USERNAME,
++    PRIORITY,
++    USER,
++    GROUP,
++    HOST,
++    HOSTGROUP,
++    RULE_NAME,
++    EXTENSION,
++    DESKPROFILE_NAME_SENTINEL
++};
++
++/*
++ * The rule's filename has to follow a global policy, used by FleetCommander
++ * client that shows how the profile should be applied.
++ *
++ * This global policy is represented by an integer from 1 to 24 (inclusive) and
++ * has the following meaning:
++ *  1 = user, group, host, hostgroup
++ *  2 = user, group, hostgroup, host
++ *  3 = user, host, group, hostgroup
++ *  4 = user, host, hostgroup, group
++ *  5 = user, hostgroup, group, host
++ *  6 = user, hostgroup, host, group
++ *  7 = group, user, host, hostgroup
++ *  8 = group, user, hostgroup, host
++ *  9 = group, host, user, hostgroup
++ * 10 = group, host, hostgroup, user
++ * 11 = group, hostgroup, user, host
++ * 12 = group, hostgroup, host, user
++ * 13 = host, user, group, hostgroup
++ * 14 = host, user, hostgroup, group
++ * 15 = host, group, user, hostgroup
++ * 16 = host, group, hostgroup, user
++ * 17 = host, hostgroup, user, group
++ * 18 = host, hostgroup, group, user
++ * 19 = hostgroup, user, group, host
++ * 20 = hostgroup, user, host, group
++ * 21 = hostgroup, group, user, host
++ * 22 = hostgroup, group, host, user
++ * 23 = hostgroup, host, user, group
++ * 24 = hostgroup, host, group, user
++ *
++ * Having the table above in mind and considering the following example:
++ * - rule name: testrule
++ * - policy: 22
++ * - priority: 420
++ * - client's machine matches: host and group
++ *
++ * So, the filename will be: "000420_000000_000420_000420_000000_testrule.json"
++ *
++ * The function below not only helps us to create this filename in the correct
++ * format, but also create the whole path for this rule's file.
++ *
++ * An example of the full path would be:
++ * "/var/lib/sss/deskprofile/ipa.example/user_foobar/000420_000000_000420_000420_000000_testrule.json"
++ *  |       RULES DIR       |   DOMAIN  |  USERNAME |      |      |GROUP | HOST | USER |        |
++ *                                                  PRIORITY                            RULE NAME
++ *                                                         HOSTGROUP                            EXTENSION
++ *
++ * In case a element has to be added/remove, please, remember to update:
++ * - deskprofile_name enum;
++ * - permuts's matrix;
++ * - vals array;
++ */
++static errno_t
++ipa_deskprofile_get_filename_path(TALLOC_CTX *mem_ctx,
++                                  uint16_t config_priority,
++                                  const char *rules_dir,
++                                  const char *domain,
++                                  const char *username,
++                                  const char *priority,
++                                  const char *user_priority,
++                                  const char *group_priority,
++                                  const char *host_priority,
++                                  const char *hostgroup_priority,
++                                  const char *rule_name,
++                                  const char *extension,
++                                  char **_filename_path)
++{
++    TALLOC_CTX *tmp_ctx;
++    static const uint8_t permuts[][DESKPROFILE_NAME_SENTINEL] = {
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, USER, GROUP, HOST, HOSTGROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, USER, GROUP, HOSTGROUP, HOST, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, USER, HOST, GROUP, HOSTGROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, USER, HOST, HOSTGROUP, GROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, USER, HOSTGROUP, GROUP, HOST, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, USER, HOSTGROUP, HOST, GROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, GROUP, USER, HOST, HOSTGROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, GROUP, USER, HOSTGROUP, HOST, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, GROUP, HOST, USER, HOSTGROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, GROUP, HOST, HOSTGROUP, HOST, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, GROUP, HOSTGROUP, USER, HOST, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, GROUP, HOSTGROUP, HOST, USER, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOST, USER, GROUP, HOSTGROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOST, USER, HOSTGROUP, GROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOST, GROUP, USER, HOSTGROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOST, GROUP, HOSTGROUP, USER, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOST, HOSTGROUP, USER, GROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOST, HOSTGROUP, GROUP, USER, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOSTGROUP, USER, GROUP, HOST, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOSTGROUP, USER, HOST, GROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOSTGROUP, GROUP, USER, HOST, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOSTGROUP, GROUP, HOST, USER, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOSTGROUP, HOST, USER, GROUP, RULE_NAME, EXTENSION},
++        {RULES_DIR, DOMAIN, USERNAME, PRIORITY, HOSTGROUP, HOST, GROUP, USER, RULE_NAME, EXTENSION},
++    };
++    const char *vals[] = {
++        rules_dir,
++        domain,
++        username,
++        priority,
++        user_priority,
++        group_priority,
++        host_priority,
++        hostgroup_priority,
++        rule_name,
++        extension,
++        NULL,
++    };
++    const uint8_t *perms;
++    char *result;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(mem_ctx);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    if (config_priority < DESKPROFILE_GLOBAL_POLICY_MIN_VALUE ||
++        config_priority > DESKPROFILE_GLOBAL_POLICY_MAX_VALUE) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "The configuration priority has an invalid value: %d!\n",
++              config_priority);
++        ret = EINVAL;
++        goto done;
++    }
++
++    perms = permuts[config_priority - 1];
++
++    result = talloc_strdup(tmp_ctx, "");
++    if (result == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    for (int i = 0; i < DESKPROFILE_NAME_SENTINEL; i++) {
++        switch(perms[i]) {
++            case RULES_DIR:
++            case DOMAIN:
++            case USERNAME:
++                result = talloc_asprintf_append(result, "%s/", vals[perms[i]]);
++                break;
++            case PRIORITY:
++            case USER:
++            case GROUP:
++            case HOST:
++            case HOSTGROUP:
++                result = talloc_asprintf_append(result, "%s_", vals[perms[i]]);
++                break;
++            case RULE_NAME:
++                result = talloc_asprintf_append(result, "%s", vals[perms[i]]);
++                break;
++            case EXTENSION:
++                result = talloc_asprintf_append(result, ".%s", vals[perms[i]]);
++                break;
++            default:
++                DEBUG(SSSDBG_MINOR_FAILURE,
++                      "This situation should never happen\n");
++                ret = EINVAL;
++                goto done;
++        }
++
++        if (result == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++    }
++
++    *_filename_path = talloc_steal(mem_ctx, result);
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++errno_t
++ipa_deskprofile_rules_create_user_dir(
++                                    const char *username, /* fully-qualified */
++                                    uid_t uid,
++                                    gid_t gid)
++{
++    TALLOC_CTX *tmp_ctx;
++    char *shortname;
++    char *domain;
++    char *domain_dir;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    ret = sss_parse_internal_fqname(tmp_ctx, username, &shortname, &domain);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "sss_parse_internal_fqname() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = sss_create_dir(IPA_DESKPROFILE_RULES_USER_DIR, domain, 0755,
++                         getuid(), getgid());
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Failed to create the directory \"%s/%s\" that would be used to "
++              "store the Desktop Profile rules users' directory [%d]: %s\n",
++              IPA_DESKPROFILE_RULES_USER_DIR, domain,
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    domain_dir = talloc_asprintf(tmp_ctx, IPA_DESKPROFILE_RULES_USER_DIR"/%s",
++                                 domain);
++    if (domain_dir == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = sss_create_dir(domain_dir, shortname, 0600, uid, gid);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++               "Failed to create the directory \"%s/%s/%s\" that would be used "
++               "to store the Desktop Profile rules for the user \"%s\" [%d]: "
++               "%s\n",
++               IPA_DESKPROFILE_RULES_USER_DIR, domain, shortname, username,
++               ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static errno_t
++ipa_deskprofile_get_normalized_rule_name(TALLOC_CTX *mem_ctx,
++                                         const char *name,
++                                         char **_rule_name)
++{
++    char buffer[PATH_MAX];
++    size_t buffer_len;
++    size_t name_len;
++
++    name_len = strlen(name);
++    buffer_len = 0;
++    for (size_t i = 0; i < name_len; i++) {
++        char character;
++        bool replace;
++
++        character = name[i];
++        replace = false;
++
++        if (isalnum(character) == 0) {
++            char next_character;
++
++            next_character = name[i+1];
++            if (i + 1 >= name_len || isalnum(next_character) == 0) {
++                continue;
++            }
++
++            replace = true;
++        }
++
++        buffer[buffer_len] = replace ? '_' : character;
++        buffer_len++;
++    }
++    buffer[buffer_len] = '\0';
++
++    *_rule_name = talloc_strdup(mem_ctx, buffer);
++    if (*_rule_name == NULL) {
++        return ENOMEM;
++    }
++
++    return EOK;
++}
++
++static errno_t
++ipa_deskprofile_rule_check_memberuser(
++                                    TALLOC_CTX *mem_ctx,
++                                    struct sss_domain_info *domain,
++                                    struct sysdb_attrs *rule,
++                                    const char *rule_name,
++                                    const char *rule_prio,
++                                    const char *base_dn,
++                                    const char *username, /* fully-qualified */
++                                    char **_user_prio,
++                                    char **_group_prio)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct ldb_message_element *el;
++    struct ldb_result *res;
++    size_t num_groups;
++    char **groups = NULL;
++    const char *fqgroupname = NULL;
++    char *groupname = NULL;
++    char *shortname;
++    char *domainname;
++    char *data;
++    char *memberuser;
++    char *membergroup;
++    char *user_prio;
++    char *group_prio;
++    bool user = false;
++    bool group = false;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(mem_ctx);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    ret = sss_parse_internal_fqname(tmp_ctx, username,
++                                    &shortname, &domainname);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "sss_parse_internal_fqname() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = sysdb_initgroups(tmp_ctx, domain, username, &res);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "sysdb_initgroups() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    if (res->count == 0) {
++        /* This really should NOT happen at this point */
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "User [%s] not found in cache\n", username);
++        ret = ENOENT;
++        goto done;
++    }
++
++    groups = talloc_array(tmp_ctx, char *, res->count);
++    if (groups == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    num_groups = 0;
++    /* Start counting from 1 to exclude the user entry */
++    for (size_t i = 1; i < res->count; i++) {
++        fqgroupname = ldb_msg_find_attr_as_string(res->msgs[i],
++                                                  SYSDB_NAME,
++                                                  NULL);
++        if (fqgroupname == NULL) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  "Skipping malformed entry [%s]\n",
++                  ldb_dn_get_linearized(res->msgs[i]->dn));
++            continue;
++        }
++
++        ret = sss_parse_internal_fqname(tmp_ctx, fqgroupname,
++                                        &groupname, NULL);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  "Malformed name %s, skipping!\n", fqgroupname);
++            continue;
++        }
++
++        groups[num_groups] = groupname;
++        num_groups++;
++    }
++    groups[num_groups] = NULL;
++
++    ret = sysdb_attrs_get_el(rule, IPA_MEMBER_USER, &el);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_TRACE_FUNC,
++              "Failed to get the Desktop Profile Rule memberUser for rule "
++              "\"%s\" [%d]: %s\n",
++              rule_name, ret, sss_strerror(ret));
++
++        goto done;
++    }
++
++    memberuser = talloc_asprintf(tmp_ctx, "uid=%s,cn=users,cn=accounts,%s",
++                                 shortname, base_dn);
++    if (memberuser == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to allocate memberuser\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    for (size_t i = 0; i < el->num_values; i++) {
++        if (user && group) {
++            break;
++        }
++
++        data = (char *)el->values[i].data;
++
++        if (!user && data != NULL && strcmp(memberuser, data) == 0) {
++            DEBUG(SSSDBG_TRACE_FUNC,
++                  "Desktop Profile rule \"%s\" matches with the user \"%s\" "
++                  "for the \"%s\" domain!\n",
++                  rule_name, shortname, domainname);
++            user = true;
++            continue;
++        }
++
++        if (!group && data != NULL) {
++            for (size_t j = 0; !group && groups[j] != NULL; j++) {
++                membergroup = talloc_asprintf(tmp_ctx,
++                                              "cn=%s,cn=groups,cn=accounts,%s",
++                                              groups[j], base_dn);
++                if (membergroup == NULL) {
++                    DEBUG(SSSDBG_CRIT_FAILURE,
++                          "Failed to allocate membergroup\n");
++                    ret = ENOMEM;
++                    goto done;
++                }
++
++                if (strcmp(membergroup, data) == 0) {
++                    DEBUG(SSSDBG_TRACE_FUNC,
++                          "Desktop Profile rule \"%s\" matches with (at least) "
++                          "the group \"%s\" for the \"%s\" domain!\n",
++                          rule_name, groups[j], domainname);
++                    group = true;
++                }
++            }
++        }
++    }
++
++    user_prio = user ? talloc_strdup(tmp_ctx, rule_prio) :
++                       talloc_asprintf(tmp_ctx, "%06d", 0);
++    if (user_prio == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to allocate the user priority\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    group_prio = group ? talloc_strdup(tmp_ctx, rule_prio) :
++                         talloc_asprintf(tmp_ctx, "%06d", 0);
++    if (group_prio == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to allocate the group priority\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    *_user_prio = talloc_steal(mem_ctx, user_prio);
++    *_group_prio = talloc_steal(mem_ctx, group_prio);
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static errno_t
++ipa_deskprofile_rule_check_memberhost(TALLOC_CTX *mem_ctx,
++                                      struct sss_domain_info *domain,
++                                      struct sysdb_attrs *rule,
++                                      const char *rule_name,
++                                      const char *rule_prio,
++                                      const char *base_dn,
++                                      const char *hostname,
++                                      char **_host_prio,
++                                      char **_hostgroup_prio)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct ldb_dn *host_dn;
++    struct ldb_message_element *el_orig_memberof = NULL;
++    struct ldb_message_element *el = NULL;
++    struct ldb_message **msgs;
++    size_t count;
++    size_t num_memberhostgroup;
++    char **memberhostgroups = NULL;
++    char *data;
++    char *memberhost;
++    char *memberhostgroup;
++    char *name;
++    char *host_prio;
++    char *hostgroup_prio;
++    const char *memberof_attrs[] = { SYSDB_ORIG_MEMBEROF, NULL };
++    bool host = false;
++    bool hostgroup = false;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(mem_ctx);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    host_dn = sysdb_custom_dn(tmp_ctx, domain, hostname,
++                              DESKPROFILE_HOSTS_SUBDIR);
++    if (host_dn == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = sysdb_search_entry(tmp_ctx, domain->sysdb, host_dn,
++                             LDB_SCOPE_BASE, NULL,
++                             memberof_attrs,
++                             &count, &msgs);
++    if (ret == ENOENT || count == 0) {
++        memberhostgroups = talloc_array(tmp_ctx, char *, 1);
++        memberhostgroups[0] = NULL;
++    } else if (ret != EOK) {
++        goto done;
++    } else if (count > 1) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "More than one result for a BASE search!\n");
++        ret = EIO;
++        goto done;
++    } else { /* ret == EOK && count == 1 */
++        el_orig_memberof = ldb_msg_find_element(msgs[0], SYSDB_ORIG_MEMBEROF);
++        memberhostgroups = talloc_array(tmp_ctx,
++                                        char *,
++                                        el_orig_memberof->num_values);
++    }
++
++    if (el_orig_memberof != NULL) {
++        num_memberhostgroup = 0;
++        for (size_t i = 0; i < el_orig_memberof->num_values; i++) {
++            data = (char *)el_orig_memberof->values[i].data;
++
++            ret = ipa_common_get_hostgroupname(tmp_ctx, domain->sysdb, data,
++                                               &name);
++
++            /* ERR_UNEXPECTED_ENTRY_TYPE means we had a memberOf entry that
++             * wasn't a host group, thus we'll just ignore those.
++             */
++            if (ret != EOK && ret != ERR_UNEXPECTED_ENTRY_TYPE) {
++                DEBUG(SSSDBG_MINOR_FAILURE,
++                      "Skipping malformed entry [%s]\n",
++                      data);
++                continue;
++            } else if (ret == EOK) {
++                memberhostgroups[num_memberhostgroup] = name;
++                num_memberhostgroup++;
++            }
++        }
++        memberhostgroups[num_memberhostgroup] = NULL;
++    }
++
++    ret = sysdb_attrs_get_el(rule, IPA_MEMBER_HOST, &el);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_TRACE_FUNC,
++              "Failed to get the Desktop Profile Rule memberHost for rule "
++              "\"%s\" [%d]: %s\n",
++              rule_name, ret, sss_strerror(ret));
++
++        goto done;
++    }
++
++    memberhost = talloc_asprintf(tmp_ctx, "fqdn=%s,cn=computers,cn=accounts,%s",
++                                 hostname, base_dn);
++    if (memberhost == NULL) {
++        ret = ENOMEM;
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to allocate memberhost\n");
++        goto done;
++    }
++
++    for (size_t i = 0; i < el->num_values; i++) {
++        if (host && hostgroup) {
++            break;
++        }
++
++        data = (char *)el->values[i].data;
++
++        if (!host && data != NULL && strcmp(memberhost, data) == 0) {
++            host = true;
++            DEBUG(SSSDBG_TRACE_FUNC,
++                  "Desktop Profile rule \"%s\" matches with the host \"%s\" "
++                  "for the \"%s\" domain!\n",
++                  rule_name, hostname, domain->name);
++            continue;
++        }
++
++        if (!hostgroup && data != NULL) {
++            for (size_t j = 0; !hostgroup && memberhostgroups[j] != NULL; j++) {
++                memberhostgroup = talloc_asprintf(
++                                        tmp_ctx,
++                                        "cn=%s,cn=hostgroups,cn=accounts,%s",
++                                        memberhostgroups[j], base_dn);
++
++                if (memberhostgroup == NULL) {
++                    DEBUG(SSSDBG_CRIT_FAILURE,
++                          "Failed to allocate memberhostgroup\n");
++                    ret = ENOMEM;
++                    goto done;
++                }
++
++                if (strcmp(memberhostgroup, data) == 0) {
++                    hostgroup = true;
++                    DEBUG(SSSDBG_TRACE_FUNC,
++                          "Desktop Profile rule \"%s\" matches with (at least) "
++                          "the hostgroup \"%s\" for the \"%s\" domain!\n",
++                          rule_name, memberhostgroups[j], domain->name);
++                    continue;
++                }
++            }
++        }
++    }
++
++    host_prio = host ? talloc_strdup(tmp_ctx, rule_prio) :
++                       talloc_asprintf(tmp_ctx, "%06d", 0);
++    if (host_prio == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to allocate the host priority\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    hostgroup_prio = hostgroup ? talloc_strdup(tmp_ctx, rule_prio) :
++                                 talloc_asprintf(tmp_ctx, "%06d", 0);
++    if (hostgroup_prio == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to allocate the hostgroup priority\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    *_host_prio = talloc_steal(mem_ctx, host_prio);
++    *_hostgroup_prio = talloc_steal(mem_ctx, hostgroup_prio);
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++
++errno_t
++ipa_deskprofile_rules_save_rule_to_disk(
++                                    TALLOC_CTX *mem_ctx,
++                                    uint16_t priority,
++                                    struct sysdb_attrs *rule,
++                                    struct sss_domain_info *domain,
++                                    const char *hostname,
++                                    const char *username, /* fully-qualified */
++                                    uid_t uid,
++                                    gid_t gid)
++{
++    TALLOC_CTX *tmp_ctx;
++    const char *rule_name;
++    const char *data;
++    char *shortname;
++    char *domainname;
++    char *base_dn;
++    char *rule_prio;
++    char *user_prio;
++    char *group_prio;
++    char *host_prio;
++    char *hostgroup_prio;
++    char *normalized_rule_name = NULL;
++    char *filename_path = NULL;
++    const char *extension = "json";
++    uint32_t prio;
++    int fd = -1;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(mem_ctx);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    ret = sysdb_attrs_get_string(rule, IPA_CN, &rule_name);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_TRACE_FUNC,
++              "Failed to get the Desktop Profile Rule name [%d]: %s\n",
++              ret, sss_strerror(ret));
++
++        goto done;
++    }
++
++    ret = sysdb_attrs_get_uint32_t(rule, IPA_DESKPROFILE_PRIORITY, &prio);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_TRACE_FUNC,
++              "Failed to get the Desktop Profile Rule priority for rule "
++              "\"%s\" [%d]: %s\n",
++              rule_name, ret, sss_strerror(ret));
++        goto done;
++    }
++
++    rule_prio = talloc_asprintf(tmp_ctx, "%06d", prio);
++    if (rule_prio == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to allocate rule priority\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = sysdb_attrs_get_string(rule, IPA_DESKPROFILE_DATA, &data);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_TRACE_FUNC,
++              "Failed to get the Desktop Profile Rule data for rule \"%s\" "
++              "[%d]: %s\n",
++              rule_name, ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = sss_parse_internal_fqname(tmp_ctx, username, &shortname, &domainname);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "sss_parse_internal_fqname() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = domain_to_basedn(tmp_ctx, domainname, &base_dn);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "domain_to_basedn() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = ipa_deskprofile_rule_check_memberuser(tmp_ctx, domain, rule,
++                                                rule_name, rule_prio,
++                                                base_dn, username,
++                                                &user_prio, &group_prio);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "ipa_deskprofile_rule_check_memberuser() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = ipa_deskprofile_rule_check_memberhost(tmp_ctx, domain, rule,
++                                                rule_name, rule_prio,
++                                                base_dn, hostname,
++                                                &host_prio, &hostgroup_prio);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "ipa_deskprofile_rule_check_memberhost() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = ipa_deskprofile_get_normalized_rule_name(mem_ctx, rule_name,
++                                                   &normalized_rule_name);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "ipa_deskprofile_get_normalized_rule_name() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = ipa_deskprofile_get_filename_path(tmp_ctx,
++                                            priority,
++                                            IPA_DESKPROFILE_RULES_USER_DIR,
++                                            domainname,
++                                            shortname,
++                                            rule_prio,
++                                            user_prio,
++                                            group_prio,
++                                            host_prio,
++                                            hostgroup_prio,
++                                            normalized_rule_name,
++                                            extension,
++                                            &filename_path);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "ipa_deskprofile_get_filename_path() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    fd = open(filename_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
++    if (fd == -1) {
++        ret = errno;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Failed to create the Desktop Profile rule file \"%s\" "
++              "[%d]: %s\n",
++              filename_path, ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = dprintf(fd, "%s", data);
++    if (ret < 0) {
++        ret = EIO;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Failed to write the content of the Desktop Profile rule for "
++              "the \"%s\" file.\n",
++              filename_path);
++        goto done;
++    }
++
++    ret = fchown(fd, uid, gid);
++    if (ret != EOK) {
++        ret = errno;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Failed to own the Desktop Profile Rule file \"%s\" [%d]: %s\n",
++              filename_path, ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    if (fd != -1) {
++        close(fd);
++    }
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++errno_t
++ipa_deskprofile_rules_remove_user_dir(const char *user_dir)
++{
++    errno_t ret;
++
++    ret = sss_remove_tree(user_dir);
++    if (ret == ENOENT) {
++        return EOK;
++    } else if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Cannot remove \"%s\" directory [%d]: %s\n",
++              user_dir, ret, sss_strerror(ret));
++        return ret;
++    }
++
++    return EOK;
++}
++
++errno_t
++deskprofile_get_cached_priority(struct sss_domain_info *domain,
++                                uint16_t *_priority)
++{
++    TALLOC_CTX *tmp_ctx;
++    const char *attrs[] = { IPA_DESKPROFILE_PRIORITY, NULL };
++    struct ldb_message **resp;
++    size_t resp_count;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    ret = sysdb_search_custom_by_name(tmp_ctx,
++                                      domain,
++                                      IPA_DESKPROFILE_PRIORITY,
++                                      DESKPROFILE_CONFIG_SUBDIR,
++                                      attrs, &resp_count, &resp);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "sysdb_search_custom_by_name() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    if (resp_count != 1) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "sysdb_search_custom_by_name() got more attributes than "
++              "expected. Expected (%d), got (%"PRIu64")\n", 1, resp_count);
++        ret = EINVAL;
++        goto done;
++    }
++
++    *_priority = ldb_msg_find_attr_as_uint(resp[0],
++                                           IPA_DESKPROFILE_PRIORITY,
++                                           0);
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++const char **
++deskprofile_get_attrs_to_get_cached_rules(TALLOC_CTX *mem_ctx)
++{
++    const char **attrs = talloc_zero_array(mem_ctx, const char *, 11);
++    if (attrs == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, "talloc_zero_array() failed\n");
++        goto done;
++    }
++
++    attrs[0] = OBJECTCLASS;
++    attrs[1] = IPA_CN;
++    attrs[2] = IPA_UNIQUE_ID;
++    attrs[3] = IPA_ENABLED_FLAG;
++    attrs[4] = IPA_MEMBER_USER;
++    attrs[5] = IPA_USER_CATEGORY;
++    attrs[6] = IPA_MEMBER_HOST;
++    attrs[7] = IPA_HOST_CATEGORY;
++    attrs[8] = IPA_DESKPROFILE_PRIORITY;
++    attrs[9] = IPA_DESKPROFILE_DATA;
++    attrs[10] = NULL;
++
++done:
++    return attrs;
++}
+diff --git a/src/providers/ipa/ipa_deskprofile_rules_util.h b/src/providers/ipa/ipa_deskprofile_rules_util.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..61f404df83382e139abc859ed43db65037d04ace
+--- /dev/null
++++ b/src/providers/ipa/ipa_deskprofile_rules_util.h
+@@ -0,0 +1,57 @@
++/*
++    SSSD
++
++    Authors:
++        Fabiano Fidêncio <fidencio@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef IPA_DESKPROFILE_RULES_UTIL_H_
++#define IPA_DESKPROFILE_RULES_UTIL_H_
++
++#include "db/sysdb.h"
++
++#ifndef IPA_DESKPROFILE_RULES_USER_DIR
++#define IPA_DESKPROFILE_RULES_USER_DIR  SSS_STATEDIR"/deskprofile"
++#endif /* IPA_DESKPROFILE_RULES_USER_DIR */
++
++errno_t
++ipa_deskprofile_rules_create_user_dir(
++                                    const char *username, /* fully-qualified */
++                                    uid_t uid,
++                                    gid_t gid);
++errno_t
++ipa_deskprofile_rules_save_rule_to_disk(
++                                    TALLOC_CTX *mem_ctx,
++                                    uint16_t priority,
++                                    struct sysdb_attrs *rule,
++                                    struct sss_domain_info *domain,
++                                    const char *hostname,
++                                    const char *username, /* fully-qualified */
++                                    uid_t uid,
++                                    gid_t gid);
++errno_t
++ipa_deskprofile_rules_remove_user_dir(const char *user_dir);
++
++errno_t
++deskprofile_get_cached_priority(struct sss_domain_info *domain,
++                                uint16_t *_priority);
++
++const char **
++deskprofile_get_attrs_to_get_cached_rules(TALLOC_CTX *mem_ctx);
++
++#endif /* IPA_DESKPROFILE_RULES_UTIL_H_ */
+diff --git a/src/providers/ipa/ipa_init.c b/src/providers/ipa/ipa_init.c
+index 7dec4d1fb8541a48470d4e44f10838e5bea67ad5..7cae43c065e0cd687a80620faf6a354f001bd41c 100644
+--- a/src/providers/ipa/ipa_init.c
++++ b/src/providers/ipa/ipa_init.c
+@@ -42,6 +42,7 @@
+ #include "providers/ipa/ipa_subdomains.h"
+ #include "providers/ipa/ipa_srv.h"
+ #include "providers/be_dyndns.h"
++#include "providers/ipa/ipa_session.h"
+ 
+ #define DNS_SRV_MISCONFIGURATION "SRV discovery is enabled on the IPA " \
+     "server while using custom dns_discovery_domain. DNS discovery of " \
+@@ -940,3 +941,51 @@ errno_t sssm_ipa_sudo_init(TALLOC_CTX *mem_ctx,
+     return EOK;
+ #endif
+ }
++
++errno_t sssm_ipa_session_init(TALLOC_CTX *mem_ctx,
++                              struct be_ctx *be_ctx,
++                              void *module_data,
++                              struct dp_method *dp_methods)
++{
++    struct ipa_session_ctx *session_ctx;
++    struct ipa_init_ctx *init_ctx;
++    struct ipa_id_ctx *id_ctx;
++    errno_t ret;
++
++    init_ctx = talloc_get_type(module_data, struct ipa_init_ctx);
++    id_ctx = init_ctx->id_ctx;
++
++    session_ctx = talloc_zero(mem_ctx, struct ipa_session_ctx);
++    if (session_ctx == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_zero() failed.\n");
++
++        return ENOMEM;
++    }
++
++    session_ctx->sdap_ctx = id_ctx->sdap_id_ctx;
++    session_ctx->host_map = id_ctx->ipa_options->host_map;
++    session_ctx->hostgroup_map = id_ctx->ipa_options->hostgroup_map;
++    session_ctx->host_search_bases = id_ctx->ipa_options->host_search_bases;
++    session_ctx->deskprofile_search_bases = id_ctx->ipa_options->deskprofile_search_bases;
++
++    ret = dp_copy_options(session_ctx, id_ctx->ipa_options->basic,
++                          IPA_OPTS_BASIC, &session_ctx->ipa_options);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "dp_copy_options() failed.\n");
++
++        goto done;
++    }
++
++    dp_set_method(dp_methods, DPM_SESSION_HANDLER,
++                  ipa_pam_session_handler_send, ipa_pam_session_handler_recv, session_ctx,
++                  struct ipa_session_ctx, struct pam_data, struct pam_data *);
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        talloc_free(session_ctx);
++    }
++
++    return ret;
++}
+diff --git a/src/providers/ipa/ipa_opts.c b/src/providers/ipa/ipa_opts.c
+index f9f3a2a6992be6cf5cb3c699b30c45ca9dbb42ab..4836445dad82c4d3ecaecc32d22cb6f9730f0fcb 100644
+--- a/src/providers/ipa/ipa_opts.c
++++ b/src/providers/ipa/ipa_opts.c
+@@ -48,6 +48,8 @@ struct dp_option ipa_basic_opts[] = {
+     { "ipa_server_mode", DP_OPT_BOOL, BOOL_FALSE, BOOL_FALSE },
+     { "ipa_views_search_base", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "krb5_confd_path", DP_OPT_STRING, { KRB5_MAPPING_DIR }, NULL_STRING },
++    { "ipa_deskprofile_search_base", DP_OPT_STRING, NULL_STRING, NULL_STRING },
++    { "ipa_deskprofile_refresh", DP_OPT_NUMBER, { .number = 5 }, NULL_NUMBER },
+     DP_OPTION_TERMINATOR
+ };
+ 
+diff --git a/src/providers/ipa/ipa_session.c b/src/providers/ipa/ipa_session.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..7adf8b6d7dfef9b2c29c1ee42f47842131773e90
+--- /dev/null
++++ b/src/providers/ipa/ipa_session.c
+@@ -0,0 +1,833 @@
++/*
++    SSSD
++
++    IPA Backend Module -- Session Management
++
++    Authors:
++        Fabiano Fidêncio <fidencio@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++#include <security/pam_modules.h>
++
++#include "util/child_common.h"
++#include "providers/ldap/sdap_async.h"
++#include "providers/ipa/ipa_common.h"
++#include "providers/ipa/ipa_config.h"
++#include "providers/ipa/ipa_hosts.h"
++#include "providers/ipa/ipa_subdomains.h"
++#include "providers/ipa/ipa_session.h"
++#include "providers/ipa/ipa_rules_common.h"
++#include "providers/ipa/ipa_deskprofile_private.h"
++#include "providers/ipa/ipa_deskprofile_config.h"
++#include "providers/ipa/ipa_deskprofile_rules.h"
++#include "providers/ipa/ipa_deskprofile_rules_util.h"
++
++/* Those here are used for sending a message to the deskprofile client
++ * informing that our side is done. */
++#define SSS_FLEETCOMMANDERCLIENT_BUS "org.freedesktop.FleetCommanderClient"
++#define SSS_FLEETCOMMANDERCLIENT_PATH "/org/freedesktop/FleetCommanderClient"
++#define SSS_FLEETCOMMANDERCLIENT_IFACE "org.freedesktop.FleetCommanderClient"
++
++struct ipa_fetch_deskprofile_state {
++    struct tevent_context *ev;
++    struct be_ctx *be_ctx;
++    struct sdap_id_ctx *sdap_ctx;
++    struct ipa_session_ctx *session_ctx;
++    struct sdap_id_op *sdap_op;
++    struct dp_option *ipa_options;
++    struct sdap_search_base **search_bases;
++    const char *username;
++
++    /* Hosts */
++    struct ipa_common_entries *hosts;
++    struct sysdb_attrs *ipa_host;
++
++    /* Rules */
++    struct ipa_common_entries *rules;
++    struct sysdb_attrs *config;
++    uint16_t priority;
++};
++
++static errno_t ipa_fetch_deskprofile_retry(struct tevent_req *req);
++static void ipa_fetch_deskprofile_connect_done(struct tevent_req *subreq);
++static errno_t ipa_fetch_deskprofile_hostinfo(struct tevent_req *req);
++static void ipa_fetch_deskprofile_hostinfo_done(struct tevent_req *subreq);
++static void ipa_fetch_deskprofile_config_done(struct tevent_req *subreq);
++static void ipa_fetch_deskprofile_rules_done(struct tevent_req *subreq);
++
++static struct tevent_req *
++ipa_fetch_deskprofile_send(TALLOC_CTX *mem_ctx,
++                           struct tevent_context *ev,
++                           struct be_ctx *be_ctx,
++                           struct ipa_session_ctx *session_ctx,
++                           const char *username)
++{
++    struct ipa_fetch_deskprofile_state *state;
++    struct tevent_req *req;
++    time_t now;
++    time_t refresh_interval;
++    bool offline;
++    errno_t ret;
++
++    req = tevent_req_create(mem_ctx, &state,
++                            struct ipa_fetch_deskprofile_state);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "tevent_req_create() failed\n");
++        return NULL;
++    }
++
++    state->ev = ev;
++    state->be_ctx = be_ctx;
++    state->session_ctx = session_ctx;
++    state->sdap_ctx = session_ctx->sdap_ctx;
++    state->ipa_options = session_ctx->ipa_options;
++    state->search_bases = session_ctx->deskprofile_search_bases;
++    state->username = username;
++    state->hosts = talloc_zero(state, struct ipa_common_entries);
++    if (state->hosts == NULL) {
++        ret = ENOMEM;
++        goto immediately;
++    }
++    state->rules = talloc_zero(state, struct ipa_common_entries);
++    if (state->rules == NULL) {
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    if (state->search_bases == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "No Desktop Profile search base found.\n");
++        ret = EINVAL;
++        goto immediately;
++    }
++
++    state->sdap_op = sdap_id_op_create(state,
++                                       state->sdap_ctx->conn->conn_cache);
++    if (state->sdap_op == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_create() failed\n");
++        ret = ENOMEM;
++        goto immediately;
++    }
++
++    offline = be_is_offline(be_ctx);
++    DEBUG(SSSDBG_TRACE_ALL, "Connection status is [%s].\n",
++          offline ? "offline" : "online");
++
++    refresh_interval = dp_opt_get_int(state->ipa_options,
++                                      IPA_DESKPROFILE_REFRESH);
++    now = time(NULL);
++
++    if (offline || now < session_ctx->last_update + refresh_interval) {
++        DEBUG(SSSDBG_TRACE_FUNC,
++              "Performing cached Desktop Profile evaluation\n");
++        ret = EOK;
++        goto immediately;
++    }
++
++    ret = ipa_fetch_deskprofile_retry(req);
++    if (ret != EAGAIN) {
++        goto immediately;
++    }
++
++    return req;
++
++immediately:
++    if (ret == EOK) {
++        tevent_req_done(req);
++    } else {
++        tevent_req_error(req, ret);
++    }
++    tevent_req_post(req, ev);
++
++    return req;
++}
++
++static errno_t
++ipa_fetch_deskprofile_retry(struct tevent_req *req)
++{
++    struct tevent_req *subreq;
++    struct ipa_fetch_deskprofile_state *state;
++    int ret;
++
++    state = tevent_req_data(req, struct ipa_fetch_deskprofile_state);
++
++    subreq = sdap_id_op_connect_send(state->sdap_op, state, &ret);
++    if (subreq == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "sdap_id_op_connect_send() failed: %d (%s)\n",
++              ret, strerror(ret));
++
++        return ret;
++    }
++
++    tevent_req_set_callback(subreq, ipa_fetch_deskprofile_connect_done, req);
++
++    return EAGAIN;
++}
++
++static void
++ipa_fetch_deskprofile_connect_done(struct tevent_req *subreq)
++{
++    struct tevent_req *req = NULL;
++    int dp_error;
++    errno_t ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++
++    ret = sdap_id_op_connect_recv(subreq, &dp_error);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    ret = ipa_fetch_deskprofile_hostinfo(req);
++    if (ret == EAGAIN) {
++        return;
++    }
++
++done:
++    if (ret == EOK) {
++        tevent_req_done(req);
++    } else {
++        tevent_req_error(req, ret);
++    }
++}
++
++static errno_t
++ipa_fetch_deskprofile_hostinfo(struct tevent_req *req)
++{
++    struct tevent_req *subreq;
++    struct ipa_fetch_deskprofile_state *state;
++    const char *hostname;
++
++    state = tevent_req_data(req, struct ipa_fetch_deskprofile_state);
++    hostname = dp_opt_get_string(state->ipa_options, IPA_HOSTNAME);
++
++    subreq = ipa_host_info_send(state,
++                                state->ev,
++                                sdap_id_op_handle(state->sdap_op),
++                                state->sdap_ctx->opts,
++                                hostname,
++                                state->session_ctx->host_map,
++                                state->session_ctx->hostgroup_map,
++                                state->session_ctx->host_search_bases);
++    if (subreq == NULL) {
++        return ENOMEM;
++    }
++
++    tevent_req_set_callback(subreq, ipa_fetch_deskprofile_hostinfo_done, req);
++
++    return EAGAIN;
++}
++
++static void
++ipa_fetch_deskprofile_hostinfo_done(struct tevent_req *subreq)
++{
++    struct tevent_req *req;
++    struct ipa_fetch_deskprofile_state *state;
++    errno_t ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_fetch_deskprofile_state);
++
++    ret = ipa_host_info_recv(subreq, state,
++                             &state->hosts->entry_count,
++                             &state->hosts->entries,
++                             &state->hosts->group_count,
++                             &state->hosts->groups);
++    state->hosts->entry_subdir = DESKPROFILE_HOSTS_SUBDIR;
++    state->hosts->group_subdir = DESKPROFILE_HOSTGROUPS_SUBDIR;
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    ret = ipa_get_host_attrs(state->ipa_options,
++                             state->hosts->entry_count,
++                             state->hosts->entries,
++                             &state->ipa_host);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Could not locate IPA host.\n");
++        goto done;
++    }
++
++    subreq = ipa_deskprofile_get_config_send(state,
++                                             state->ev,
++                                             sdap_id_op_handle(state->sdap_op),
++                                             state->sdap_ctx->opts,
++                                             state->ipa_options);
++    if (subreq == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    tevent_req_set_callback(subreq, ipa_fetch_deskprofile_config_done, req);
++    return;
++
++done:
++    tevent_req_error(req, ret);
++}
++
++static void
++ipa_fetch_deskprofile_config_done(struct tevent_req *subreq)
++{
++    struct tevent_req *req;
++    struct ipa_fetch_deskprofile_state *state;
++    errno_t ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_fetch_deskprofile_state);
++
++    ret = ipa_deskprofile_get_config_recv(subreq, state, &state->config);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    ret = sysdb_store_custom(state->be_ctx->domain, IPA_DESKPROFILE_PRIORITY,
++                             DESKPROFILE_CONFIG_SUBDIR, state->config);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to save Desktop Profile policy\n");
++        goto done;
++    }
++
++    subreq = ipa_deskprofile_rule_info_send(state,
++                                            state->ev,
++                                            sdap_id_op_handle(state->sdap_op),
++                                            state->sdap_ctx->opts,
++                                            state->search_bases,
++                                            state->ipa_host,
++                                            state->be_ctx->domain,
++                                            state->username);
++    if (subreq == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    tevent_req_set_callback(subreq, ipa_fetch_deskprofile_rules_done, req);
++    return;
++
++done:
++    tevent_req_error(req, ret);
++}
++
++static void
++ipa_fetch_deskprofile_rules_done(struct tevent_req *subreq)
++{
++    struct tevent_req *req;
++    struct ipa_fetch_deskprofile_state *state;
++    int dp_error;
++    errno_t ret;
++    bool found;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_fetch_deskprofile_state);
++
++    ret = ipa_deskprofile_rule_info_recv(subreq,
++                                         state,
++                                         &state->rules->entry_count,
++                                         &state->rules->entries);
++    state->rules->entry_subdir = DESKPROFILE_RULES_SUBDIR;
++    talloc_zfree(subreq);
++    if (ret == ENOENT) {
++        /* Set ret to EOK so we can safely call sdap_id_op_done. */
++        ret = EOK;
++        found = false;
++    } else if (ret == EOK) {
++        found = true;
++    } else {
++        goto done;
++    }
++
++    ret = sdap_id_op_done(state->sdap_op, ret, &dp_error);
++    if (dp_error == DP_ERR_OK && ret != EOK) {
++        /* retry */
++        ret = ipa_fetch_deskprofile_retry(req);
++        if (ret != EAGAIN) {
++            tevent_req_error(req, ret);
++        }
++        return;
++    } else if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++   /* For now, let's completely purge the previous stored
++    * rules before saving the new ones */
++    ret = ipa_common_purge_rules(state->be_ctx->domain,
++                                 DESKPROFILE_RULES_SUBDIR);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Unable to remove Desktop Profile rules\n");
++        goto done;
++    }
++
++    if (!found) {
++        ret = ENOENT;
++        goto done;
++    }
++
++    ret = ipa_common_save_rules(state->be_ctx->domain,
++                                state->hosts, NULL, state->rules,
++                                &state->session_ctx->last_update);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to save Desktop Profile rules\n");
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    tevent_req_done(req);
++}
++
++static errno_t
++ipa_fetch_deskprofile_recv(struct tevent_req *req)
++{
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    return EOK;
++}
++
++struct ipa_pam_session_handler_state {
++    struct tevent_context *ev;
++    struct be_ctx *be_ctx;
++    struct ipa_session_ctx *session_ctx;
++    struct pam_data *pd;
++
++    /* Those attributes are used for:
++     * - saving the deskprofile rules to the disk;
++     * - deleting the deskprofile rules from the disk;
++     * - contacting the deskprofile client that everything is ready;
++     */
++    char *shortname;
++    char *domain;
++    char *user_dir;
++    uid_t uid;
++    gid_t gid;
++};
++
++static errno_t
++ipa_pam_session_handler_get_deskprofile_user_info(
++                                                TALLOC_CTX *mem_ctx,
++                                                struct sss_domain_info *domain,
++                                                const char *username,
++                                                char **_shortname,
++                                                char **_domain,
++                                                char **_user_dir,
++                                                uid_t *uid,
++                                                gid_t *gid);
++static void ipa_pam_session_handler_done(struct tevent_req *subreq);
++static errno_t
++ipa_pam_session_handler_save_deskprofile_rules(
++                                    struct be_ctx *be_ctx,
++                                    struct sss_domain_info *domain,
++                                    const char *username, /* fully-qualified */
++                                    const char *user_dir,
++                                    const char *hostname,
++                                    uid_t uid,
++                                    gid_t gid);
++static errno_t
++ipa_pam_session_handler_notify_deskprofile_client(uid_t uid,
++                                                  const char *user_dir,
++                                                  uint16_t prio);
++
++
++struct tevent_req *
++ipa_pam_session_handler_send(TALLOC_CTX *mem_ctx,
++                             struct ipa_session_ctx *session_ctx,
++                             struct pam_data *pd,
++                             struct dp_req_params *params)
++{
++    struct tevent_req *req;
++    struct tevent_req *subreq;
++    struct ipa_pam_session_handler_state *state;
++    errno_t ret;
++
++    DEBUG(SSSDBG_TRACE_FUNC, "Retrieving Desktop Profile rules\n");
++    req = tevent_req_create(mem_ctx, &state,
++                            struct ipa_pam_session_handler_state);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "tevent_req_create() failed\n");
++        return NULL;
++    }
++
++    state->pd = pd;
++    state->ev = params->ev;
++    state->be_ctx = params->be_ctx;
++    state->session_ctx = session_ctx;
++
++    /* Get all the user info that will be needed in order the delete the
++     * user's deskprofile directory from the disk, create the user's directory,
++     * save the fetched rules to the disk and notify the deskprofile client
++     * that this operation is done. */
++    ret = ipa_pam_session_handler_get_deskprofile_user_info(
++                                                        state,
++                                                        state->be_ctx->domain,
++                                                        pd->user,
++                                                        &state->shortname,
++                                                        &state->domain,
++                                                        &state->user_dir,
++                                                        &state->uid,
++                                                        &state->gid);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "ipa_deskprofile_get_user_info() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        state->pd->pam_status = PAM_SESSION_ERR;
++        goto done;
++    }
++
++    /* As no proper merging mechanism has been implemented yet ...
++     * let's just remove the user directory stored in the disk as it's
++     * going to be created again in case there's any rule fetched. */
++    ret = ipa_deskprofile_rules_remove_user_dir(state->user_dir);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "ipa_deskprofile_rules_remove_user_dir() failed.\n");
++        state->pd->pam_status = PAM_SESSION_ERR;
++        goto done;
++    }
++
++    subreq = ipa_fetch_deskprofile_send(state, state->ev, state->be_ctx,
++                                        state->session_ctx, pd->user);
++    if (subreq == NULL) {
++        state->pd->pam_status = PAM_SESSION_ERR;
++        goto done;
++    }
++
++    tevent_req_set_callback(subreq, ipa_pam_session_handler_done, req);
++    return req;
++
++done:
++    tevent_req_done(req);
++    tevent_req_post(req, params->ev);
++
++    return req;
++}
++
++static void
++ipa_pam_session_handler_done(struct tevent_req *subreq)
++{
++    struct tevent_req *req;
++    struct ipa_pam_session_handler_state *state;
++    const char *hostname;
++    errno_t ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct ipa_pam_session_handler_state);
++
++    ret = ipa_fetch_deskprofile_recv(subreq);
++    talloc_free(subreq);
++
++    if (ret == ENOENT) {
++        DEBUG(SSSDBG_IMPORTANT_INFO, "No Desktop Profile rules found\n");
++        state->pd->pam_status = PAM_SUCCESS;
++        goto done;
++    } else if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Unable to fetch Desktop Profile rules [%d]: %s\n",
++              ret, sss_strerror(ret));
++        state->pd->pam_status = PAM_SYSTEM_ERR;
++        goto done;
++    }
++
++    hostname = dp_opt_get_string(state->session_ctx->ipa_options, IPA_HOSTNAME);
++    ret = ipa_pam_session_handler_save_deskprofile_rules(state->be_ctx,
++                                                         state->be_ctx->domain,
++                                                         state->pd->user,
++                                                         state->user_dir,
++                                                         hostname,
++                                                         state->uid,
++                                                         state->gid);
++
++    state->pd->pam_status = (ret == EOK) ? PAM_SUCCESS : PAM_SESSION_ERR;
++
++done:
++    /* TODO For backward compatibility we always return EOK to DP now. */
++    tevent_req_done(req);
++}
++
++errno_t
++ipa_pam_session_handler_recv(TALLOC_CTX *mem_ctx,
++                             struct tevent_req *req,
++                             struct pam_data **_data)
++{
++    struct ipa_pam_session_handler_state *state = NULL;
++
++    state = tevent_req_data(req, struct ipa_pam_session_handler_state);
++
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    *_data = talloc_steal(mem_ctx, state->pd);
++
++    return EOK;
++}
++
++static errno_t
++ipa_pam_session_handler_get_deskprofile_user_info(TALLOC_CTX *mem_ctx,
++                                                  struct sss_domain_info *domain,
++                                                  const char *username,
++                                                  char **_shortname,
++                                                  char **_domain,
++                                                  char **_user_dir,
++                                                  uid_t *_uid,
++                                                  gid_t *_gid)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct ldb_result *res = NULL;
++    char *shortname;
++    char *domain_name;
++    char *user_dir;
++    uid_t uid;
++    gid_t gid;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    ret = sss_parse_internal_fqname(tmp_ctx, username,
++                                    &shortname, &domain_name);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_TRACE_FUNC, "Failed to parse \"%s\" [%d]: %s\n",
++              username, ret, sss_strerror(ret));
++        goto done;
++    }
++
++    user_dir = talloc_asprintf(tmp_ctx, IPA_DESKPROFILE_RULES_USER_DIR"/%s/%s",
++                               domain_name, shortname);
++    if (user_dir == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "talloc_asprintf() failed!\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = sysdb_getpwnam(tmp_ctx, domain, username, &res);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "sysdb_getpwnam() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    if (res->count != 1) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "sysdb_getpwnam() got more users than expected. "
++              "Expected [%d], got [%d]\n", 1, res->count);
++        ret = EINVAL;
++        goto done;
++    }
++
++    uid = ldb_msg_find_attr_as_uint64(res->msgs[0], SYSDB_UIDNUM, 0);
++    gid = ldb_msg_find_attr_as_uint64(res->msgs[0], SYSDB_GIDNUM, 0);
++    if (uid == 0 || gid == 0) {
++        /* As IPA doesn't handle root users ou groups, we know for sure that's
++         * something wrong in case we get uid = 0 or gid = 0.
++         */
++        ret = EINVAL;
++        goto done;
++    }
++
++    ret = EOK;
++
++    *_shortname = talloc_steal(mem_ctx, shortname);
++    *_domain = talloc_steal(mem_ctx, domain_name);
++    *_user_dir = talloc_steal(mem_ctx, user_dir);
++    *_uid = uid;
++    *_gid = gid;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static errno_t
++ipa_pam_session_handler_save_deskprofile_rules(
++                                    struct be_ctx *be_ctx,
++                                    struct sss_domain_info *domain,
++                                    const char *username, /* fully-qualified */
++                                    const char *user_dir,
++                                    const char *hostname,
++                                    uid_t uid,
++                                    gid_t gid)
++{
++    TALLOC_CTX *tmp_ctx;
++    const char **attrs_get_cached_rules;
++    size_t rule_count;
++    struct sysdb_attrs **rules;
++    uint16_t priority;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    /* Get Desktop Profile priority from sysdb */
++    ret = deskprofile_get_cached_priority(be_ctx->domain, &priority);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "deskprofile_get_cached_priority() failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++
++    /* Get Desktop Profile rules from sysdb */
++    attrs_get_cached_rules = deskprofile_get_attrs_to_get_cached_rules(tmp_ctx);
++    if (attrs_get_cached_rules == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "deskprofile_get_attrs_get_cached_rules() failed\n");
++        ret = ENOMEM;
++        goto done;
++    }
++    ret = ipa_common_get_cached_rules(tmp_ctx, be_ctx->domain,
++                                      IPA_DESKPROFILE_RULE,
++                                      DESKPROFILE_RULES_SUBDIR,
++                                      attrs_get_cached_rules,
++                                      &rule_count,
++                                      &rules);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Could not retrieve Desktop Profile rules from the cache\n");
++        goto done;
++    }
++
++    /* Create the user directory where the rules are going to be stored */
++    ret = ipa_deskprofile_rules_create_user_dir(username, uid, gid);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Cannot create the user directory [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    /* Save the rules to the disk */
++    for (size_t i = 0; i < rule_count; i++) {
++        ret = ipa_deskprofile_rules_save_rule_to_disk(tmp_ctx,
++                                                      priority,
++                                                      rules[i],
++                                                      domain,
++                                                      hostname,
++                                                      username,
++                                                      uid,
++                                                      gid);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "Failed to save a Desktop Profile Rule to disk [%d]: %s\n",
++                  ret, sss_strerror(ret));
++            goto done;
++        }
++    }
++
++    /* Notify FleetCommander that our side is done */
++    ret = ipa_pam_session_handler_notify_deskprofile_client(uid,
++                                                            user_dir,
++                                                            priority);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "ipa_pam_session_handler_notify_deskprofile_client() "
++              "failed [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static DBusConnection *
++ipa_deskprofile_client_connect(void)
++{
++    DBusConnection *conn;
++    DBusError error;
++
++    dbus_error_init(&error);
++    conn = dbus_bus_get(DBUS_BUS_SYSTEM, &error);
++    if (dbus_error_is_set(&error)) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Unable to connect to the FleetCommanderClient bus [%s]: %s\n",
++              error.name, error.message);
++        conn = NULL;
++        goto done;
++    }
++
++done:
++    dbus_error_free(&error);
++    return conn;
++}
++
++static errno_t
++ipa_pam_session_handler_notify_deskprofile_client(uid_t uid,
++                                                  const char *user_dir,
++                                                  uint16_t prio)
++{
++    DBusConnection *conn = NULL;
++    DBusMessage *msg = NULL;
++    DBusError error;
++    errno_t ret;
++    bool dbus_ret;
++
++    dbus_error_init(&error);
++
++    conn = ipa_deskprofile_client_connect();
++    if (conn == NULL) {
++        ret = EIO;
++        goto done;
++    }
++
++    msg = sbus_create_message(NULL,
++                              SSS_FLEETCOMMANDERCLIENT_BUS,
++                              SSS_FLEETCOMMANDERCLIENT_PATH,
++                              SSS_FLEETCOMMANDERCLIENT_IFACE,
++                              "ProcessSSSDFiles",
++                              DBUS_TYPE_UINT32, &uid,
++                              DBUS_TYPE_STRING, &user_dir,
++                              DBUS_TYPE_UINT16, &prio);
++    if (msg == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to create D-Bus Message!\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    dbus_ret = dbus_connection_send(conn, msg, NULL);
++    if (dbus_ret == FALSE) {
++        ret = EIO;
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    if (msg != NULL) {
++        dbus_message_unref(msg);
++    }
++
++    if (conn != NULL) {
++        dbus_connection_unref(conn);
++    }
++
++    return ret;
++}
+diff --git a/src/providers/ipa/ipa_session.h b/src/providers/ipa/ipa_session.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..aac99844df0c0d158b63ad67bd89896611891551
+--- /dev/null
++++ b/src/providers/ipa/ipa_session.h
+@@ -0,0 +1,52 @@
++/*
++    SSSD
++
++    IPA Backend Module -- Session Management
++
++    Authors:
++        Fabiano Fidêncio <fidencio@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef IPA_SESSION_H_
++#define IPA_SESSION_H_
++
++#include "providers/ldap/ldap_common.h"
++
++struct ipa_session_ctx {
++    struct sdap_id_ctx *sdap_ctx;
++    struct dp_option *ipa_options;
++    time_t last_update;
++
++    struct sdap_attr_map *host_map;
++    struct sdap_attr_map *hostgroup_map;
++    struct sdap_search_base **deskprofile_search_bases;
++    struct sdap_search_base **host_search_bases;
++};
++
++struct tevent_req *
++ipa_pam_session_handler_send(TALLOC_CTX *mem_ctx,
++                             struct ipa_session_ctx *session_ctx,
++                             struct pam_data *pd,
++                             struct dp_req_params *params);
++
++errno_t
++ipa_pam_session_handler_recv(TALLOC_CTX *mem_ctx,
++                             struct tevent_req *req,
++                             struct pam_data **_data);
++
++#endif /* IPA_SESSION_H_ */
+diff --git a/src/responder/ifp/ifp_components.c b/src/responder/ifp/ifp_components.c
+index 0cd6ba59f866b30a7bb979fbf179b7043de3d5d0..a4cc649c21e4f7d35f5703886916653f8c2d5786 100644
+--- a/src/responder/ifp/ifp_components.c
++++ b/src/responder/ifp/ifp_components.c
+@@ -590,7 +590,8 @@ void ifp_backend_get_providers(struct sbus_request *dbus_req,
+                                       CONFDB_DOMAIN_AUTOFS_PROVIDER,
+                                       CONFDB_DOMAIN_SELINUX_PROVIDER,
+                                       CONFDB_DOMAIN_HOSTID_PROVIDER,
+-                                      CONFDB_DOMAIN_SUBDOMAINS_PROVIDER};
++                                      CONFDB_DOMAIN_SUBDOMAINS_PROVIDER,
++                                      CONFDB_DOMAIN_SESSION_PROVIDER};
+     int num_providers = sizeof(providers) / sizeof(providers[0]);
+     errno_t ret;
+     int i;
+-- 
+2.14.1
+

@@ -1,0 +1,50 @@
+From 0475a98d313b8380e7fbf98ee0821a65f8140589 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 29 Aug 2017 15:29:19 +0200
+Subject: [PATCH 81/93] IPA: format fixes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There are format warnings when compiling on 32bit. One is about time_t
+where %ld should be used and the other is about size_t where %zu should
+be used.
+
+Related to https://pagure.io/SSSD/sssd/issue/2995
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/providers/ipa/ipa_deskprofile_rules_util.c | 2 +-
+ src/providers/ipa/ipa_session.c                | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_deskprofile_rules_util.c b/src/providers/ipa/ipa_deskprofile_rules_util.c
+index 1f5b7f9c5244c5863dec4096e2af58914425c37c..53c433145666af00a994420ccd1a926b11937fc9 100644
+--- a/src/providers/ipa/ipa_deskprofile_rules_util.c
++++ b/src/providers/ipa/ipa_deskprofile_rules_util.c
+@@ -891,7 +891,7 @@ deskprofile_get_cached_priority(struct sss_domain_info *domain,
+     if (resp_count != 1) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "sysdb_search_custom_by_name() got more attributes than "
+-              "expected. Expected (%d), got (%"PRIu64")\n", 1, resp_count);
++              "expected. Expected (1), got (%zu)\n", resp_count);
+         ret = EINVAL;
+         goto done;
+     }
+diff --git a/src/providers/ipa/ipa_session.c b/src/providers/ipa/ipa_session.c
+index 8559284c9b453129400626e0cf93e70275e80301..3c7dd33c30ac6331319fc62cac466c4fbf04c0a5 100644
+--- a/src/providers/ipa/ipa_session.c
++++ b/src/providers/ipa/ipa_session.c
+@@ -140,7 +140,7 @@ ipa_fetch_deskprofile_send(TALLOC_CTX *mem_ctx,
+         next_request /= 60;
+         DEBUG(SSSDBG_TRACE_FUNC,
+               "No rules were found in the last request.\n"
+-              "Next request will happen in any login after %"PRIu64" minutes\n",
++              "Next request will happen in any login after %ld minutes\n",
+               next_request);
+         ret = ENOENT;
+         goto immediately;
+-- 
+2.14.1
+

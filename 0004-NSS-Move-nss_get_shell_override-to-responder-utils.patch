@@ -1,0 +1,233 @@
+From 9759333b3dd404c6787ef0186984c5d4256eb5bb Mon Sep 17 00:00:00 2001
+From: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
+Date: Wed, 29 Mar 2017 16:25:19 +0300
+Subject: [PATCH 04/93] NSS: Move nss_get_shell_override to responder utils
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Move nss_get_shell_override to common responder utils and rename it to
+sss_resp_get_shell_override to make it available to other responders. In
+particular let PAM responder use it to provide original shell when it is
+overriden for session recording.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/common/responder.h       |  5 ++
+ src/responder/common/responder_utils.c | 83 +++++++++++++++++++++++++++++++++
+ src/responder/nss/nss_protocol_pwent.c | 85 +---------------------------------
+ 3 files changed, 89 insertions(+), 84 deletions(-)
+
+diff --git a/src/responder/common/responder.h b/src/responder/common/responder.h
+index 7a998967f2761b1c813a866f34cf78d549ede1b9..ba5b73bcc3f3d3bc3cd0cfc19381ef08a046771a 100644
+--- a/src/responder/common/responder.h
++++ b/src/responder/common/responder.h
+@@ -404,6 +404,11 @@ char *sss_resp_create_fqname(TALLOC_CTX *mem_ctx,
+ 
+ errno_t sss_resp_populate_cr_domains(struct resp_ctx *rctx);
+ 
++const char *
++sss_resp_get_shell_override(struct ldb_message *msg,
++                            struct resp_ctx *rctx,
++                            struct sss_domain_info *domain);
++
+ /**
+  * Helper functions to format output names
+  */
+diff --git a/src/responder/common/responder_utils.c b/src/responder/common/responder_utils.c
+index 7f5c0573087e9c6c885ae158d0677994fd538e2a..521896088b9af904b4d10021d5755f2591fe91ec 100644
+--- a/src/responder/common/responder_utils.c
++++ b/src/responder/common/responder_utils.c
+@@ -399,3 +399,86 @@ int resp_resolve_group_names_recv(TALLOC_CTX *mem_ctx,
+     *_initgr_named_res = talloc_steal(mem_ctx, state->initgr_named_res);
+     return EOK;
+ }
++
++const char *
++sss_resp_get_shell_override(struct ldb_message *msg,
++                            struct resp_ctx *rctx,
++                            struct sss_domain_info *domain)
++{
++    const char *shell;
++    int i;
++
++    /* Check whether we are unconditionally overriding
++     * the server for the login shell. */
++    if (domain->override_shell) {
++        return domain->override_shell;
++    } else if (rctx->override_shell) {
++        return rctx->override_shell;
++    }
++
++    shell = sss_view_ldb_msg_find_attr_as_string(domain, msg, SYSDB_SHELL,
++                                                 NULL);
++    if (shell == NULL) {
++        /* Check whether there is a default shell specified */
++        if (domain->default_shell) {
++            return domain->default_shell;
++        } else if (rctx->default_shell) {
++            return rctx->default_shell;
++        }
++
++        return "";
++    }
++
++    if (rctx->allowed_shells == NULL && rctx->vetoed_shells == NULL) {
++        return shell;
++    }
++
++    if (rctx->vetoed_shells) {
++        for (i = 0; rctx->vetoed_shells[i]; i++) {
++            if (strcmp(rctx->vetoed_shells[i], shell) == 0) {
++                DEBUG(SSSDBG_FUNC_DATA,
++                      "The shell '%s' is vetoed. Using fallback.\n",
++                      shell);
++                return rctx->shell_fallback;
++            }
++        }
++    }
++
++    if (rctx->etc_shells) {
++        for (i = 0; rctx->etc_shells[i]; i++) {
++            if (strcmp(shell, rctx->etc_shells[i]) == 0) {
++                DEBUG(SSSDBG_TRACE_ALL,
++                      "Shell %s found in /etc/shells\n", shell);
++                break;
++            }
++        }
++
++        if (rctx->etc_shells[i]) {
++            DEBUG(SSSDBG_TRACE_ALL, "Using original shell '%s'\n", shell);
++            return shell;
++        }
++    }
++
++    if (rctx->allowed_shells) {
++        if (strcmp(rctx->allowed_shells[0], "*") == 0) {
++            DEBUG(SSSDBG_FUNC_DATA,
++                  "The shell '%s' is allowed but does not exist. "
++                  "Using fallback\n", shell);
++            return rctx->shell_fallback;
++        } else {
++            for (i = 0; rctx->allowed_shells[i]; i++) {
++                if (strcmp(rctx->allowed_shells[i], shell) == 0) {
++                    DEBUG(SSSDBG_FUNC_DATA,
++                          "The shell '%s' is allowed but does not exist. "
++                          "Using fallback\n", shell);
++                    return rctx->shell_fallback;
++                }
++            }
++        }
++    }
++
++    DEBUG(SSSDBG_FUNC_DATA,
++          "The shell '%s' is not allowed and does not exist.\n", shell);
++
++    return NOLOGIN_SHELL;
++}
+diff --git a/src/responder/nss/nss_protocol_pwent.c b/src/responder/nss/nss_protocol_pwent.c
+index cb11ea3d493370552fa5a97fd4ffe2108ff34026..6c1de3123238514c0c5d0dae43d4c5fa7d5eff5c 100644
+--- a/src/responder/nss/nss_protocol_pwent.c
++++ b/src/responder/nss/nss_protocol_pwent.c
+@@ -119,89 +119,6 @@ nss_get_homedir(TALLOC_CTX *mem_ctx,
+     return homedir;
+ }
+ 
+-static const char *
+-nss_get_shell_override(struct ldb_message *msg,
+-                       struct resp_ctx *rctx,
+-                       struct sss_domain_info *domain)
+-{
+-    const char *shell;
+-    int i;
+-
+-    /* Check whether we are unconditionally overriding
+-     * the server for the login shell. */
+-    if (domain->override_shell) {
+-        return domain->override_shell;
+-    } else if (rctx->override_shell) {
+-        return rctx->override_shell;
+-    }
+-
+-    shell = sss_view_ldb_msg_find_attr_as_string(domain, msg, SYSDB_SHELL,
+-                                                 NULL);
+-    if (shell == NULL) {
+-        /* Check whether there is a default shell specified */
+-        if (domain->default_shell) {
+-            return domain->default_shell;
+-        } else if (rctx->default_shell) {
+-            return rctx->default_shell;
+-        }
+-
+-        return "";
+-    }
+-
+-    if (rctx->allowed_shells == NULL && rctx->vetoed_shells == NULL) {
+-        return shell;
+-    }
+-
+-    if (rctx->vetoed_shells) {
+-        for (i = 0; rctx->vetoed_shells[i]; i++) {
+-            if (strcmp(rctx->vetoed_shells[i], shell) == 0) {
+-                DEBUG(SSSDBG_FUNC_DATA,
+-                      "The shell '%s' is vetoed. Using fallback.\n",
+-                      shell);
+-                return rctx->shell_fallback;
+-            }
+-        }
+-    }
+-
+-    if (rctx->etc_shells) {
+-        for (i = 0; rctx->etc_shells[i]; i++) {
+-            if (strcmp(shell, rctx->etc_shells[i]) == 0) {
+-                DEBUG(SSSDBG_TRACE_ALL,
+-                      "Shell %s found in /etc/shells\n", shell);
+-                break;
+-            }
+-        }
+-
+-        if (rctx->etc_shells[i]) {
+-            DEBUG(SSSDBG_TRACE_ALL, "Using original shell '%s'\n", shell);
+-            return shell;
+-        }
+-    }
+-
+-    if (rctx->allowed_shells) {
+-        if (strcmp(rctx->allowed_shells[0], "*") == 0) {
+-            DEBUG(SSSDBG_FUNC_DATA,
+-                  "The shell '%s' is allowed but does not exist. "
+-                  "Using fallback\n", shell);
+-            return rctx->shell_fallback;
+-        } else {
+-            for (i = 0; rctx->allowed_shells[i]; i++) {
+-                if (strcmp(rctx->allowed_shells[i], shell) == 0) {
+-                    DEBUG(SSSDBG_FUNC_DATA,
+-                          "The shell '%s' is allowed but does not exist. "
+-                          "Using fallback\n", shell);
+-                    return rctx->shell_fallback;
+-                }
+-            }
+-        }
+-    }
+-
+-    DEBUG(SSSDBG_FUNC_DATA,
+-          "The shell '%s' is not allowed and does not exist.\n", shell);
+-
+-    return NOLOGIN_SHELL;
+-}
+-
+ static errno_t
+ nss_get_pwent(TALLOC_CTX *mem_ctx,
+               struct nss_ctx *nss_ctx,
+@@ -239,7 +156,7 @@ nss_get_pwent(TALLOC_CTX *mem_ctx,
+     gecos = sss_view_ldb_msg_find_attr_as_string(domain, msg, SYSDB_GECOS,
+                                                  NULL);
+     homedir = nss_get_homedir(mem_ctx, nss_ctx, domain, msg, name, upn, uid);
+-    shell = nss_get_shell_override(msg, nss_ctx->rctx, domain);
++    shell = sss_resp_get_shell_override(msg, nss_ctx->rctx, domain);
+ 
+     /* Convert to sized strings. */
+     ret = sized_output_name(mem_ctx, nss_ctx->rctx, name, domain, _name);
+-- 
+2.14.1
+

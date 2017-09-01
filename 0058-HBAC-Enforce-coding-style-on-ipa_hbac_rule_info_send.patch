@@ -1,0 +1,35 @@
+From 4b37ee7d370003514916c793046577ea4b6e736b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Thu, 3 Aug 2017 00:27:36 +0200
+Subject: [PATCH 58/93] HBAC: Enforce coding style on ipa_hbac_rule_info_send()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Use if-else if-else statements instead of using severel different if
+statements.
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ipa/ipa_hbac_rules.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_hbac_rules.c b/src/providers/ipa/ipa_hbac_rules.c
+index d188971aa85dacf928657f5402dd96f66a6a521e..5a52a8362662ac6457f3578dc25e74aec2e4ddd4 100644
+--- a/src/providers/ipa/ipa_hbac_rules.c
++++ b/src/providers/ipa/ipa_hbac_rules.c
+@@ -132,7 +132,7 @@ ipa_hbac_rule_info_send(TALLOC_CTX *mem_ctx,
+                                        state, &memberof_list);
+     if (ret != EOK && ret != ENOENT) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Could not identify.\n");
+-    } if (ret == ENOENT) {
++    } else if (ret == ENOENT) {
+         /* This host is not a member of any hostgroups */
+         memberof_list = talloc_array(state, const char *, 1);
+         if (memberof_list == NULL) {
+-- 
+2.14.1
+

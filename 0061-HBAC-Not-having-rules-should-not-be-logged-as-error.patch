@@ -1,0 +1,34 @@
+From 85517b57685809ff96818bbd3e3b4678ac74b461 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Wed, 16 Aug 2017 08:19:43 +0200
+Subject: [PATCH 61/93] HBAC: Not having rules should not be logged as error
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Let's tone down the debug level to TRACE_FUNC instead of MINOR_FAILURE.
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ipa/ipa_hbac_rules.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_hbac_rules.c b/src/providers/ipa/ipa_hbac_rules.c
+index 62501615150c52fe823f756a5dfbe2eb9a5a1a97..0634a277e244fad98a84789ad5ab630ae632413f 100644
+--- a/src/providers/ipa/ipa_hbac_rules.c
++++ b/src/providers/ipa/ipa_hbac_rules.c
+@@ -281,7 +281,7 @@ ipa_hbac_rule_info_done(struct tevent_req *subreq)
+     } else if (ret != EOK) {
+         goto fail;
+     } else if (ret == EOK && state->rule_count == 0) {
+-        DEBUG(SSSDBG_MINOR_FAILURE, "No rules apply to this host\n");
++        DEBUG(SSSDBG_TRACE_FUNC, "No rules apply to this host\n");
+         tevent_req_error(req, ENOENT);
+         return;
+     }
+-- 
+2.14.1
+

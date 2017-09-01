@@ -1,0 +1,500 @@
+From 382a972a80ac571cdbf70d88571f6de49fe1cd23 Mon Sep 17 00:00:00 2001
+From: Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
+Date: Tue, 21 Mar 2017 11:30:20 +0200
+Subject: [PATCH 14/93] CACHE_REQ: Pull sessionRecording attrs from initgr
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+After entires are retrieved by cache_req for user info requests (except
+initgr), overlay them with sessionRecording attribute retrieved from an
+initgr request made additionally for each entry.
+
+Do not do additional initgr requests with selective session recording
+enabled, if we don't have any group names to match against in session
+recording configuration. Only do user name matches instead.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                                        |   1 +
+ src/responder/common/cache_req/cache_req.c         |  51 +++-
+ src/responder/common/cache_req/cache_req_private.h |  10 +
+ .../common/cache_req/cache_req_sr_overlay.c        | 326 +++++++++++++++++++++
+ src/tests/cwrap/Makefile.am                        |   1 +
+ 5 files changed, 383 insertions(+), 6 deletions(-)
+ create mode 100644 src/responder/common/cache_req/cache_req_sr_overlay.c
+
+diff --git a/Makefile.am b/Makefile.am
+index 9e6a43110ebbcbd310af2b5efc2b5d00cb21d24e..e7d69d2f0ffdf6f966d2f430174c0159fceb9118 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -530,6 +530,7 @@ SSSD_CACHE_REQ_OBJ = \
+ 	src/responder/common/cache_req/cache_req_search.c \
+ 	src/responder/common/cache_req/cache_req_data.c \
+ 	src/responder/common/cache_req/cache_req_domain.c \
++	src/responder/common/cache_req/cache_req_sr_overlay.c \
+ 	src/responder/common/cache_req/plugins/cache_req_common.c \
+ 	src/responder/common/cache_req/plugins/cache_req_enum_users.c \
+ 	src/responder/common/cache_req/plugins/cache_req_enum_groups.c \
+diff --git a/src/responder/common/cache_req/cache_req.c b/src/responder/common/cache_req/cache_req.c
+index 84a9b1cb0ad22a9d6fcb31bc1ac1d013098e62df..2f2c3e97f8b6f2d3d42727d10a98c4890c073af2 100644
+--- a/src/responder/common/cache_req/cache_req.c
++++ b/src/responder/common/cache_req/cache_req.c
+@@ -26,6 +26,7 @@
+ #include "util/util.h"
+ #include "responder/common/responder.h"
+ #include "responder/common/cache_req/cache_req_private.h"
++#include "responder/common/cache_req/cache_req_private.h"
+ #include "responder/common/cache_req/cache_req_plugin.h"
+ 
+ static const struct cache_req_plugin *
+@@ -721,6 +722,8 @@ cache_req_search_domains(struct tevent_req *req,
+                          bool bypass_cache,
+                          bool bypass_dp);
+ 
++static void cache_req_process_result(struct tevent_req *subreq);
++
+ static void cache_req_done(struct tevent_req *subreq);
+ 
+ struct tevent_req *cache_req_send(TALLOC_CTX *mem_ctx,
+@@ -1001,11 +1004,11 @@ cache_req_search_domains(struct tevent_req *req,
+         return ENOMEM;
+     }
+ 
+-    tevent_req_set_callback(subreq, cache_req_done, req);
++    tevent_req_set_callback(subreq, cache_req_process_result, req);
+     return EAGAIN;
+ }
+ 
+-static void cache_req_done(struct tevent_req *subreq)
++static void cache_req_process_result(struct tevent_req *subreq)
+ {
+     struct cache_req_state *state;
+     struct tevent_req *req;
+@@ -1040,11 +1043,23 @@ static void cache_req_done(struct tevent_req *subreq)
+         }
+     }
+ 
++    /* Overlay each result with session recording flag */
++    if (ret == EOK) {
++        subreq = cache_req_sr_overlay_send(state, state->ev, state->cr,
++                                           state->results,
++                                           state->num_results);
++        if (subreq == NULL) {
++            CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, state->cr,
++                            "Failed creating a session recording "
++                            "overlay request\n");
++            ret = ENOMEM;
++        } else {
++            tevent_req_set_callback(subreq, cache_req_done, req);
++            ret = EAGAIN;
++        }
++    }
++
+     switch (ret) {
+-    case EOK:
+-        CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr, "Finished: Success\n");
+-        tevent_req_done(req);
+-        break;
+     case EAGAIN:
+         break;
+     case ENOENT:
+@@ -1061,6 +1076,30 @@ static void cache_req_done(struct tevent_req *subreq)
+     return;
+ }
+ 
++static void cache_req_done(struct tevent_req *subreq)
++{
++    struct cache_req_state *state;
++    struct tevent_req *req;
++    errno_t ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct cache_req_state);
++    ret = cache_req_sr_overlay_recv(subreq);
++    talloc_zfree(subreq);
++
++    switch (ret) {
++    case EOK:
++        CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr, "Finished: Success\n");
++        tevent_req_done(req);
++        break;
++    default:
++        CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr,
++                        "Finished: Error %d: %s\n", ret, sss_strerror(ret));
++        tevent_req_error(req, ret);
++        break;
++    }
++}
++
+ errno_t cache_req_recv(TALLOC_CTX *mem_ctx,
+                        struct tevent_req *req,
+                        struct cache_req_result ***_results)
+diff --git a/src/responder/common/cache_req/cache_req_private.h b/src/responder/common/cache_req/cache_req_private.h
+index c0ee5f969f2a171b8a6eb396b3d14b593d157b76..9b706ff7d678f543effb77089857a7e8a42a9c51 100644
+--- a/src/responder/common/cache_req/cache_req_private.h
++++ b/src/responder/common/cache_req/cache_req_private.h
+@@ -152,6 +152,16 @@ cache_req_create_result_from_msg(TALLOC_CTX *mem_ctx,
+                                  const char *lookup_name,
+                                  const char *well_known_domain);
+ 
++struct tevent_req *
++cache_req_sr_overlay_send(TALLOC_CTX *mem_ctx,
++                          struct tevent_context *ev,
++                          struct cache_req *cr,
++                          struct cache_req_result **results,
++                          size_t num_results);
++
++errno_t
++cache_req_sr_overlay_recv(struct tevent_req *req);
++
+ /* Plug-in common. */
+ 
+ struct cache_req_result *
+diff --git a/src/responder/common/cache_req/cache_req_sr_overlay.c b/src/responder/common/cache_req/cache_req_sr_overlay.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..4d1111b04938032447e112258873827ddfbe9b2b
+--- /dev/null
++++ b/src/responder/common/cache_req/cache_req_sr_overlay.c
+@@ -0,0 +1,326 @@
++/*
++    Authors:
++        Nikolai Kondrashov <Nikolai.Kondrashov@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "responder/common/cache_req/cache_req_private.h"
++
++struct cache_req_sr_overlay_state {
++    /* Input data */
++    struct tevent_context *ev;
++    struct cache_req *cr;
++    struct cache_req_result **results;
++    size_t num_results;
++    /* Work data */
++    size_t res_idx;
++    size_t msg_idx;
++};
++
++static errno_t cache_req_sr_overlay_match_users(
++                                struct cache_req_sr_overlay_state *state);
++
++static errno_t cache_req_sr_overlay_match_users(
++                                struct cache_req_sr_overlay_state *state);
++
++static struct tevent_req *cache_req_sr_overlay_match_all_step_send(
++                                struct cache_req_sr_overlay_state *state);
++
++static void cache_req_sr_overlay_match_all_step_done(
++                                struct tevent_req *subreq);
++
++struct tevent_req *cache_req_sr_overlay_send(
++                                TALLOC_CTX *mem_ctx,
++                                struct tevent_context *ev,
++                                struct cache_req *cr,
++                                struct cache_req_result **results,
++                                size_t num_results)
++{
++    errno_t ret = EOK;
++    struct tevent_req *req;
++    struct tevent_req *subreq;
++    struct cache_req_sr_overlay_state *state;
++    struct resp_ctx *rctx = cr->rctx;
++
++    req = tevent_req_create(mem_ctx, &state,
++                            struct cache_req_sr_overlay_state);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "tevent_req_create() failed\n");
++        return NULL;
++    }
++
++    state->ev = ev;
++    state->cr = cr;
++    state->results = results;
++    state->num_results = num_results;
++
++    /* If session recording is selective */
++    if (rctx->sr_conf.scope == SESSION_RECORDING_SCOPE_SOME) {
++        /* If it's a request for a user/users */
++        switch (cr->data->type) {
++        case CACHE_REQ_USER_BY_NAME:
++        case CACHE_REQ_USER_BY_UPN:
++        case CACHE_REQ_USER_BY_ID:
++        case CACHE_REQ_ENUM_USERS:
++            /* If we have group names to match against */
++            if (rctx->sr_conf.groups != NULL &&
++                rctx->sr_conf.groups[0] != NULL) {
++                /* Pull and match group and user names for each user entry */
++                subreq = cache_req_sr_overlay_match_all_step_send(state);
++                if (subreq == NULL) {
++                    CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, state->cr,
++                                    "Failed allocating a session recording "
++                                    "user overlay request\n");
++                    ret = ENOMEM;
++                    goto done;
++                }
++                tevent_req_set_callback(
++                    subreq, cache_req_sr_overlay_match_all_step_done, req);
++                ret = EAGAIN;
++            } else {
++                /* Only match user names for each user entry */
++                ret = cache_req_sr_overlay_match_users(state);
++            }
++            break;
++        default:
++            break;
++        }
++    }
++
++done:
++    if (ret != EAGAIN) {
++        if (ret == EOK) {
++            tevent_req_done(req);
++        } else {
++            tevent_req_error(req, ret);
++        }
++        tevent_req_post(req, ev);
++    }
++
++    return req;
++}
++
++static errno_t cache_req_sr_overlay_match_users(
++                                struct cache_req_sr_overlay_state *state)
++{
++    struct cache_req *cr;
++    struct resp_ctx *rctx;
++    errno_t ret;
++    int lret;
++    TALLOC_CTX *tmp_ctx = NULL;
++    struct cache_req_result *result;
++    struct ldb_message *msg;
++    const char *name;
++    char *output_name;
++    char **conf_user;
++    bool enabled;
++    char *enabled_str;
++
++    cr = state->cr;
++    rctx = cr->rctx;
++
++    /* Create per-message talloc context */
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, cr,
++                        "Failed creating temporary talloc context\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    /* For each result */
++    for (state->res_idx = 0;
++         state->res_idx < state->num_results;
++         state->res_idx++) {
++        result = state->results[state->res_idx];
++
++        /* For each message */
++        for (state->msg_idx = 0;
++             state->msg_idx < result->count;
++             state->msg_idx++) {
++            msg = result->msgs[state->msg_idx];
++
++            /* Format output username */
++            name = sss_get_name_from_msg(result->domain, msg);
++            ret = sss_output_fqname(tmp_ctx, result->domain, name,
++                                    rctx->override_space,
++                                    &output_name);
++            if (ret != EOK) {
++                CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, cr,
++                                "Failed formatting output username from %s: %s\n",
++                                name, sss_strerror(ret));
++                goto done;
++            }
++
++            /* For each user name in session recording config */
++            enabled = false;
++            conf_user = rctx->sr_conf.users;
++            if (conf_user != NULL) {
++                for (; *conf_user != NULL; conf_user++) {
++                    /* If it matches the requested user name */
++                    if (strcmp(*conf_user, output_name) == 0) {
++                        enabled = true;
++                        break;
++                    }
++                }
++            }
++
++            /* Set sessionRecording attribute to enabled value */
++            ldb_msg_remove_attr(msg, SYSDB_SESSION_RECORDING);
++            enabled_str = talloc_strdup(tmp_ctx, enabled ? "TRUE" : "FALSE");
++            if (enabled_str == NULL) {
++                CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, cr,
++                                "Failed to allocate a %s attribute value\n",
++                                SYSDB_SESSION_RECORDING);
++                ret = ENOMEM;
++                goto done;
++            }
++            lret = ldb_msg_add_string(msg, SYSDB_SESSION_RECORDING, enabled_str);
++            if (lret != LDB_SUCCESS) {
++                ret = sysdb_error_to_errno(lret);
++                CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, cr,
++                                "Failed adding %s attribute: %s\n",
++                                SYSDB_SESSION_RECORDING, sss_strerror(ret));
++                goto done;
++            }
++            talloc_steal(msg, enabled_str);
++
++            /* Free per-message allocations */
++            talloc_free_children(tmp_ctx);
++        }
++    }
++
++done:
++    talloc_zfree(tmp_ctx);
++    return ret;
++}
++
++static struct tevent_req *cache_req_sr_overlay_match_all_step_send(
++                                struct cache_req_sr_overlay_state *state)
++{
++    struct cache_req *cr = state->cr;
++    struct cache_req_result *result =
++                                state->results[state->res_idx];
++    const char *name;
++
++    name = ldb_msg_find_attr_as_string(result->msgs[state->msg_idx],
++                                       SYSDB_NAME, NULL);
++    return cache_req_initgr_by_name_send(state, state->ev, cr->rctx, cr->ncache,
++                                         cr->midpoint, CACHE_REQ_ANY_DOM,
++                                         NULL, name);
++}
++
++static void cache_req_sr_overlay_match_all_step_done(
++                                struct tevent_req *subreq)
++{
++    int lret;
++    errno_t ret;
++    TALLOC_CTX *tmp_ctx = NULL;
++    struct tevent_req *req;
++    struct cache_req_sr_overlay_state *state;
++    struct cache_req_result *result;
++    struct ldb_message *msg;
++    const char *enabled;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++    state = tevent_req_data(req, struct cache_req_sr_overlay_state);
++    msg = state->results[state->res_idx]->
++                    msgs[state->msg_idx];
++
++    /* Create temporary allocation context */
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, state->cr,
++                        "Failed creating temporary talloc context\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    /* Get initgroups result */
++    ret = cache_req_initgr_by_name_recv(tmp_ctx, subreq, &result);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, state->cr,
++                        "Failed retrieving initgr request results: %s\n",
++                        sss_strerror(ret));
++        goto done;
++    }
++
++    /* Overwrite sessionRecording attribute */
++    ldb_msg_remove_attr(msg, SYSDB_SESSION_RECORDING);
++    enabled = ldb_msg_find_attr_as_string(result->msgs[0],
++                                          SYSDB_SESSION_RECORDING, NULL);
++    if (enabled != NULL) {
++        char *enabled_copy;
++        enabled_copy = talloc_strdup(tmp_ctx, enabled);
++        if (enabled_copy == NULL) {
++            CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, state->cr,
++                            "Failed to allocate a copy of %s attribute\n",
++                            SYSDB_SESSION_RECORDING);
++            ret = ENOMEM;
++            goto done;
++        }
++        lret = ldb_msg_add_string(msg, SYSDB_SESSION_RECORDING, enabled_copy);
++        if (lret != LDB_SUCCESS) {
++            ret = sysdb_error_to_errno(lret);
++            CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, state->cr,
++                            "Failed adding %s attribute: %s\n",
++                            SYSDB_SESSION_RECORDING, sss_strerror(ret));
++            goto done;
++        }
++        talloc_steal(msg, enabled_copy);
++    }
++
++    /* Move onto next entry, if any */
++    state->msg_idx++;
++    if (state->msg_idx >=
++            state->results[state->res_idx]->count) {
++        state->res_idx++;
++        if (state->res_idx >= state->num_results) {
++            ret = EOK;
++            goto done;
++        }
++        state->msg_idx = 0;
++    }
++
++    /* Schedule next entry overlay */
++    subreq = cache_req_sr_overlay_match_all_step_send(state);
++    if (subreq == NULL) {
++        ret = ENOMEM;
++        CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, state->cr,
++                        "Failed allocating a session recording "
++                        "user overlay request\n");
++        goto done;
++    }
++    tevent_req_set_callback(subreq,
++                            cache_req_sr_overlay_match_all_step_done, req);
++    ret = EAGAIN;
++
++done:
++    if (ret == EOK) {
++        tevent_req_done(req);
++    } else if (ret != EAGAIN) {
++        tevent_req_error(req, ret);
++    }
++    talloc_free(tmp_ctx);
++}
++
++errno_t cache_req_sr_overlay_recv(struct tevent_req *req)
++{
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++    return EOK;
++}
+diff --git a/src/tests/cwrap/Makefile.am b/src/tests/cwrap/Makefile.am
+index 6c499cb94a5945b789d36ab98aa6a67459df52ce..a559abe9e163ee162fa6db4d688daf2cc4c40c2d 100644
+--- a/src/tests/cwrap/Makefile.am
++++ b/src/tests/cwrap/Makefile.am
+@@ -42,6 +42,7 @@ SSSD_CACHE_REQ_OBJ = \
+     ../../../src/responder/common/cache_req/cache_req_search.c \
+     ../../../src/responder/common/cache_req/cache_req_data.c \
+     ../../../src/responder/common/cache_req/cache_req_domain.c \
++    ../../../src/responder/common/cache_req/cache_req_sr_overlay.c \
+     ../../../src/responder/common/cache_req/plugins/cache_req_common.c \
+     ../../../src/responder/common/cache_req/plugins/cache_req_enum_users.c \
+     ../../../src/responder/common/cache_req/plugins/cache_req_enum_groups.c \
+-- 
+2.14.1
+
