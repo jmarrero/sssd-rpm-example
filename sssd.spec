@@ -16,8 +16,6 @@
 
     %global with_cifs_utils_plugin 1
 
-    %global with_krb5_localauth_plugin 1
-
 %global enable_systemtap 1
     %global enable_systemtap_opt --enable-systemtap
 
@@ -951,11 +949,9 @@ done
 %dir %{_sysconfdir}/cifs-utils
 %ghost %{_sysconfdir}/cifs-utils/idmap-plugin
 %endif
-%if (0%{?with_krb5_localauth_plugin} == 1)
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/modules
 %{_libdir}/%{name}/modules/sssd_krb5_localauth_plugin.so
-%endif
 %{_mandir}/man8/pam_sss.8*
 %{_mandir}/man8/sssd_krb5_locator_plugin.8*
 
