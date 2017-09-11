@@ -1,0 +1,597 @@
+From dee665060ba71ff61ad223e755ae61441118fbba Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 22 Aug 2017 22:32:19 +0200
+Subject: [PATCH 115/115] SUDO: Use initgr_with_views when looking up a sudo
+ user
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The sudo responder code didn't take views into account when looking for
+rules, which resulted in sudo rules being ignored if the user's name was
+overriden.
+
+Please see the ticket for a detailed info on how to reproduce the bug.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3488
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/db/sysdb_sudo.c                        |  89 ++++++++++-----
+ src/db/sysdb_sudo.h                        |   6 +-
+ src/responder/sudo/sudosrv_get_sudorules.c |  45 +++++---
+ src/responder/sudo/sudosrv_private.h       |   2 +-
+ src/tests/cmocka/test_sysdb_sudo.c         | 170 ++++++++++++++++++++++++++++-
+ 5 files changed, 259 insertions(+), 53 deletions(-)
+
+diff --git a/src/db/sysdb_sudo.c b/src/db/sysdb_sudo.c
+index 97a1bee99c0255579f42cc7263d3d755429cd417..ff8c95105ad8d4c7d36d5bf5c3005bcc8ff93040 100644
+--- a/src/db/sysdb_sudo.c
++++ b/src/db/sysdb_sudo.c
+@@ -370,38 +370,58 @@ sysdb_sudo_filter_netgroups(TALLOC_CTX *mem_ctx,
+ errno_t
+ sysdb_get_sudo_user_info(TALLOC_CTX *mem_ctx,
+                          struct sss_domain_info *domain,
+-                         const char *username, uid_t *_uid,
+-                         char ***groupnames)
++                         const char *username,
++                         const char **_orig_name,
++                         uid_t *_uid,
++                         char ***_groupnames)
+ {
+     TALLOC_CTX *tmp_ctx;
+     errno_t ret;
+-    struct ldb_message *msg;
+     struct ldb_message *group_msg = NULL;
++    struct ldb_result *res;
+     char **sysdb_groupnames = NULL;
+     const char *primary_group = NULL;
+-    struct ldb_message_element *groups;
+     uid_t uid = 0;
+     gid_t gid = 0;
+     size_t num_groups = 0;
+-    int i;
+-    const char *attrs[] = { SYSDB_MEMBEROF,
+-                            SYSDB_GIDNUM,
+-                            SYSDB_UIDNUM,
+-                            NULL };
++    const char *groupname;
+     const char *group_attrs[] = { SYSDB_NAME,
+                                   NULL };
++    const char *orig_name;
+ 
+     tmp_ctx = talloc_new(NULL);
+     NULL_CHECK(tmp_ctx, ret, done);
+ 
+-    ret = sysdb_search_user_by_name(tmp_ctx, domain, username, attrs, &msg);
++    /*
++     * Even though we lookup initgroups with views, we don't want to use
++     * overridden group names/gids since the rules contains the original
++     * values.
++     */
++    ret = sysdb_initgroups_with_views(tmp_ctx, domain, username, &res);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Error looking up user %s\n", username);
+         goto done;
+     }
+ 
++    if (res->count == 0) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "No such user %s\n", username);
++        ret = ENOENT;
++        goto done;
++    }
++
++    /* Even though the database might be queried with the overriden name,
++     * the original name must be used in the filter later on
++     */
++    orig_name = ldb_msg_find_attr_as_string(res->msgs[0], SYSDB_NAME, NULL);
++    if (orig_name == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "No original name?\n");
++        ret = EINVAL;
++        goto done;
++    }
++    DEBUG(SSSDBG_TRACE_FUNC, "original name: %s\n", orig_name);
++
+     if (_uid != NULL) {
+-        uid = ldb_msg_find_attr_as_uint64(msg, SYSDB_UIDNUM, 0);
++        uid = ldb_msg_find_attr_as_uint64(res->msgs[0], SYSDB_UIDNUM, 0);
+         if (!uid) {
+             DEBUG(SSSDBG_CRIT_FAILURE, "A user with no UID?\n");
+             ret = EIO;
+@@ -409,35 +429,40 @@ sysdb_get_sudo_user_info(TALLOC_CTX *mem_ctx,
+         }
+     }
+ 
+-    /* resolve secondary groups */
+-    if (groupnames != NULL) {
+-        groups = ldb_msg_find_element(msg, SYSDB_MEMBEROF);
+-        if (!groups || groups->num_values == 0) {
++    /* get secondary group names */
++    if (_groupnames != NULL) {
++        if (res->count < 2) {
+             /* No groups for this user in sysdb currently */
+             sysdb_groupnames = NULL;
+             num_groups = 0;
+         } else {
+-            num_groups = groups->num_values;
+-            sysdb_groupnames = talloc_array(tmp_ctx, char *, num_groups + 1);
++            sysdb_groupnames = talloc_zero_array(tmp_ctx, char *, res->count);
+             NULL_CHECK(sysdb_groupnames, ret, done);
+ 
+-            /* Get a list of the groups by groupname only */
+-            for (i = 0; i < groups->num_values; i++) {
+-                ret = sysdb_group_dn_name(domain->sysdb,
+-                                          sysdb_groupnames,
+-                                          (const char *)groups->values[i].data,
+-                                          &sysdb_groupnames[i]);
+-                if (ret != EOK) {
+-                    ret = ENOMEM;
+-                    goto done;
++            /* Start counting from 1 to exclude the user entry */
++            num_groups = 0;
++            for (size_t i = 1; i < res->count; i++) {
++                groupname = ldb_msg_find_attr_as_string(res->msgs[i],
++                                                        SYSDB_NAME,
++                                                        NULL);
++                if (groupname == NULL) {
++                    DEBUG(SSSDBG_MINOR_FAILURE, "A group with no name?");
++                    continue;
+                 }
++
++                sysdb_groupnames[num_groups] = talloc_strdup(sysdb_groupnames,
++                                                             groupname);
++                if (sysdb_groupnames[num_groups] == NULL) {
++                    DEBUG(SSSDBG_MINOR_FAILURE, "Cannot strdup %s\n", groupname);
++                    continue;
++                }
++                num_groups++;
+             }
+-            sysdb_groupnames[groups->num_values] = NULL;
+         }
+     }
+ 
+     /* resolve primary group */
+-    gid = ldb_msg_find_attr_as_uint64(msg, SYSDB_GIDNUM, 0);
++    gid = ldb_msg_find_attr_as_uint64(res->msgs[0], SYSDB_GIDNUM, 0);
+     if (gid != 0) {
+         ret = sysdb_search_group_by_gid(tmp_ctx, domain, gid, group_attrs,
+                                         &group_msg);
+@@ -468,12 +493,16 @@ sysdb_get_sudo_user_info(TALLOC_CTX *mem_ctx,
+ 
+     ret = EOK;
+ 
++    if (orig_name != NULL) {
++        *_orig_name = talloc_steal(mem_ctx, orig_name);
++    }
++
+     if (_uid != NULL) {
+         *_uid = uid;
+     }
+ 
+-    if (groupnames != NULL) {
+-        *groupnames = talloc_steal(mem_ctx, sysdb_groupnames);
++    if (_groupnames != NULL) {
++        *_groupnames = talloc_steal(mem_ctx, sysdb_groupnames);
+     }
+ done:
+     talloc_free(tmp_ctx);
+diff --git a/src/db/sysdb_sudo.h b/src/db/sysdb_sudo.h
+index 0c75d78eb8bfc5f6c7d484bf17f7a0a68f7fd044..4770c889789d9805b19a2d419bb73b5880ca3f74 100644
+--- a/src/db/sysdb_sudo.h
++++ b/src/db/sysdb_sudo.h
+@@ -120,8 +120,10 @@ sysdb_sudo_filter_netgroups(TALLOC_CTX *mem_ctx,
+ errno_t
+ sysdb_get_sudo_user_info(TALLOC_CTX *mem_ctx,
+                          struct sss_domain_info *domain,
+-                         const char *username, uid_t *_uid,
+-                         char ***groupnames);
++                         const char *username,
++                         const char **_orig_name,
++                         uid_t *_uid,
++                         char ***_groupnames);
+ 
+ errno_t sysdb_sudo_set_last_full_refresh(struct sss_domain_info *domain,
+                                          time_t value);
+diff --git a/src/responder/sudo/sudosrv_get_sudorules.c b/src/responder/sudo/sudosrv_get_sudorules.c
+index 3272e634d895acf4854309371779a00cf1525126..a420c76fb39757eba817120ab2045b319dd48f94 100644
+--- a/src/responder/sudo/sudosrv_get_sudorules.c
++++ b/src/responder/sudo/sudosrv_get_sudorules.c
+@@ -193,7 +193,8 @@ static errno_t sudosrv_expired_rules(TALLOC_CTX *mem_ctx,
+ 
+ static errno_t sudosrv_cached_rules_by_user(TALLOC_CTX *mem_ctx,
+                                             struct sss_domain_info *domain,
+-                                            uid_t uid,
++                                            uid_t cli_uid,
++                                            uid_t orig_uid,
+                                             const char *username,
+                                             char **groupnames,
+                                             struct sysdb_attrs ***_rules,
+@@ -224,7 +225,7 @@ static errno_t sudosrv_cached_rules_by_user(TALLOC_CTX *mem_ctx,
+         return ENOMEM;
+     }
+ 
+-    filter = sysdb_sudo_filter_user(tmp_ctx, username, groupnames, uid);
++    filter = sysdb_sudo_filter_user(tmp_ctx, username, groupnames, orig_uid);
+     if (filter == NULL) {
+         ret = ENOMEM;
+         goto done;
+@@ -236,7 +237,7 @@ static errno_t sudosrv_cached_rules_by_user(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    val = talloc_asprintf(tmp_ctx, "#%"SPRIuid, uid);
++    val = talloc_asprintf(tmp_ctx, "#%"SPRIuid, cli_uid);
+     if (val == NULL) {
+         ret = ENOMEM;
+         goto done;
+@@ -301,7 +302,8 @@ static errno_t sudosrv_cached_rules_by_ng(TALLOC_CTX *mem_ctx,
+ 
+ static errno_t sudosrv_cached_rules(TALLOC_CTX *mem_ctx,
+                                     struct sss_domain_info *domain,
+-                                    uid_t uid,
++                                    uid_t cli_uid,
++                                    uid_t orig_uid,
+                                     const char *username,
+                                     char **groups,
+                                     bool inverse_order,
+@@ -323,13 +325,15 @@ static errno_t sudosrv_cached_rules(TALLOC_CTX *mem_ctx,
+         return ENOMEM;
+     }
+ 
+-    ret = sudosrv_cached_rules_by_user(tmp_ctx, domain, uid, username, groups,
++    ret = sudosrv_cached_rules_by_user(tmp_ctx, domain,
++                                       cli_uid, orig_uid, username, groups,
+                                        &user_rules, &num_user_rules);
+     if (ret != EOK) {
+         goto done;
+     }
+ 
+-    ret = sudosrv_cached_rules_by_ng(tmp_ctx, domain, uid, username, groups,
++    ret = sudosrv_cached_rules_by_ng(tmp_ctx, domain,
++                                     orig_uid, username, groups,
+                                      &ng_rules, &num_ng_rules);
+     if (ret != EOK) {
+         goto done;
+@@ -410,7 +414,8 @@ static errno_t sudosrv_cached_defaults(TALLOC_CTX *mem_ctx,
+ static errno_t sudosrv_fetch_rules(TALLOC_CTX *mem_ctx,
+                                    enum sss_sudo_type type,
+                                    struct sss_domain_info *domain,
+-                                   uid_t uid,
++                                   uid_t cli_uid,
++                                   uid_t orig_uid,
+                                    const char *username,
+                                    char **groups,
+                                    bool inverse_order,
+@@ -428,7 +433,8 @@ static errno_t sudosrv_fetch_rules(TALLOC_CTX *mem_ctx,
+               username, domain->name);
+         debug_name = "rules";
+ 
+-        ret = sudosrv_cached_rules(mem_ctx, domain, uid, username, groups,
++        ret = sudosrv_cached_rules(mem_ctx, domain,
++                                   cli_uid, orig_uid, username, groups,
+                                    inverse_order, &rules, &num_rules);
+ 
+         break;
+@@ -616,13 +622,16 @@ struct sudosrv_get_rules_state {
+     struct tevent_context *ev;
+     struct resp_ctx *rctx;
+     enum sss_sudo_type type;
+-    uid_t uid;
++    uid_t cli_uid;
+     const char *username;
+     struct sss_domain_info *domain;
+     char **groups;
+     bool inverse_order;
+     int threshold;
+ 
++    uid_t orig_uid;
++    const char *orig_username;
++
+     struct sysdb_attrs **rules;
+     uint32_t num_rules;
+ };
+@@ -634,7 +643,7 @@ struct tevent_req *sudosrv_get_rules_send(TALLOC_CTX *mem_ctx,
+                                           struct tevent_context *ev,
+                                           struct sudo_ctx *sudo_ctx,
+                                           enum sss_sudo_type type,
+-                                          uid_t uid,
++                                          uid_t cli_uid,
+                                           const char *username)
+ {
+     struct sudosrv_get_rules_state *state;
+@@ -651,7 +660,7 @@ struct tevent_req *sudosrv_get_rules_send(TALLOC_CTX *mem_ctx,
+     state->ev = ev;
+     state->rctx = sudo_ctx->rctx;
+     state->type = type;
+-    state->uid = uid;
++    state->cli_uid = cli_uid;
+     state->inverse_order = sudo_ctx->inverse_order;
+     state->threshold = sudo_ctx->threshold;
+ 
+@@ -702,7 +711,9 @@ static void sudosrv_get_rules_initgr_done(struct tevent_req *subreq)
+     talloc_zfree(result);
+ 
+     ret = sysdb_get_sudo_user_info(state, state->domain, state->username,
+-                                   NULL, &state->groups);
++                                   &state->orig_username,
++                                   &state->orig_uid,
++                                   &state->groups);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to obtain user groups [%d]: %s\n",
+               ret, sss_strerror(ret));
+@@ -711,7 +722,8 @@ static void sudosrv_get_rules_initgr_done(struct tevent_req *subreq)
+ 
+     subreq = sudosrv_refresh_rules_send(state, state->ev, state->rctx,
+                                         state->domain, state->threshold,
+-                                        state->uid, state->username,
++                                        state->orig_uid,
++                                        state->orig_username,
+                                         state->groups);
+     if (subreq == NULL) {
+         ret = ENOMEM;
+@@ -748,8 +760,11 @@ static void sudosrv_get_rules_done(struct tevent_req *subreq)
+               "in cache.\n");
+     }
+ 
+-    ret = sudosrv_fetch_rules(state, state->type, state->domain, state->uid,
+-                              state->username, state->groups,
++    ret = sudosrv_fetch_rules(state, state->type, state->domain,
++                              state->cli_uid,
++                              state->orig_uid,
++                              state->orig_username,
++                              state->groups,
+                               state->inverse_order,
+                               &state->rules, &state->num_rules);
+ 
+diff --git a/src/responder/sudo/sudosrv_private.h b/src/responder/sudo/sudosrv_private.h
+index c76bdd3955bc29b7ba2cda58c503a4c616d7e63a..164f033c0eae2af6f3184c8927b1b7c6cf57afd4 100644
+--- a/src/responder/sudo/sudosrv_private.h
++++ b/src/responder/sudo/sudosrv_private.h
+@@ -71,7 +71,7 @@ struct tevent_req *sudosrv_get_rules_send(TALLOC_CTX *mem_ctx,
+                                           struct tevent_context *ev,
+                                           struct sudo_ctx *sudo_ctx,
+                                           enum sss_sudo_type type,
+-                                          uid_t uid,
++                                          uid_t cli_uid,
+                                           const char *username);
+ 
+ errno_t sudosrv_get_rules_recv(TALLOC_CTX *mem_ctx,
+diff --git a/src/tests/cmocka/test_sysdb_sudo.c b/src/tests/cmocka/test_sysdb_sudo.c
+index 5cd348259fc8ccef888772a497feb7b674b3fa0a..1f8432395595c3d0981624d1788230a7e3812de8 100644
+--- a/src/tests/cmocka/test_sysdb_sudo.c
++++ b/src/tests/cmocka/test_sysdb_sudo.c
+@@ -40,6 +40,10 @@
+ #define TEST_GROUP_NAME "test_sudo_group"
+ #define TEST_GID 10001
+ 
++#define OVERRIDE_USER_NAME "user_test"
++#define OVERRIDE_GROUP_NAME "group_sudo_test"
++#define OVERRIDE_UID 2112
++
+ struct test_user {
+     const char *name;
+     uid_t uid;
+@@ -186,6 +190,52 @@ static int test_sysdb_teardown(void **state)
+     return 0;
+ }
+ 
++static int test_sysdb_views_setup(void **state)
++{
++    struct sysdb_test_ctx *test_ctx;
++    errno_t ret;
++
++    assert_true(leak_check_setup());
++
++    test_ctx = talloc_zero(global_talloc_context, struct sysdb_test_ctx);
++    assert_non_null(test_ctx);
++
++    test_dom_suite_setup(TESTS_PATH);
++
++    test_ctx->tctx = create_dom_test_ctx(test_ctx, TESTS_PATH, TEST_CONF_DB,
++                                         TEST_DOM_NAME, "ipa", NULL);
++    assert_non_null(test_ctx->tctx);
++
++    create_groups(test_ctx->tctx->dom);
++    create_users(test_ctx->tctx->dom);
++
++    ret = sysdb_update_view_name(test_ctx->tctx->dom->sysdb, SYSDB_LOCAL_VIEW_NAME);
++    assert_int_equal(ret, EOK);
++    sysdb_master_domain_update(test_ctx->tctx->dom);
++
++    reset_ldb_errstrings(test_ctx->tctx->dom);
++    check_leaks_push(test_ctx);
++
++    *state = (void *)test_ctx;
++    return 0;
++}
++
++static int test_sysdb_views_teardown(void **state)
++{
++    struct sysdb_test_ctx *test_ctx;
++
++    test_ctx = talloc_get_type_abort(*state, struct sysdb_test_ctx);
++
++    test_dom_suite_cleanup(TESTS_PATH, TEST_CONF_DB, TEST_DOM_NAME);
++
++    reset_ldb_errstrings(test_ctx->tctx->dom);
++    assert_true(check_leaks_pop(test_ctx));
++    talloc_zfree(test_ctx);
++    assert_true(leak_check_teardown());
++
++    return 0;
++}
++
+ void test_store_sudo(void **state)
+ {
+     errno_t ret;
+@@ -452,44 +502,146 @@ void test_get_sudo_user_info(void **state)
+ {
+     errno_t ret;
+     char **groupnames = NULL;
++    const char *orig_username;
+     struct sysdb_test_ctx *test_ctx = talloc_get_type_abort(*state,
+                                                          struct sysdb_test_ctx);
+ 
+     /* User 1 has group. */
+-    ret = sysdb_get_sudo_user_info(test_ctx, test_ctx->tctx->dom,
+-                                   users[1].name, NULL, &groupnames);
++    ret = sysdb_get_sudo_user_info(test_ctx, test_ctx->tctx->dom, users[1].name,
++                                   &orig_username, NULL, &groupnames);
+     assert_int_equal(ret, EOK);
+     assert_string_equal(groupnames[0], TEST_GROUP_NAME);
++    assert_string_equal(orig_username, users[1].name);
+ 
+     talloc_zfree(groupnames);
++    talloc_zfree(orig_username);
++}
++
++void test_get_overriden_sudo_user_info(void **state)
++{
++    errno_t ret;
++    char **groupnames = NULL;
++    const char *orig_username;
++    uid_t orig_uid;
++    struct sysdb_test_ctx *test_ctx = talloc_get_type_abort(*state,
++                                                         struct sysdb_test_ctx);
++
++    char *strdn;
++    char *safe_dn;
++    char *anchor;
++    char *group_fqname;
++    char *user_fqname;
++    struct sysdb_attrs *attrs;
++    struct ldb_dn *ldb_dn;
++
++    attrs = sysdb_new_attrs(test_ctx);
++    assert_non_null(attrs);
++
++    /* Override user's name and primary UID */
++    user_fqname = sss_create_internal_fqname(test_ctx,
++                                             OVERRIDE_USER_NAME,
++                                             test_ctx->tctx->dom->name);
++    assert_non_null(user_fqname);
++
++    ldb_dn = sysdb_user_dn(attrs, test_ctx->tctx->dom, users[1].name);
++    assert_non_null(ldb_dn);
++    strdn = sysdb_user_strdn(attrs, test_ctx->tctx->dom->name, users[1].name);
++    assert_non_null(strdn);
++    ret = sysdb_dn_sanitize(attrs, strdn, &safe_dn);
++    assert_int_equal(ret, EOK);
++    anchor = talloc_asprintf(attrs, ":%s:%s", SYSDB_LOCAL_VIEW_NAME, safe_dn);
++    assert_non_null(anchor);
++
++    ret = sysdb_attrs_add_string(attrs, SYSDB_OVERRIDE_ANCHOR_UUID, anchor);
++    assert_int_equal(ret, EOK);
++    ret = sysdb_attrs_add_string(attrs, SYSDB_NAME, user_fqname);
++    assert_int_equal(ret, EOK);
++    ret = sysdb_attrs_add_uint32(attrs, SYSDB_UIDNUM, OVERRIDE_UID);
++    assert_int_equal(ret, EOK);
++
++    ret = sysdb_store_override(test_ctx->tctx->dom, SYSDB_LOCAL_VIEW_NAME,
++                               SYSDB_MEMBER_USER, attrs, ldb_dn);
++    assert_int_equal(ret, EOK);
++    talloc_zfree(attrs);
++
++    /* Override user's secondary group name */
++    attrs = sysdb_new_attrs(test_ctx);
++    assert_non_null(attrs);
++
++    group_fqname = sss_create_internal_fqname(test_ctx,
++                                              OVERRIDE_GROUP_NAME,
++                                              test_ctx->tctx->dom->name);
++    assert_non_null(group_fqname);
++
++    ldb_dn = sysdb_group_dn(attrs, test_ctx->tctx->dom, TEST_GROUP_NAME);
++    assert_non_null(ldb_dn);
++    strdn = sysdb_group_strdn(attrs, test_ctx->tctx->dom->name, TEST_GROUP_NAME);
++    assert_non_null(strdn);
++    ret = sysdb_dn_sanitize(attrs, strdn, &safe_dn);
++    assert_int_equal(ret, EOK);
++    anchor = talloc_asprintf(attrs, ":%s:%s", SYSDB_LOCAL_VIEW_NAME, safe_dn);
++    assert_non_null(anchor);
++
++    ret = sysdb_attrs_add_string(attrs, SYSDB_OVERRIDE_ANCHOR_UUID, anchor);
++    assert_int_equal(ret, EOK);
++    ret = sysdb_attrs_add_string(attrs, SYSDB_NAME, group_fqname);
++    assert_int_equal(ret, EOK);
++
++    ret = sysdb_store_override(test_ctx->tctx->dom, SYSDB_LOCAL_VIEW_NAME,
++                               SYSDB_MEMBER_GROUP, attrs, ldb_dn);
++    assert_int_equal(ret, EOK);
++
++    /* User must be searchable by their overriden name */
++    ret = sysdb_get_sudo_user_info(test_ctx, test_ctx->tctx->dom, user_fqname,
++                                   &orig_username, &orig_uid, &groupnames);
++    assert_int_equal(ret, EOK);
++
++    /* sysdb_get_sudo_user_info must return the original values, not the
++     * overriden one */
++    assert_string_equal(groupnames[0], TEST_GROUP_NAME);
++    assert_string_equal(orig_username, users[1].name);
++    assert_int_equal(orig_uid, users[1].uid);
++
++    talloc_zfree(groupnames);
++    talloc_zfree(orig_username);
++    talloc_zfree(attrs);
++    talloc_zfree(user_fqname);
++    talloc_zfree(group_fqname);
+ }
+ 
+ void test_get_sudo_user_info_nogroup(void **state)
+ {
+     errno_t ret;
+     char **groupnames = NULL;
++    const char *orig_username;
+     struct sysdb_test_ctx *test_ctx = talloc_get_type_abort(*state,
+                                                          struct sysdb_test_ctx);
+ 
+     /* User 0 hasn't group. */
+-    ret = sysdb_get_sudo_user_info(test_ctx, test_ctx->tctx->dom,
+-                                   users[0].name, NULL, &groupnames);
++    ret = sysdb_get_sudo_user_info(test_ctx, test_ctx->tctx->dom, users[0].name,
++                                   &orig_username, NULL, &groupnames);
+     assert_int_equal(ret, EOK);
+     assert_null(groupnames);
++    assert_string_equal(orig_username, users[0].name);
+ 
+     talloc_zfree(groupnames);
++    talloc_zfree(orig_username);
+ }
+ 
+ void test_get_sudo_nouser(void **state)
+ {
+     errno_t ret;
+     char **groupnames = NULL;
++    const char *orig_username = NULL;
+     struct sysdb_test_ctx *test_ctx = talloc_get_type_abort(*state,
+                                                          struct sysdb_test_ctx);
+ 
+     ret = sysdb_get_sudo_user_info(test_ctx, test_ctx->tctx->dom,
+-                                   TEST_USER_NON_EXIST, NULL, &groupnames);
++                                   TEST_USER_NON_EXIST,
++                                   &orig_username, NULL, &groupnames);
+     assert_int_equal(ret, ENOENT);
++    assert_null(orig_username);
++    assert_null(groupnames);
+ }
+ 
+ void test_set_sudo_rule_attr_add(void **state)
+@@ -849,6 +1001,14 @@ int main(int argc, const char *argv[])
+                                         test_sysdb_setup,
+                                         test_sysdb_teardown),
+ 
++        /* The override tests use a different setup/teardown because loading
++         * the view allocates some data on the confdb and domain pointers,
++         * which would confuse the leak check
++         */
++        cmocka_unit_test_setup_teardown(test_get_overriden_sudo_user_info,
++                                        test_sysdb_views_setup,
++                                        test_sysdb_views_teardown),
++
+         /* sysdb_set_sudo_rule_attr() */
+         cmocka_unit_test_setup_teardown(test_set_sudo_rule_attr_add,
+                                         test_sysdb_setup,
+-- 
+2.14.1
+

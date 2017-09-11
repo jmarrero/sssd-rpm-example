@@ -32,7 +32,7 @@
 
 Name: sssd
 Version: 1.15.3
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -134,6 +134,27 @@ Patch0090: 0090-SECRETS-Use-separate-quotas-for-kcm-and-secrets-hive.patch
 Patch0091: 0091-TESTS-Test-that-ccaches-can-be-stored-after-max_secr.patch
 Patch0092: 0092-SECRETS-Add-a-new-option-to-control-per-UID-limits.patch
 Patch0093: 0093-SECRETS-Support-0-as-unlimited-for-the-quotas.patch
+Patch0094: 0094-TESTS-Relax-the-assert-in-test_idle_timeout.patch
+Patch0095: 0095-IPA-Reword-the-DEBUG-message-about-SRV-resolution-on.patch
+Patch0097: 0097-SYSDB-Add-sysdb_search_by_orig_dn.patch
+Patch0098: 0098-TESTS-Add-tests-for-sysdb_search_-users-groups-_by_o.patch
+Patch0099: 0099-IPA-Use-sysdb_search_-_by_orig_dn-_hbac_users.c.patch
+Patch0100: 0100-SDAP-Use-sysdb_search_-_by_orig_dn-in-sdap_async_nes.patch
+Patch0101: 0101-SDAP-Use-sysdb_search_-_by_orig_dn-in-sdap_async_gro.patch
+Patch0102: 0102-IPA-Use-sysdb_search_-_by_orig_dn-in-_subdomains_ext.patch
+Patch0103: 0103-MAN-Improve-description-of-trusted-domain-section-in.patch
+Patch0104: 0104-certmap-add-OpenSSL-implementation.patch
+Patch0105: 0105-MAN-Improve-failover-documentation-by-explaining-the.patch
+Patch0106: 0106-MAN-Document-that-the-secrets-provider-can-only-be-s.patch
+Patch0107: 0107-SELINUX-Use-getseuserbyname-to-get-IPA-seuser.patch
+Patch0108: 0108-certmap-Suppress-warning-Wmissing-braces.patch
+Patch0109: 0109-cache_req-Look-for-name-attribute-also-in-nss_cmd_ge.patch
+Patch0110: 0110-ipa-make-sure-view-name-is-initialized-at-startup.patch
+Patch0111: 0111-DP-Add-Generic-DP-Request-Probes.patch
+Patch0112: 0112-CONTRIB-Add-DP-Request-analysis-script.patch
+Patch0113: 0113-MAN-Add-sssd-systemtap-man-page.patch
+Patch0114: 0114-TESTS-Use-NULL-for-pointer-not-0.patch
+Patch0115: 0115-SUDO-Use-initgr_with_views-when-looking-up-a-sudo-us.patch
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 
 ### Dependencies ###
@@ -920,6 +941,7 @@ done
 %attr(700,root,root) %dir %{dbpath}
 %attr(755,root,root) %dir %{mcpath}
 %attr(700,root,root) %dir %{secdbpath}
+%attr(755,root,root) %dir %{deskprofilepath}
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/passwd
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/group
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/initgroups
@@ -958,10 +980,12 @@ done
 %dir %{_datadir}/sssd/systemtap
 %{_datadir}/sssd/systemtap/id_perf.stp
 %{_datadir}/sssd/systemtap/nested_group_perf.stp
+%{_datadir}/sssd/systemtap/dp_request.stp
 %dir %{_datadir}/systemtap
 %dir %{_datadir}/systemtap/tapset
 %{_datadir}/systemtap/tapset/sssd.stp
 %{_datadir}/systemtap/tapset/sssd_functions.stp
+%{_mandir}/man5/sssd-systemtap.5*
 
 
 %files ldap -f sssd_ldap.lang
@@ -1330,6 +1354,17 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Sep 11 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-4
+- Resolves: rhbz#1488327 - SELinux is preventing selinux_child from write
+                           access on the sock_file system_bus_socket
+- Resolves: rhbz#1490402 - SSSD does not create /var/lib/sss/deskprofile and
+                           fails to download desktop profile data
+- Resolves: upstream#3485 - getsidbyid does not work with 1.15.3
+- Resolves: upstream#3488 - SUDO doesn't work for IPA users on IPA clients
+                            after applying ID Views for them in IPA server
+- Resolves: upstream#3501 - Accessing IdM kerberos ticket fails while id
+                            mapping is applied
+
 * Fri Sep 01 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-3
 - Backport few upstream patches/fixes
 

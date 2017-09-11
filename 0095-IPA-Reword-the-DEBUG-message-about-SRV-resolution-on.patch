@@ -1,0 +1,35 @@
+From cd2b8fd423c5b6fbc3b9a466a5dedafd06362116 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 15 Aug 2017 09:40:22 +0200
+Subject: [PATCH 095/115] IPA: Reword the DEBUG message about SRV resolution on
+ IDM masters
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/providers/ipa/ipa_init.c | 7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_init.c b/src/providers/ipa/ipa_init.c
+index 7cae43c065e0cd687a80620faf6a354f001bd41c..3335e3ad23940aa67615c17742b89cf3c36beb6b 100644
+--- a/src/providers/ipa/ipa_init.c
++++ b/src/providers/ipa/ipa_init.c
+@@ -260,9 +260,10 @@ static errno_t ipa_init_server_mode(struct be_ctx *be_ctx,
+     dnsdomain = dp_opt_get_string(be_ctx->be_res->opts, DP_RES_OPT_DNS_DOMAIN);
+ 
+     if (srv_in_server_list(ipa_servers) || sites_enabled) {
+-        DEBUG(SSSDBG_MINOR_FAILURE, "SRV resolution or IPA sites enabled "
+-              "on the IPA server. Site discovery of trusted AD servers "
+-              "might not work.\n");
++        DEBUG(SSSDBG_IMPORTANT_INFO, "SSSD configuration uses either DNS "
++              "SRV resolution or IPA site discovery to locate IPA servers. "
++              "On IPA server itself, it is recommended that SSSD is "
++              "configured to only connect to the IPA server it's running at. ");
+ 
+         /* If SRV discovery is enabled on the server and
+          * dns_discovery_domain is set explicitly, then
+-- 
+2.14.1
+

@@ -1,0 +1,1682 @@
+From a20fb9cbd5f42a6ca895aea1b84347fdfea34b89 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 14 Feb 2017 22:47:08 +0100
+Subject: [PATCH 104/115] certmap: add OpenSSL implementation
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The OpenSSL 1.1 API is used but there is a short macro block which
+should added the needed compatibility if and older OpenSSL version is
+used.
+
+Related to https://pagure.io/SSSD/sssd/issue/3050
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ Makefile.am                               |   7 +-
+ src/lib/certmap/sss_cert_content_common.c | 199 ++++++++
+ src/lib/certmap/sss_cert_content_crypto.c | 778 +++++++++++++++++++++++++++++-
+ src/lib/certmap/sss_cert_content_nss.c    | 105 +---
+ src/lib/certmap/sss_certmap.c             |  93 +---
+ src/lib/certmap/sss_certmap_attr_names.c  |  81 ++--
+ src/lib/certmap/sss_certmap_int.h         |  25 +-
+ src/tests/cmocka/test_certmap.c           | 103 +++-
+ 8 files changed, 1167 insertions(+), 224 deletions(-)
+ create mode 100644 src/lib/certmap/sss_cert_content_common.c
+
+diff --git a/Makefile.am b/Makefile.am
+index 273ecc72fba6793b4f46dbb11f6541e2e1bcc930..cb5c405a453cacbe5c2464ea09c0e6353253a789 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -288,11 +288,9 @@ if HAVE_CMOCKA
+         simple-access-tests \
+         krb5_common_test \
+         test_iobuf \
++        sss_certmap_test \
+         $(NULL)
+ 
+-if HAVE_NSS
+-non_interactive_cmocka_based_tests +=  sss_certmap_test
+-endif #HAVE_NSS
+ 
+ if HAVE_LIBRESOLV
+ non_interactive_cmocka_based_tests += test_resolv_fake
+@@ -1804,6 +1802,7 @@ libsss_certmap_la_SOURCES = \
+     src/lib/certmap/sss_certmap_attr_names.c \
+     src/lib/certmap/sss_certmap_krb5_match.c \
+     src/lib/certmap/sss_certmap_ldap_mapping.c \
++    src/lib/certmap/sss_cert_content_common.c \
+     src/util/util_ext.c \
+     src/util/cert/cert_common.c \
+     $(NULL)
+@@ -3427,7 +3426,6 @@ test_inotify_LDADD = \
+     libsss_test_common.la \
+     $(NULL)
+ 
+-if HAVE_NSS
+ sss_certmap_test_SOURCES = \
+     src/tests/cmocka/test_certmap.c \
+     src/lib/certmap/sss_certmap_attr_names.c \
+@@ -3445,7 +3443,6 @@ sss_certmap_test_LDADD = \
+     libsss_test_common.la \
+     libsss_certmap.la \
+     $(NULL)
+-endif
+ 
+ if BUILD_KCM
+ test_kcm_json_SOURCES = \
+diff --git a/src/lib/certmap/sss_cert_content_common.c b/src/lib/certmap/sss_cert_content_common.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..42919335221b6d1a188eebe24543668bb927f18a
+--- /dev/null
++++ b/src/lib/certmap/sss_cert_content_common.c
+@@ -0,0 +1,199 @@
++/*
++   SSSD - certificate handling utils
++   The calls defined here should be useable outside of SSSD as well, e.g. in
++   libsss_certmap.
++
++   Copyright (C) Sumit Bose <sbose@redhat.com> 2017
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <stdbool.h>
++#include <errno.h>
++#include <string.h>
++
++#include "lib/certmap/sss_certmap_int.h"
++
++int get_short_name(TALLOC_CTX *mem_ctx, const char *full_name,
++                   char delim, char **short_name)
++{
++    char *at;
++    char *s;
++
++    if (full_name == NULL || delim == '\0' || short_name == NULL) {
++        return EINVAL;
++    }
++
++    at = strchr(full_name, delim);
++    if (at != NULL) {
++        s = talloc_strndup(mem_ctx, full_name, (at - full_name));
++    } else {
++        s = talloc_strdup(mem_ctx, full_name);
++    }
++    if (s == NULL) {
++        return ENOMEM;
++    }
++
++    *short_name = s;
++
++    return 0;
++}
++
++int add_to_san_list(TALLOC_CTX *mem_ctx, bool is_bin,
++                    enum san_opt san_opt, const uint8_t *data, size_t len,
++                    struct san_list **item)
++{
++    struct san_list *i;
++
++    if (data == NULL || len == 0 || san_opt == SAN_INVALID) {
++        return EINVAL;
++    }
++
++    i = talloc_zero(mem_ctx, struct san_list);
++    if (i == NULL) {
++        return ENOMEM;
++    }
++
++    i->san_opt = san_opt;
++    if (is_bin) {
++        i->bin_val = talloc_memdup(i, data, len);
++        i->bin_val_len = len;
++    } else {
++        i->val = talloc_strndup(i, (const char *) data, len);
++    }
++    if (i->val == NULL) {
++        talloc_free(i);
++        return ENOMEM;
++    }
++
++    *item = i;
++
++    return 0;
++}
++
++int add_principal_to_san_list(TALLOC_CTX *mem_ctx, enum san_opt san_opt,
++                              const char *princ, struct san_list **item)
++{
++    struct san_list *i = NULL;
++    int ret;
++
++    i = talloc_zero(mem_ctx, struct san_list);
++    if (i == NULL) {
++        return ENOMEM;
++    }
++    i->san_opt = san_opt;
++
++    i->val = talloc_strdup(i, princ);
++    if (i->val == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = get_short_name(i, i->val, '@', &(i->short_name));
++    if (ret != 0) {
++        goto done;
++    }
++
++    ret = 0;
++
++done:
++    if (ret == 0) {
++        *item = i;
++    } else {
++        talloc_free(i);
++    }
++
++    return ret;
++}
++
++int rdn_list_2_dn_str(TALLOC_CTX *mem_ctx, const char *conversion,
++                      const char **rdn_list, char **result)
++{
++    char *str = NULL;
++    size_t c;
++    int ret;
++    char *conv = NULL;
++
++    str = talloc_strdup(mem_ctx, "");
++    if (str == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++    if (conversion == NULL || strcmp(conversion, "nss_ldap") == 0
++                           || strcmp(conversion, "nss") == 0) {
++        for (c = 0; rdn_list[c] != NULL; c++);
++        while (c != 0) {
++            c--;
++            str = talloc_asprintf_append(str, "%s%s",
++                                         (rdn_list[c + 1] == NULL) ? "" : ",",
++                                         rdn_list[c]);
++            if (str == NULL) {
++                ret = ENOMEM;
++                goto done;
++            }
++        };
++    } else if (strcmp(conversion, "ad_ldap") == 0) {
++        for (c = 0; rdn_list[c] != NULL; c++);
++        while (c != 0) {
++            c--;
++            conv = check_ad_attr_name(str, rdn_list[c]);
++            str = talloc_asprintf_append(str, "%s%s",
++                                         (rdn_list[c + 1] == NULL) ? "" : ",",
++                                         conv == NULL ? rdn_list[c] : conv);
++            talloc_free(conv);
++            conv = NULL;
++            if (str == NULL) {
++                ret = ENOMEM;
++                goto done;
++            }
++        };
++    } else if (strcmp(conversion, "nss_x500") == 0) {
++        for (c = 0; rdn_list[c] != NULL; c++) {
++            str = talloc_asprintf_append(str, "%s%s", (c == 0) ? "" : ",",
++                                                       rdn_list[c]);
++            if (str == NULL) {
++                ret = ENOMEM;
++                goto done;
++            }
++        }
++    } else if (strcmp(conversion, "ad_x500") == 0
++                        || strcmp(conversion, "ad") == 0) {
++        for (c = 0; rdn_list[c] != NULL; c++) {
++            conv = check_ad_attr_name(str, rdn_list[c]);
++            str = talloc_asprintf_append(str, "%s%s",
++                                         (c == 0) ? "" : ",",
++                                         conv == NULL ? rdn_list[c] : conv);
++            talloc_free(conv);
++            conv = NULL;
++            if (str == NULL) {
++                ret = ENOMEM;
++                goto done;
++            }
++        }
++    } else {
++        ret = EINVAL;
++        goto done;
++    }
++
++    ret = 0;
++
++done:
++    if (ret == 0) {
++        *result = str;
++    } else {
++        talloc_free(str);
++    }
++
++    return ret;
++}
+diff --git a/src/lib/certmap/sss_cert_content_crypto.c b/src/lib/certmap/sss_cert_content_crypto.c
+index bddcf9bce986bd986aa0aa5f16a0744a97ab36d6..23e065a3cfedd103dabc0ba6379472da23d422b1 100644
+--- a/src/lib/certmap/sss_cert_content_crypto.c
++++ b/src/lib/certmap/sss_cert_content_crypto.c
+@@ -19,14 +19,788 @@
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#include <errno.h>
++#include "config.h"
+ 
++#include <talloc.h>
++#include <openssl/x509v3.h>
++#include <openssl/asn1.h>
++#include <openssl/asn1t.h>
++#include <openssl/err.h>
++#include <openssl/stack.h>
++#include <openssl/safestack.h>
++
++#include "util/crypto/sss_crypto.h"
++#include "util/cert.h"
+ #include "lib/certmap/sss_certmap.h"
+ #include "lib/certmap/sss_certmap_int.h"
+ 
++/* backward compatible macros for OpenSSL < 1.1 */
++#if OPENSSL_VERSION_NUMBER < 0x10100000L
++#define ASN1_STRING_get0_data(o) ASN1_STRING_data(o)
++#define X509_get_extension_flags(o) ((o)->ex_flags)
++#define X509_get_key_usage(o) ((o)->ex_kusage)
++#endif /* OPENSSL_VERSION_NUMBER < 0x10100000L */
++
++typedef struct PrincipalName_st {
++    ASN1_INTEGER *name_type;
++    STACK_OF(ASN1_GENERALSTRING) *name_string;
++} PrincipalName;
++
++ASN1_SEQUENCE(PrincipalName) = {
++    ASN1_EXP(PrincipalName, name_type, ASN1_INTEGER, 0),
++    ASN1_EXP_SEQUENCE_OF(PrincipalName, name_string, ASN1_GENERALSTRING, 1)
++} ASN1_SEQUENCE_END(PrincipalName)
++
++IMPLEMENT_ASN1_FUNCTIONS(PrincipalName)
++
++typedef struct KRB5PrincipalName_st {
++    ASN1_STRING *realm;
++    PrincipalName *principal_name;
++} KRB5PrincipalName;
++
++ASN1_SEQUENCE(KRB5PrincipalName) = {
++    ASN1_EXP(KRB5PrincipalName, realm, ASN1_GENERALSTRING, 0),
++    ASN1_EXP(KRB5PrincipalName, principal_name, PrincipalName, 1)
++} ASN1_SEQUENCE_END(KRB5PrincipalName)
++
++IMPLEMENT_ASN1_FUNCTIONS(KRB5PrincipalName)
++
++enum san_opt openssl_name_type_to_san_opt(int type)
++{
++    switch (type) {
++    case GEN_OTHERNAME:
++        return SAN_OTHER_NAME;
++    case GEN_EMAIL:
++        return SAN_RFC822_NAME;
++    case GEN_DNS:
++        return SAN_DNS_NAME;
++    case GEN_X400:
++        return SAN_X400_ADDRESS;
++    case GEN_DIRNAME:
++        return SAN_DIRECTORY_NAME;
++    case GEN_EDIPARTY:
++        return SAN_EDIPART_NAME;
++    case GEN_URI:
++        return SAN_URI;
++    case GEN_IPADD:
++        return SAN_IP_ADDRESS;
++    case GEN_RID:
++        return SAN_REGISTERED_ID;
++    default:
++        return SAN_INVALID;
++    }
++}
++
++static int add_string_other_name_to_san_list(TALLOC_CTX *mem_ctx,
++                                             enum san_opt san_opt,
++                                             OTHERNAME *other_name,
++                                             struct san_list **item)
++{
++    struct san_list *i = NULL;
++    int ret;
++    char oid_buf[128]; /* FIXME: any other size ?? */
++    int len;
++    unsigned char *p;
++
++    len = OBJ_obj2txt(oid_buf, sizeof(oid_buf), other_name->type_id, 1);
++    if (len <= 0) {
++        return EINVAL;
++    }
++
++    i = talloc_zero(mem_ctx, struct san_list);
++    if (i == NULL) {
++        return ENOMEM;
++    }
++    i->san_opt = san_opt;
++
++    i->other_name_oid = talloc_strndup(i, oid_buf, len);
++    if (i->other_name_oid == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    len = i2d_ASN1_TYPE(other_name->value, NULL);
++    if (len <= 0) {
++        ret = EINVAL;
++        goto done;
++    }
++
++    i->bin_val = talloc_size(mem_ctx, len);
++    if (i->bin_val == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    /* i2d_TYPE increment the second argument so that it points to the end of
++     * the written data hence we cannot use i->bin_val directly. */
++    p = i->bin_val;
++    i->bin_val_len = i2d_ASN1_TYPE(other_name->value, &p);
++
++    ret = 0;
++
++done:
++    if (ret == 0) {
++        *item = i;
++    } else {
++        talloc_free(i);
++    }
++
++    return ret;
++}
++
++static int add_nt_princ_to_san_list(TALLOC_CTX *mem_ctx,
++                                    enum san_opt san_opt,
++                                    GENERAL_NAME *current,
++                                    struct san_list **item)
++{
++    struct san_list *i = NULL;
++    int ret;
++    OTHERNAME *other_name = current->d.otherName;
++
++    if (ASN1_TYPE_get(other_name->value) != V_ASN1_UTF8STRING) {
++        return EINVAL;
++    }
++
++    i = talloc_zero(mem_ctx, struct san_list);
++    if (i == NULL) {
++        return ENOMEM;
++    }
++    i->san_opt = san_opt;
++
++    i->val = talloc_strndup(i,
++                 (const char *) ASN1_STRING_get0_data(
++                                           other_name->value->value.utf8string),
++                 ASN1_STRING_length(other_name->value->value.utf8string));
++    if (i->val == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = get_short_name(i, i->val, '@', &(i->short_name));
++    if (ret != 0) {
++        goto done;
++    }
++
++    ret = 0;
++
++done:
++    if (ret == 0) {
++        *item = i;
++    } else {
++        talloc_free(i);
++    }
++
++    return ret;
++}
++
++void *ASN1_TYPE_unpack_sequence(const ASN1_ITEM *it, const ASN1_TYPE *t)
++{
++    if (t == NULL || t->type != V_ASN1_SEQUENCE || t->value.sequence == NULL)
++        return NULL;
++    return ASN1_item_unpack(t->value.sequence, it);
++}
++
++static int add_pkinit_princ_to_san_list(TALLOC_CTX *mem_ctx,
++                                        enum san_opt san_opt,
++                                        GENERAL_NAME *current,
++                                        struct san_list **item)
++{
++    struct san_list *i = NULL;
++    int ret;
++    KRB5PrincipalName *princ = NULL;
++    size_t c;
++    const unsigned char *p;
++    const ASN1_STRING *oct;
++    ASN1_GENERALSTRING *name_comp;
++
++    oct = current->d.otherName->value->value.sequence;
++    p = oct->data;
++    princ = d2i_KRB5PrincipalName(NULL, &p, oct->length);
++    if (princ == NULL) {
++        return EINVAL;
++    }
++
++    if (princ->realm == NULL
++            || princ->principal_name == NULL
++            || princ->principal_name->name_string == NULL
++            || sk_ASN1_GENERALSTRING_num(princ->principal_name->name_string)
++                                                                         == 0) {
++        ret = EINVAL;
++        goto done;
++    }
++
++    i = talloc_zero(mem_ctx, struct san_list);
++    if (i == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++    i->san_opt = san_opt;
++
++    i->val = talloc_strdup(i, "");
++    if (i->val == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    for (c = 0;
++         c < sk_ASN1_GENERALSTRING_num(princ->principal_name->name_string);
++         c++) {
++
++        if (c > 0) {
++            i->val = talloc_strdup_append(i->val, "/");
++            if (i->val == NULL) {
++                ret = ENOMEM;
++                goto done;
++            }
++        }
++
++        name_comp = sk_ASN1_GENERALSTRING_value(
++                                         princ->principal_name->name_string, c);
++        i->val = talloc_strndup_append(i->val,
++                                (const char *) ASN1_STRING_get0_data(name_comp),
++                                ASN1_STRING_length(name_comp));
++        if (i->val == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++    }
++
++    i->val = talloc_asprintf_append(i->val, "@%.*s",
++                                    ASN1_STRING_length(princ->realm),
++                                    ASN1_STRING_get0_data(princ->realm));
++    if (i->val == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = get_short_name(i, i->val, '@', &(i->short_name));
++    if (ret != 0) {
++        goto done;
++    }
++
++    ret = 0;
++
++done:
++    KRB5PrincipalName_free(princ);
++    if (ret == 0) {
++        *item = i;
++    } else {
++        talloc_free(i);
++    }
++
++    return ret;
++}
++
++static int add_ip_to_san_list(TALLOC_CTX *mem_ctx, enum san_opt san_opt,
++                              const uint8_t *data, size_t len,
++                              struct san_list **item)
++{
++    struct san_list *i = NULL;
++
++    i = talloc_zero(mem_ctx, struct san_list);
++    if (i == NULL) {
++        return ENOMEM;
++    }
++    i->san_opt = san_opt;
++
++    i->val = talloc_strndup(i, (const char *) data, len);
++    if (i->val == NULL) {
++        talloc_free(i);
++        return ENOMEM;
++    }
++
++    *item = i;
++    return 0;
++}
++
++static int get_rdn_list(TALLOC_CTX *mem_ctx, X509_NAME *name,
++                        const char ***rdn_list)
++{
++    int ret;
++    size_t c;
++    const char **list = NULL;
++    X509_NAME_ENTRY *e;
++    ASN1_STRING *rdn_str;
++    ASN1_OBJECT *rdn_name;
++    BIO *bio_mem = NULL;
++    char *tmp_str;
++    long tmp_str_size;
++
++    int nid;
++    const char *sn;
++
++    bio_mem = BIO_new(BIO_s_mem());
++    if (bio_mem == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    list = talloc_zero_array(mem_ctx, const char *,
++                             X509_NAME_entry_count(name) + 1);
++    if (list == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    for (c = 0; c < X509_NAME_entry_count(name); c++) {
++        e = X509_NAME_get_entry(name, c);
++        rdn_str = X509_NAME_ENTRY_get_data(e);
++
++        ret = ASN1_STRING_print_ex(bio_mem, rdn_str, ASN1_STRFLGS_RFC2253);
++        if (ret < 0) {
++            ret = EIO;
++            goto done;
++        }
++
++        tmp_str_size = BIO_get_mem_data(bio_mem, &tmp_str);
++        if (tmp_str_size == 0) {
++            ret = EINVAL;
++            goto done;
++        }
++
++        rdn_name = X509_NAME_ENTRY_get_object(e);
++        nid = OBJ_obj2nid(rdn_name);
++        sn = OBJ_nid2sn(nid);
++
++        list[c] = talloc_asprintf(list, "%s=%.*s", openssl_2_nss_attr_name(sn),
++                                                   (int) tmp_str_size, tmp_str);
++        ret = BIO_reset(bio_mem);
++        if (ret != 1) {
++            /* BIO_reset() for BIO_s_mem returns 1 for sucess */
++            ret = ENOMEM;
++            goto done;
++        }
++        if (list[c] == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++    }
++
++    ret = 0;
++
++done:
++    BIO_free_all(bio_mem);
++    if (ret == 0) {
++        *rdn_list = list;
++    } else {
++        talloc_free(list);
++    }
++
++    return ret;
++}
++
++static int add_rdn_list_to_san_list(TALLOC_CTX *mem_ctx,
++                                    enum san_opt san_opt,
++                                    X509_NAME *name,
++                                    struct san_list **item)
++{
++    struct san_list *i = NULL;
++    int ret;
++
++    i = talloc_zero(mem_ctx, struct san_list);
++    if (i == NULL) {
++        return ENOMEM;
++    }
++    i->san_opt = san_opt;
++
++    ret = get_rdn_list(i, name, &(i->rdn_list));
++    if (ret != 0) {
++        talloc_free(i);
++        return ret;
++    }
++
++    *item = i;
++    return 0;
++}
++
++static int add_oid_to_san_list(TALLOC_CTX *mem_ctx,
++                               enum san_opt san_opt,
++                               ASN1_OBJECT *oid,
++                               struct san_list **item)
++{
++    struct san_list *i = NULL;
++    char oid_buf[128]; /* FIXME: any other size ?? */
++    int len;
++
++    len = OBJ_obj2txt(oid_buf, sizeof(oid_buf), oid, 1);
++    if (len <= 0) {
++        return EINVAL;
++    }
++
++    i = talloc_zero(mem_ctx, struct san_list);
++    if (i == NULL) {
++        return ENOMEM;
++    }
++    i->san_opt = san_opt;
++
++    i->val = talloc_strndup(i, oid_buf, len);
++    if (i->val == NULL) {
++        talloc_free(i);
++        return ENOMEM;
++    }
++
++    *item = i;
++    return 0;
++}
++
++static int get_san(TALLOC_CTX *mem_ctx, X509 *cert, struct san_list **san_list)
++{
++    STACK_OF(GENERAL_NAME) *extsan = NULL;
++    GENERAL_NAME *current;
++    size_t c;
++    int ret;
++    int crit;
++    struct san_list *list = NULL;
++    struct san_list *item = NULL;
++    struct san_list *item_s = NULL;
++    struct san_list *item_p = NULL;
++    struct san_list *item_pb = NULL;
++    int len;
++    unsigned char *data;
++    unsigned char *p;
++
++    extsan = X509_get_ext_d2i(cert, NID_subject_alt_name, &crit, NULL);
++    if (extsan == NULL) {
++        if (crit == -1) { /* extension could not be found */
++            return EOK;
++        } else {
++            return EINVAL;
++        }
++    }
++
++    for (c = 0; c < sk_GENERAL_NAME_num(extsan); c++) {
++        current = sk_GENERAL_NAME_value(extsan, c);
++        switch (current->type) {
++        case GEN_OTHERNAME:
++            ret = add_string_other_name_to_san_list(mem_ctx,
++                                                    SAN_STRING_OTHER_NAME,
++                                                    current->d.otherName,
++                                                    &item_s);
++            if (ret != 0) {
++                goto done;
++            }
++            DLIST_ADD(list, item_s);
++
++            item_p = NULL;
++            if (strcmp(item_s->other_name_oid, NT_PRINCIPAL_OID) == 0) {
++                ret = add_nt_princ_to_san_list(mem_ctx, SAN_NT, current,
++                                               &item_p);
++                if (ret != 0) {
++                    goto done;
++                }
++                DLIST_ADD(list, item_p);
++            } else if (strcmp(item_s->other_name_oid, PKINIT_OID) == 0) {
++                ret = add_pkinit_princ_to_san_list(mem_ctx, SAN_PKINIT,
++                                                   current, &item_p);
++                if (ret != 0) {
++                    goto done;
++                }
++                DLIST_ADD(list, item_p);
++            }
++
++            if (item_p != NULL) {
++                ret = add_principal_to_san_list(mem_ctx, SAN_PRINCIPAL,
++                                                item_p->val, &item_pb);
++                if (ret != 0) {
++                    goto done;
++                }
++                DLIST_ADD(list, item_pb);
++            }
++
++            break;
++            break;
++        case GEN_EMAIL:
++            ret = add_to_san_list(mem_ctx, false,
++                                  openssl_name_type_to_san_opt(current->type),
++                                  ASN1_STRING_get0_data(current->d.rfc822Name),
++                                  ASN1_STRING_length(current->d.rfc822Name),
++                                  &item);
++            if (ret != 0) {
++                goto done;
++            }
++
++            ret = get_short_name(item, item->val, '@', &(item->short_name));
++            if (ret != 0) {
++                goto done;
++            }
++
++            DLIST_ADD(list, item);
++            break;
++        case GEN_DNS:
++            ret = add_to_san_list(mem_ctx, false,
++                                  openssl_name_type_to_san_opt(current->type),
++                                  ASN1_STRING_get0_data(current->d.dNSName),
++                                  ASN1_STRING_length(current->d.dNSName),
++                                  &item);
++            if (ret != 0) {
++                goto done;
++            }
++
++            ret = get_short_name(item, item->val, '.', &(item->short_name));
++            if (ret != 0) {
++                goto done;
++            }
++
++            DLIST_ADD(list, item);
++            break;
++        case GEN_URI:
++            ret = add_to_san_list(mem_ctx, false,
++                    openssl_name_type_to_san_opt(current->type),
++                    ASN1_STRING_get0_data(current->d.uniformResourceIdentifier),
++                    ASN1_STRING_length(current->d.uniformResourceIdentifier),
++                    &item);
++            if (ret != 0) {
++                goto done;
++            }
++            break;
++        case GEN_IPADD:
++            ret = add_ip_to_san_list(mem_ctx,
++                                    openssl_name_type_to_san_opt(current->type),
++                                    ASN1_STRING_get0_data(current->d.iPAddress),
++                                    ASN1_STRING_length(current->d.iPAddress),
++                                    &item);
++            if (ret != 0) {
++                goto done;
++            }
++            DLIST_ADD(list, item);
++            break;
++        case GEN_DIRNAME:
++            ret = add_rdn_list_to_san_list(mem_ctx,
++                                    openssl_name_type_to_san_opt(current->type),
++                                    current->d.directoryName, &item);
++            if (ret != 0) {
++                goto done;
++            }
++            DLIST_ADD(list, item);
++            break;
++        case GEN_RID:
++            ret = add_oid_to_san_list(mem_ctx,
++                                    openssl_name_type_to_san_opt(current->type),
++                                    current->d.registeredID, &item);
++            if (ret != 0) {
++                goto done;
++            }
++            DLIST_ADD(list, item);
++            break;
++        case GEN_X400:
++            len = i2d_ASN1_TYPE(current->d.x400Address, NULL);
++            if (len <= 0) {
++                ret = EINVAL;
++                goto done;
++            }
++
++            data = talloc_size(mem_ctx, len);
++            if (data == NULL) {
++                ret = ENOMEM;
++                goto done;
++            }
++
++            /* i2d_TYPE increment the second argument so that it points to the end of
++             * the written data hence we cannot use i->bin_val directly. */
++            p = data;
++            len = i2d_ASN1_TYPE(current->d.x400Address, &p);
++
++            ret = add_to_san_list(mem_ctx, true,
++                                  openssl_name_type_to_san_opt(current->type),
++                                  data, len, &item);
++            if (ret != 0) {
++                goto done;
++            }
++            DLIST_ADD(list, item);
++            break;
++        case GEN_EDIPARTY:
++            len = i2d_EDIPARTYNAME(current->d.ediPartyName, NULL);
++            if (len <= 0) {
++                ret = EINVAL;
++                goto done;
++            }
++
++            data = talloc_size(mem_ctx, len);
++            if (data == NULL) {
++                ret = ENOMEM;
++                goto done;
++            }
++
++            /* i2d_TYPE increment the second argument so that it points to the end of
++             * the written data hence we cannot use i->bin_val directly. */
++            p = data;
++            len = i2d_EDIPARTYNAME(current->d.ediPartyName, &data);
++
++            ret = add_to_san_list(mem_ctx, true,
++                                  openssl_name_type_to_san_opt(current->type),
++                                  data, len, &item);
++            if (ret != 0) {
++                goto done;
++            }
++            DLIST_ADD(list, item);
++            break;
++        default:
++            ret = EINVAL;
++            goto done;
++        }
++    }
++
++done:
++    GENERAL_NAMES_free(extsan);
++
++    if (ret == EOK) {
++        *san_list = list;
++    }
++
++    return ret;
++}
++
++static int get_extended_key_usage_oids(TALLOC_CTX *mem_ctx,
++                                       X509 *cert,
++                                       const char ***_oids)
++{
++    const char **oids_list = NULL;
++    size_t c;
++    int ret;
++    char oid_buf[128]; /* FIXME: any other size ?? */
++    int len;
++    EXTENDED_KEY_USAGE *extusage = NULL;
++
++    extusage = X509_get_ext_d2i(cert, NID_ext_key_usage, NULL, NULL);
++    if (extusage == NULL) {
++        return EIO;
++    }
++
++    oids_list = talloc_zero_array(mem_ctx, const char *,
++                                  sk_ASN1_OBJECT_num(extusage) + 1);
++    if (oids_list == NULL) {
++        return ENOMEM;
++    }
++
++    for (c = 0; c < sk_ASN1_OBJECT_num(extusage); c++) {
++        len = OBJ_obj2txt(oid_buf, sizeof(oid_buf),
++                          sk_ASN1_OBJECT_value(extusage, c), 1);
++        if (len < 0) {
++            return EIO;
++        }
++
++        oids_list[c] = talloc_strndup(oids_list, oid_buf, len);
++        if (oids_list[c] == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++    }
++
++    ret = 0;
++
++done:
++    sk_ASN1_OBJECT_pop_free(extusage, ASN1_OBJECT_free);
++    if (ret == 0) {
++        *_oids = oids_list;
++    } else {
++        talloc_free(oids_list);
++    }
++
++    return ret;
++}
++
+ int sss_cert_get_content(TALLOC_CTX *mem_ctx,
+                          const uint8_t *der_blob, size_t der_size,
+                          struct sss_cert_content **content)
+ {
+-    return EINVAL;
++    int ret;
++    struct sss_cert_content *cont = NULL;
++    X509 *cert = NULL;
++    const unsigned char *der;
++    BIO *bio_mem = NULL;
++    X509_NAME *tmp_name;
++
++    if (der_blob == NULL || der_size == 0) {
++        return EINVAL;
++    }
++
++    cont = talloc_zero(mem_ctx, struct sss_cert_content);
++    if (cont == NULL) {
++        return ENOMEM;
++    }
++
++    bio_mem = BIO_new(BIO_s_mem());
++    if (bio_mem == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    der = (const unsigned char *) der_blob;
++    cert = d2i_X509(NULL, &der, (int) der_size);
++    if (cert == NULL) {
++        ret = EINVAL;
++        goto done;
++    }
++
++    tmp_name = X509_get_issuer_name(cert);
++
++    ret = get_rdn_list(cont, tmp_name, &cont->issuer_rdn_list);
++    if (ret != 0) {
++        goto done;
++    }
++
++    ret = rdn_list_2_dn_str(cont, NULL, cont->issuer_rdn_list,
++                            &cont->issuer_str);
++    if (ret != 0) {
++        goto done;
++    }
++
++    tmp_name = X509_get_subject_name(cert);
++
++    ret = get_rdn_list(cont, tmp_name, &cont->subject_rdn_list);
++    if (ret != 0) {
++        goto done;
++    }
++
++    ret = rdn_list_2_dn_str(cont, NULL, cont->subject_rdn_list,
++                            &cont->subject_str);
++    if (ret != 0) {
++        goto done;
++    }
++
++    ret = X509_check_purpose(cert, -1, -1);
++    if (ret < 0) {
++        ret = EIO;
++        goto done;
++    }
++    if (!(X509_get_extension_flags(cert) & EXFLAG_KUSAGE)) {
++        ret = EINVAL;
++        goto done;
++    }
++    cont->key_usage = X509_get_key_usage(cert);
++
++    ret = get_extended_key_usage_oids(cont, cert,
++                                      &(cont->extended_key_usage_oids));
++    if (ret != 0) {
++        goto done;
++    }
++
++    ret = get_san(cont, cert, &(cont->san_list));
++    if (ret != 0) {
++        goto done;
++    }
++
++    cont->cert_der = talloc_memdup(cont, der_blob, der_size);
++    if (cont->cert_der == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    cont->cert_der_size = der_size;
++
++    ret = EOK;
++
++done:
++
++    X509_free(cert);
++    BIO_free_all(bio_mem);
++    CRYPTO_cleanup_all_ex_data();
++
++    if (ret == EOK) {
++        *content = cont;
++    } else {
++        talloc_free(cont);
++    }
++
++    return ret;
+ }
+diff --git a/src/lib/certmap/sss_cert_content_nss.c b/src/lib/certmap/sss_cert_content_nss.c
+index d3182895465706c87503b8abb0cea49b7677625d..9b9409797228e906ce59de2472677cb292692610 100644
+--- a/src/lib/certmap/sss_cert_content_nss.c
++++ b/src/lib/certmap/sss_cert_content_nss.c
+@@ -278,38 +278,6 @@ enum san_opt nss_name_type_to_san_opt(CERTGeneralNameType type)
+     }
+ }
+ 
+-static int add_to_san_list(TALLOC_CTX *mem_ctx, bool is_bin,
+-                           enum san_opt san_opt, uint8_t *data, size_t len,
+-                           struct san_list **item)
+-{
+-    struct san_list *i;
+-
+-    if (data == NULL || len == 0 || san_opt == SAN_INVALID) {
+-        return EINVAL;
+-    }
+-
+-    i = talloc_zero(mem_ctx, struct san_list);
+-    if (i == NULL) {
+-        return ENOMEM;
+-    }
+-
+-    i->san_opt = san_opt;
+-    if (is_bin) {
+-        i->bin_val = talloc_memdup(i, data, len);
+-        i->bin_val_len = len;
+-    } else {
+-        i->val = talloc_strndup(i, (char *) data, len);
+-    }
+-    if (i->val == NULL) {
+-        talloc_free(i);
+-        return ENOMEM;
+-    }
+-
+-    *item = i;
+-
+-    return 0;
+-}
+-
+ /* taken from pkinit_crypto_nss.c of MIT Kerberos */
+ /* KerberosString: RFC 4120, 5.2.1. */
+ static const SEC_ASN1Template kerberos_string_template[] = {
+@@ -397,9 +365,6 @@ static const SEC_ASN1Template kerberos_principal_name_template[] = {
+     {0, 0, NULL, 0}
+ };
+ 
+-#define PKINIT_OID "1.3.6.1.5.2.2"
+-#define NT_PRINCIPAL_OID "1.3.6.1.4.1.311.20.2.3"
+-
+ static int add_string_other_name_to_san_list(TALLOC_CTX *mem_ctx,
+                                              enum san_opt san_opt,
+                                              CERTGeneralName *current,
+@@ -451,31 +416,6 @@ done:
+     return ret;
+ }
+ 
+-static int get_short_name(TALLOC_CTX *mem_ctx, const char *full_name,
+-                          char delim, char **short_name)
+-{
+-    char *at;
+-    char *s;
+-
+-    if (full_name == NULL || delim == '\0' || short_name == NULL) {
+-        return EINVAL;
+-    }
+-
+-    at = strchr(full_name, delim);
+-    if (at != NULL) {
+-        s = talloc_strndup(mem_ctx, full_name, (at - full_name));
+-    } else {
+-        s = talloc_strdup(mem_ctx, full_name);
+-    }
+-    if (s == NULL) {
+-        return ENOMEM;
+-    }
+-
+-    *short_name = s;
+-
+-    return 0;
+-}
+-
+ static int add_nt_princ_to_san_list(TALLOC_CTX *mem_ctx,
+                                     PLArenaPool *pool,
+                                     enum san_opt san_opt,
+@@ -532,7 +472,7 @@ static int add_pkinit_princ_to_san_list(TALLOC_CTX *mem_ctx,
+ {
+     struct san_list *i = NULL;
+     SECStatus rv;
+-    struct kerberos_principal_name kname;
++    struct kerberos_principal_name kname = { 0 };
+     int ret;
+     size_t c;
+ 
+@@ -571,9 +511,9 @@ static int add_pkinit_princ_to_san_list(TALLOC_CTX *mem_ctx,
+                 goto done;
+             }
+         }
+-        i->val = talloc_strndup_append(i->val,
+-                                             (char *) kname.realm.data,
+-                                             kname.realm.len);
++        i->val = talloc_asprintf_append(i->val, "@%.*s",
++                                             kname.realm.len,
++                                             (char *) kname.realm.data);
+         if (i->val == NULL) {
+             ret = ENOMEM;
+             goto done;
+@@ -706,42 +646,6 @@ static int add_ip_to_san_list(TALLOC_CTX *mem_ctx, enum san_opt san_opt,
+     *item = i;
+     return 0;
+ }
+-static int add_principal_to_san_list(TALLOC_CTX *mem_ctx,
+-                                     enum san_opt san_opt,
+-                                     const char *princ,
+-                                     struct san_list **item)
+-{
+-    struct san_list *i = NULL;
+-    int ret;
+-
+-    i = talloc_zero(mem_ctx, struct san_list);
+-    if (i == NULL) {
+-        return ENOMEM;
+-    }
+-    i->san_opt = san_opt;
+-
+-    i->val = talloc_strdup(i, princ);
+-    if (i->val == NULL) {
+-        ret = ENOMEM;
+-        goto done;
+-    }
+-
+-    ret = get_short_name(i, i->val, '@', &(i->short_name));
+-    if (ret != 0) {
+-        goto done;
+-    }
+-
+-    ret = 0;
+-
+-done:
+-    if (ret == 0) {
+-        *item = i;
+-    } else {
+-        talloc_free(i);
+-    }
+-
+-    return ret;
+-}
+ 
+ static int get_san(TALLOC_CTX *mem_ctx, CERTCertificate *cert,
+                    struct san_list **san_list)
+@@ -887,6 +791,7 @@ static int get_san(TALLOC_CTX *mem_ctx, CERTCertificate *cert,
+             break;
+         default:
+             ret = EINVAL;
++            goto done;
+         }
+ 
+         current = CERT_GetNextGeneralName(current);
+diff --git a/src/lib/certmap/sss_certmap.c b/src/lib/certmap/sss_certmap.c
+index 37bbc5e7c556f637c7e09fce21950d320790ddd1..f6f6f98041bfd55a19ae919ebb62ec6f8a6e5f8f 100644
+--- a/src/lib/certmap/sss_certmap.c
++++ b/src/lib/certmap/sss_certmap.c
+@@ -311,87 +311,6 @@ done:
+     return ret;
+ }
+ 
+-static int get_dn_str(struct sss_certmap_ctx *ctx, const char *conversion,
+-                      const char **rdn_list, char **result)
+-{
+-    char *str = NULL;
+-    size_t c;
+-    int ret;
+-    char *conv = NULL;
+-
+-    str = talloc_strdup(ctx, "");
+-    if (str == NULL) {
+-        ret = ENOMEM;
+-        goto done;
+-    }
+-    if (conversion == NULL || strcmp(conversion, "nss_ldap") == 0
+-                           || strcmp(conversion, "nss") == 0) {
+-        for (c = 0; rdn_list[c] != NULL; c++);
+-        while (c != 0) {
+-            c--;
+-            str = talloc_asprintf_append(str, "%s%s",
+-                                         (rdn_list[c + 1] == NULL) ? "" : ",",
+-                                         rdn_list[c]);
+-            if (str == NULL) {
+-                ret = ENOMEM;
+-                goto done;
+-            }
+-        };
+-    } else if (strcmp(conversion, "ad_ldap") == 0) {
+-        for (c = 0; rdn_list[c] != NULL; c++);
+-        while (c != 0) {
+-            c--;
+-            conv = check_ad_attr_name(str, rdn_list[c]);
+-            str = talloc_asprintf_append(str, "%s%s",
+-                                         (rdn_list[c + 1] == NULL) ? "" : ",",
+-                                         conv == NULL ? rdn_list[c] : conv);
+-            talloc_free(conv);
+-            conv = NULL;
+-            if (str == NULL) {
+-                ret = ENOMEM;
+-                goto done;
+-            }
+-        };
+-    } else if (strcmp(conversion, "nss_x500") == 0) {
+-        for (c = 0; rdn_list[c] != NULL; c++) {
+-            str = talloc_asprintf_append(str, "%s%s", (c == 0) ? "" : ",",
+-                                                       rdn_list[c]);
+-            if (str == NULL) {
+-                ret = ENOMEM;
+-                goto done;
+-            }
+-        }
+-    } else if (strcmp(conversion, "ad_x500") == 0
+-                        || strcmp(conversion, "ad") == 0) {
+-        for (c = 0; rdn_list[c] != NULL; c++) {
+-            conv = check_ad_attr_name(str, rdn_list[c]);
+-            str = talloc_asprintf_append(str, "%s%s",
+-                                         (c == 0) ? "" : ",",
+-                                         conv == NULL ? rdn_list[c] : conv);
+-            talloc_free(conv);
+-            conv = NULL;
+-            if (str == NULL) {
+-                ret = ENOMEM;
+-                goto done;
+-            }
+-        }
+-    } else {
+-        ret = EINVAL;
+-        goto done;
+-    }
+-
+-    ret = 0;
+-
+-done:
+-    if (ret == 0) {
+-        *result = str;
+-    } else {
+-        talloc_free(str);
+-    }
+-
+-    return ret;
+-}
+-
+ static int expand_san_blob(struct sss_certmap_ctx *ctx, enum san_opt san_opt,
+                            struct san_list *san_list, char **expanded)
+ {
+@@ -458,7 +377,7 @@ static int expand_san_rdn_list(struct sss_certmap_ctx *ctx,
+ 
+     DLIST_FOR_EACH(item, san_list) {
+         if (item->san_opt == san_opt) {
+-            ret = get_dn_str(ctx, conversion, item->rdn_list, &exp);
++            ret = rdn_list_2_dn_str(ctx, conversion, item->rdn_list, &exp);
+             if (ret != 0) {
+                 return ret;
+             }
+@@ -528,11 +447,11 @@ static int expand_template(struct sss_certmap_ctx *ctx,
+     char *exp = NULL;
+ 
+     if (strcmp("issuer_dn", parsed_template->name) == 0) {
+-        ret = get_dn_str(ctx, parsed_template->conversion,
+-                         cert_content->issuer_rdn_list, &exp);
++        ret = rdn_list_2_dn_str(ctx, parsed_template->conversion,
++                                cert_content->issuer_rdn_list, &exp);
+     } else if (strcmp("subject_dn", parsed_template->name) == 0) {
+-        ret = get_dn_str(ctx, parsed_template->conversion,
+-                         cert_content->subject_rdn_list, &exp);
++        ret = rdn_list_2_dn_str(ctx, parsed_template->conversion,
++                                cert_content->subject_rdn_list, &exp);
+     } else if (strncmp("subject_", parsed_template->name, 8) == 0) {
+         ret = expand_san(ctx, parsed_template, cert_content->san_list, &exp);
+     } else if (strcmp("cert", parsed_template->name) == 0) {
+@@ -629,7 +548,7 @@ static bool check_san_regexp(struct sss_certmap_ctx *ctx,
+         if (item->san_opt == san_opt) {
+             if (item->san_opt == SAN_DIRECTORY_NAME) {
+                 /* use LDAP order for matching */
+-                ret = get_dn_str(ctx, NULL, item->rdn_list, &tmp_str);
++                ret = rdn_list_2_dn_str(ctx, NULL, item->rdn_list, &tmp_str);
+                 if (ret != 0 || tmp_str == NULL) {
+                     return false;
+                 }
+diff --git a/src/lib/certmap/sss_certmap_attr_names.c b/src/lib/certmap/sss_certmap_attr_names.c
+index a28a464910728cdd1f316b2b979da84f440685ea..65c0f9109f6d611e8054bd1ae681d5b8eee5c4f6 100644
+--- a/src/lib/certmap/sss_certmap_attr_names.c
++++ b/src/lib/certmap/sss_certmap_attr_names.c
+@@ -30,44 +30,48 @@
+  * https://msdn.microsoft.com/en-us/library/windows/desktop/aa376556%28v=vs.85%29.aspx
+  * and wine source code dlls/crypt32/oid.c  and include/wincrypt.h . */
+ 
++/* OpenSSL data taken from include/openssl/obj_mac.h */
++
+ #include <stdbool.h>
+ #include <string.h>
+ #include <talloc.h>
+ 
+ struct oid_attr_name_map {
+     bool nss_ad_differ;
++    bool nss_openssl_differ;
+     const char *oid;
+     const char *nss;
+     const char *ad;
++    const char *openssl;
+ } oid_attr_name_map[] = {
+-    { false, "2.5.4.3",                    "CN",                  "CN"},
+-    { true,  "2.5.4.8",                    "ST",                  "S"},
+-    { false, "2.5.4.10",                   "O",                   "O"},
+-    { false, "2.5.4.11",                   "OU",                  "OU"},
+-    { false, "2.5.4.46",                   "dnQualifier",         "dnQualifier"},
+-    { false, "2.5.4.6",                    "C",                   "C"},
+-    { true,  "2.5.4.5",                    "serialNumber",        "SERIALNUMBER"},
+-    { false, "2.5.4.7",                    "L",                   "L"},
+-    { true,  "2.5.4.12",                   "title",               "T"},
+-    { false, "2.5.4.4",                    "SN",                  "SN"},
+-    { true,  "2.5.4.42",                   "givenName",           "G"},
+-    { true,  "2.5.4.43",                   "initials",            "I"},
+-    { true,  "2.5.4.44",                   "generationQualifier", "OID.2.5.4.44"},
+-    { false, "0.9.2342.19200300.100.1.25", "DC",                  "DC"},
+-    { true,  "0.9.2342.19200300.100.1.3",  "MAIL",                "OID,0.9.2342.19200300.100.1.3"},
+-    { true,  "0.9.2342.19200300.100.1.1",  "UID",                 "OID.0.9.2342.19200300.100.1.1"},
+-    { true,  "2.5.4.13",                    "OID.2.5.4.13",       "Description"},
+-    { true,  "2.5.4.16",                   "postalAddress",       "OID.2.5.4.16"},
+-    { true,  "2.5.4.17",                   "postalCode",          "PostalCode"},
+-    { true,  "2.5.4.18",                   "postOfficeBox",       "POBox"},
+-    { true,  "2.5.4.51",                   "houseIdentifier",     "OID.2.5.4.51"},
+-    { false, "1.2.840.113549.1.9.1",       "E",                   "E"},
+-    { false, "2.5.4.9",                    "STREET",              "STREET"},
+-    { true,  "2.5.4.65",                   "pseudonym",           "OID.2.5.4.65"},
+-    { true,  "2.5.4.15",                   "businessCategory",    "OID.2.5.4.15"},
+-    { true,  "2.5.4.41",                   "name",                "OID.2.5.4.41"},
++    { false, false, "2.5.4.3",                    "CN",                  "CN",                            "CN"},
++    { true,  false, "2.5.4.8",                    "ST",                  "S",                             "ST"},
++    { false, false, "2.5.4.10",                   "O",                   "O",                             "O"},
++    { false, false, "2.5.4.11",                   "OU",                  "OU",                            "OU"},
++    { false, false, "2.5.4.46",                   "dnQualifier",         "dnQualifier",                   "dnQualifier"},
++    { false, false, "2.5.4.6",                    "C",                   "C",                             "C"},
++    { true,  false, "2.5.4.5",                    "serialNumber",        "SERIALNUMBER",                  "serialNumber"},
++    { false, false, "2.5.4.7",                    "L",                   "L",                             "L"},
++    { true,  false, "2.5.4.12",                   "title",               "T",                             "title"},
++    { false, false, "2.5.4.4",                    "SN",                  "SN",                            "SN"},
++    { true,  true,  "2.5.4.42",                   "givenName",           "G",                             "GN"},
++    { true,  false, "2.5.4.43",                   "initials",            "I",                             "initials"},
++    { true,  false, "2.5.4.44",                   "generationQualifier", "OID.2.5.4.44",                  "generationQualifier"},
++    { false, false, "0.9.2342.19200300.100.1.25", "DC",                  "DC",                            "DC"},
++    { true,  true,  "0.9.2342.19200300.100.1.3",  "MAIL",                "OID,0.9.2342.19200300.100.1.3", "mail"},
++    { true,  false, "0.9.2342.19200300.100.1.1",  "UID",                 "OID.0.9.2342.19200300.100.1.1", "UID"},
++    { true,  true,  "2.5.4.13",                   "OID.2.5.4.13",        "Description",                   "description"},
++    { true,  false, "2.5.4.16",                   "postalAddress",       "OID.2.5.4.16",                  "postalAddress"},
++    { true,  false, "2.5.4.17",                   "postalCode",          "PostalCode",                    "postalCode"},
++    { true,  false, "2.5.4.18",                   "postOfficeBox",       "POBox",                         "postOfficeBox"},
++    { true,  false, "2.5.4.51",                   "houseIdentifier",     "OID.2.5.4.51",                  "houseIdentifier"},
++    { false, true,  "1.2.840.113549.1.9.1",       "E",                   "E",                             "emailAddress"},
++    { false, true,  "2.5.4.9",                    "STREET",              "STREET",                        "street"},
++    { true,  false, "2.5.4.65",                   "pseudonym",           "OID.2.5.4.65",                  "pseudonym"},
++    { true,  false, "2.5.4.15",                   "businessCategory",    "OID.2.5.4.15",                  "businessCategory"},
++    { true,  false, "2.5.4.41",                   "name",                "OID.2.5.4.41",                  "name"},
+ 
+-    { false, NULL, NULL, NULL}
++    { false, false, NULL, NULL, NULL, NULL}
+ };
+ 
+ char *check_ad_attr_name(TALLOC_CTX *mem_ctx, const char *rdn)
+@@ -105,3 +109,26 @@ char *check_ad_attr_name(TALLOC_CTX *mem_ctx, const char *rdn)
+ 
+     return NULL;
+ }
++
++const char *openssl_2_nss_attr_name(const char *attr)
++{
++    size_t c;
++
++    if (attr == NULL) {
++        return NULL;
++    }
++
++    for (c = 0; oid_attr_name_map[c].oid != NULL; c++) {
++        if (!oid_attr_name_map[c].nss_openssl_differ) {
++            continue;
++        }
++
++        if (strcmp(attr, oid_attr_name_map[c].openssl) != 0) {
++            continue;
++        }
++
++        return oid_attr_name_map[c].nss;
++    }
++
++    return attr;
++}
+diff --git a/src/lib/certmap/sss_certmap_int.h b/src/lib/certmap/sss_certmap_int.h
+index 0b4cda73639be9b323ac3388f97be90bc1a771f2..479cc1606d2575b1b69007eb90eac0c9d5814582 100644
+--- a/src/lib/certmap/sss_certmap_int.h
++++ b/src/lib/certmap/sss_certmap_int.h
+@@ -28,8 +28,11 @@
+ #include <sys/types.h>
+ #include <regex.h>
+ #include <stdint.h>
++#include <stdbool.h>
+ #include <talloc.h>
+ 
++#include "lib/certmap/sss_certmap.h"
++
+ #define CM_DEBUG(cm_ctx, format, ...) do { \
+     if (cm_ctx != NULL && cm_ctx->debug != NULL) { \
+         cm_ctx->debug(cm_ctx->debug_priv, __FILE__, __LINE__, __FUNCTION__, \
+@@ -40,6 +43,9 @@
+ #define DEFAULT_MATCH_RULE "<KU>digitalSignature<EKU>clientAuth"
+ #define DEFAULT_MAP_RULE "LDAP:(userCertificate;binary={cert!bin})"
+ 
++#define PKINIT_OID "1.3.6.1.5.2.2"
++#define NT_PRINCIPAL_OID "1.3.6.1.4.1.311.20.2.3"
++
+ enum san_opt {
+     SAN_OTHER_NAME = 0,
+     SAN_RFC822_NAME,
+@@ -161,9 +167,9 @@ struct san_list {
+ #define SSS_KU_DECIPHER_ONLY        0x8000
+ 
+ struct sss_cert_content {
+-    const char *issuer_str;
++    char *issuer_str;
+     const char **issuer_rdn_list;
+-    const char *subject_str;
++    char *subject_str;
+     const char **subject_rdn_list;
+     uint32_t key_usage;
+     const char **extended_key_usage_oids;
+@@ -179,6 +185,8 @@ int sss_cert_get_content(TALLOC_CTX *mem_ctx,
+ 
+ char *check_ad_attr_name(TALLOC_CTX *mem_ctx, const char *rdn);
+ 
++char *openssl_2_nss_attr_name(const char *attr);
++
+ int parse_krb5_match_rule(struct sss_certmap_ctx *ctx,
+                           const char *rule_start,
+                           struct krb5_match_rule **match_rule);
+@@ -186,4 +194,17 @@ int parse_krb5_match_rule(struct sss_certmap_ctx *ctx,
+ int parse_ldap_mapping_rule(struct sss_certmap_ctx *ctx,
+                             const char *rule_start,
+                             struct ldap_mapping_rule **mapping_rule);
++
++int get_short_name(TALLOC_CTX *mem_ctx, const char *full_name,
++                   char delim, char **short_name);
++
++int add_to_san_list(TALLOC_CTX *mem_ctx, bool is_bin,
++                    enum san_opt san_opt, const uint8_t *data, size_t len,
++                    struct san_list **item);
++
++int add_principal_to_san_list(TALLOC_CTX *mem_ctx, enum san_opt san_opt,
++                              const char *princ, struct san_list **item);
++
++int rdn_list_2_dn_str(TALLOC_CTX *mem_ctx, const char *conversion,
++                      const char **rdn_list, char **result);
+ #endif /* __SSS_CERTMAP_INT_H__ */
+diff --git a/src/tests/cmocka/test_certmap.c b/src/tests/cmocka/test_certmap.c
+index c998443d086eaa72cc2a05c38ddfc5ba590a1ce7..f1e73875bf7ae85fbf2be84d47d8d82f544ac8ba 100644
+--- a/src/tests/cmocka/test_certmap.c
++++ b/src/tests/cmocka/test_certmap.c
+@@ -40,6 +40,10 @@
+ #include "util/crypto/nss/nss_util.h"
+ #endif
+ 
++#ifdef HAVE_LIBCRYPTO
++#include <openssl/crypto.h>
++#endif
++
+ struct priv_sss_debug {
+     int level;
+ };
+@@ -712,6 +716,65 @@ const uint8_t test_cert2_der[] = {
+ 0xa2, 0xd3, 0x43, 0x21, 0x5b, 0xdc, 0xa2, 0x1d, 0x55, 0xa9, 0x48, 0xc5, 0xc4, 0xaa, 0xf3, 0x8b,
+ 0xe6, 0x3e, 0x75, 0x96, 0xe4, 0x3e, 0x64, 0xaf, 0xe8, 0xa7, 0x6a, 0xb6};
+ 
++/* used to test SAN principal encoding according to RFC4556 */
++const uint8_t test_cert3_der[] = {
++0x30, 0x82, 0x03, 0x70, 0x30, 0x82, 0x02, 0x58, 0xa0, 0x03, 0x02, 0x01, 0x02, 0x02, 0x09, 0x00,
++0xe5, 0x8f, 0x16, 0xfe, 0x23, 0x4d, 0xc5, 0xd6, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86,
++0xf7, 0x0d, 0x01, 0x01, 0x0b, 0x05, 0x00, 0x30, 0x1a, 0x31, 0x18, 0x30, 0x16, 0x06, 0x03, 0x55,
++0x04, 0x03, 0x0c, 0x0f, 0x6b, 0x72, 0x62, 0x35, 0x5f, 0x70, 0x72, 0x69, 0x6e, 0x63, 0x5f, 0x74,
++0x65, 0x73, 0x74, 0x30, 0x1e, 0x17, 0x0d, 0x31, 0x37, 0x30, 0x37, 0x31, 0x32, 0x30, 0x39, 0x32,
++0x34, 0x31, 0x38, 0x5a, 0x17, 0x0d, 0x32, 0x30, 0x30, 0x34, 0x30, 0x37, 0x30, 0x39, 0x32, 0x34,
++0x31, 0x38, 0x5a, 0x30, 0x1a, 0x31, 0x18, 0x30, 0x16, 0x06, 0x03, 0x55, 0x04, 0x03, 0x0c, 0x0f,
++0x6b, 0x72, 0x62, 0x35, 0x5f, 0x70, 0x72, 0x69, 0x6e, 0x63, 0x5f, 0x74, 0x65, 0x73, 0x74, 0x30,
++0x82, 0x01, 0x22, 0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01,
++0x05, 0x00, 0x03, 0x82, 0x01, 0x0f, 0x00, 0x30, 0x82, 0x01, 0x0a, 0x02, 0x82, 0x01, 0x01, 0x00,
++0xbf, 0x84, 0x34, 0x46, 0x37, 0x50, 0xb1, 0xca, 0x14, 0x4c, 0x6b, 0x0d, 0xe4, 0xab, 0xc1, 0xce,
++0xf4, 0xd1, 0xde, 0xca, 0xf5, 0x50, 0x46, 0x3c, 0x63, 0x0f, 0x8e, 0xb8, 0xe9, 0xf9, 0x3e, 0xc4,
++0xf3, 0x24, 0xc1, 0xe4, 0x78, 0xf6, 0xa4, 0x39, 0x6f, 0xc1, 0xd8, 0x9c, 0x1c, 0xa7, 0x47, 0xe4,
++0xc8, 0x71, 0x32, 0x9a, 0x1d, 0x1d, 0xfb, 0x30, 0x0f, 0xf9, 0x85, 0x48, 0xf8, 0x1f, 0xa7, 0xbd,
++0xda, 0x39, 0xd4, 0xc7, 0x27, 0x4f, 0xf5, 0x34, 0xee, 0x4a, 0x59, 0x0c, 0x7a, 0xec, 0x2b, 0xaf,
++0x81, 0x8e, 0x41, 0x54, 0x6f, 0xcc, 0x91, 0x61, 0x4c, 0x61, 0x80, 0xca, 0x37, 0xab, 0x2c, 0x63,
++0x8d, 0xce, 0x07, 0xcd, 0x61, 0x11, 0x10, 0xa0, 0xe4, 0x08, 0x7d, 0x1d, 0x10, 0x85, 0xb1, 0x64,
++0x33, 0x6b, 0x4d, 0x8d, 0xd2, 0x9d, 0xd7, 0x0b, 0x21, 0xbc, 0x15, 0xcd, 0xed, 0xaa, 0xc0, 0x01,
++0x67, 0xe1, 0x7c, 0xd4, 0xf7, 0xdd, 0xf8, 0x28, 0x92, 0xce, 0x8b, 0x7f, 0x08, 0x29, 0x76, 0x6e,
++0xa5, 0xe6, 0xcd, 0xeb, 0x9c, 0x13, 0x78, 0xa3, 0x08, 0xb5, 0xdc, 0x7f, 0xc2, 0x60, 0xc3, 0xac,
++0x68, 0x30, 0x37, 0xe1, 0x54, 0x6a, 0xa9, 0x34, 0x3e, 0x43, 0x8d, 0x6f, 0x9b, 0xe5, 0x8a, 0xf9,
++0xa4, 0x22, 0xab, 0x33, 0x01, 0x32, 0xaf, 0xc4, 0x9f, 0xb1, 0x27, 0xba, 0xae, 0x20, 0x60, 0xd7,
++0x16, 0x48, 0x66, 0x2b, 0x36, 0x9c, 0x54, 0xd0, 0x6e, 0x45, 0xd3, 0x23, 0x3f, 0x17, 0x2e, 0xee,
++0xd4, 0x55, 0xa7, 0x75, 0x2f, 0x28, 0xa9, 0x40, 0x3b, 0xbc, 0x79, 0x69, 0xea, 0x58, 0xc2, 0x3c,
++0x4c, 0x70, 0x4b, 0x93, 0xd8, 0xa4, 0xb6, 0x59, 0x24, 0x77, 0x10, 0xb3, 0xc7, 0x34, 0x99, 0x6b,
++0x28, 0xbd, 0x03, 0xdb, 0xda, 0xea, 0x23, 0x19, 0x10, 0x56, 0x7e, 0xa4, 0x28, 0x04, 0x5a, 0x53,
++0x02, 0x03, 0x01, 0x00, 0x01, 0xa3, 0x81, 0xb8, 0x30, 0x81, 0xb5, 0x30, 0x09, 0x06, 0x03, 0x55,
++0x1d, 0x13, 0x04, 0x02, 0x30, 0x00, 0x30, 0x0b, 0x06, 0x03, 0x55, 0x1d, 0x0f, 0x04, 0x04, 0x03,
++0x02, 0x03, 0xa8, 0x30, 0x12, 0x06, 0x03, 0x55, 0x1d, 0x25, 0x04, 0x0b, 0x30, 0x09, 0x06, 0x07,
++0x2b, 0x06, 0x01, 0x05, 0x02, 0x03, 0x04, 0x30, 0x1d, 0x06, 0x03, 0x55, 0x1d, 0x0e, 0x04, 0x16,
++0x04, 0x14, 0xea, 0xd4, 0x30, 0xd7, 0x7d, 0x3b, 0xc7, 0xb4, 0x83, 0x53, 0x2c, 0xa5, 0xb9, 0xd8,
++0x1a, 0x47, 0x6b, 0xb5, 0xe5, 0x9d, 0x30, 0x1f, 0x06, 0x03, 0x55, 0x1d, 0x23, 0x04, 0x18, 0x30,
++0x16, 0x80, 0x14, 0xea, 0xd4, 0x30, 0xd7, 0x7d, 0x3b, 0xc7, 0xb4, 0x83, 0x53, 0x2c, 0xa5, 0xb9,
++0xd8, 0x1a, 0x47, 0x6b, 0xb5, 0xe5, 0x9d, 0x30, 0x47, 0x06, 0x03, 0x55, 0x1d, 0x11, 0x04, 0x40,
++0x30, 0x3e, 0xa0, 0x3c, 0x06, 0x06, 0x2b, 0x06, 0x01, 0x05, 0x02, 0x02, 0xa0, 0x32, 0x30, 0x30,
++0xa0, 0x0b, 0x1b, 0x09, 0x53, 0x53, 0x53, 0x44, 0x2e, 0x54, 0x45, 0x53, 0x54, 0xa1, 0x21, 0x30,
++0x1f, 0xa0, 0x03, 0x02, 0x01, 0x01, 0xa1, 0x18, 0x30, 0x16, 0x1b, 0x04, 0x74, 0x65, 0x73, 0x74,
++0x1b, 0x05, 0x63, 0x6f, 0x6d, 0x70, 0x32, 0x1b, 0x07, 0x61, 0x6e, 0x6f, 0x74, 0x68, 0x65, 0x72,
++0x30, 0x0d, 0x06, 0x09, 0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x0b, 0x05, 0x00, 0x03,
++0x82, 0x01, 0x01, 0x00, 0x08, 0x64, 0x63, 0x89, 0x6d, 0x3d, 0x66, 0x77, 0xe3, 0xb6, 0x40, 0x54,
++0xd7, 0xe2, 0xc5, 0x99, 0xac, 0x98, 0x6e, 0xf8, 0xcd, 0x62, 0xa4, 0xf8, 0xd9, 0xaf, 0xdb, 0xef,
++0xb7, 0x10, 0x8e, 0x45, 0x42, 0x53, 0x5c, 0x3f, 0x6a, 0x8d, 0xa8, 0x8a, 0x6d, 0x76, 0x51, 0x1a,
++0xf4, 0x71, 0x54, 0x27, 0x27, 0xe2, 0x45, 0xe8, 0xa8, 0xd2, 0xa9, 0xcd, 0x62, 0x0d, 0xfc, 0x0d,
++0x28, 0x46, 0x9e, 0x4e, 0x5a, 0x57, 0x72, 0xb4, 0xf2, 0x35, 0x91, 0x57, 0x11, 0xae, 0x2b, 0x9c,
++0x6a, 0x80, 0x21, 0x8e, 0x4c, 0x19, 0x4a, 0x2d, 0xe0, 0xd2, 0xdf, 0x83, 0x9d, 0x65, 0x49, 0xd1,
++0x34, 0x34, 0x14, 0xa0, 0xbb, 0x1c, 0xa8, 0x12, 0xb0, 0xe3, 0x5e, 0x82, 0x36, 0x41, 0x4c, 0x87,
++0xd1, 0x1e, 0x1a, 0xe9, 0xff, 0x55, 0xef, 0xb5, 0x2d, 0x20, 0xc5, 0xa7, 0xe5, 0x5a, 0xf2, 0xfc,
++0xf7, 0xd2, 0x21, 0xc5, 0x32, 0xb4, 0x07, 0x8f, 0xc4, 0x94, 0x56, 0xa6, 0x21, 0x6a, 0xb6, 0x26,
++0x05, 0x48, 0x90, 0xe0, 0x6b, 0x22, 0x35, 0x00, 0x51, 0x2e, 0xd7, 0xe8, 0x3a, 0x56, 0xa8, 0x70,
++0x7d, 0x0f, 0x9a, 0x97, 0x5a, 0xb8, 0x7f, 0x33, 0xc1, 0xe0, 0x92, 0x0f, 0xb3, 0xfe, 0x36, 0xe6,
++0x8b, 0x97, 0x58, 0x42, 0x49, 0xcb, 0x74, 0xde, 0x19, 0x59, 0x90, 0xb6, 0x36, 0x38, 0x07, 0x48,
++0x5d, 0x5b, 0xab, 0x08, 0xf0, 0x69, 0x22, 0x42, 0x08, 0x29, 0xfe, 0x43, 0xab, 0x83, 0x73, 0x74,
++0x5a, 0x3f, 0x3b, 0x5d, 0x8e, 0xca, 0x6f, 0x2d, 0xad, 0xa1, 0x6e, 0x80, 0x80, 0xd2, 0xc8, 0x16,
++0xb7, 0x67, 0x1a, 0x2d, 0x37, 0x8c, 0x20, 0x3b, 0x15, 0xef, 0xb2, 0x94, 0x86, 0x5c, 0xaf, 0xa2,
++0x61, 0x8b, 0xc7, 0xc1, 0xe4, 0xbe, 0x60, 0x5a, 0x86, 0x5c, 0x86, 0xba, 0x59, 0x97, 0x83, 0x1b,
++0x79, 0x1c, 0x7c, 0x26};
++
+ void test_sss_cert_get_content(void **state)
+ {
+     int ret;
+@@ -802,7 +865,6 @@ FIXME:
+     assert_string_equal(content->subject_rdn_list[3], "CN=t u");
+     assert_string_equal(content->subject_rdn_list[4],
+                                                     "E=test.user@email.domain");
+-                     //"CN=t u/emailAddress=test.user@email.domain");
+     assert_null(content->subject_rdn_list[5]);
+ 
+     assert_non_null(content->san_list);
+@@ -880,6 +942,21 @@ static void test_sss_certmap_match_cert(void **state)
+         {NULL, 0}
+     };
+ 
++    struct match_tests match_tests_3[] = {
++        {"KRB5:<KU>digitalSignature", 0},
++        {"KRB5:<KU>keyEncipherment", 0},
++        {"KRB5:<KU>keyAgreement", 0},
++        {"KRB5:<KU>digitalSignature,keyAgreement,keyEncipherment", 0},
++        {"KRB5:<SAN:Principal>test", 0},
++        {"KRB5:<SAN:ntPrincipal>test", ENOENT},
++        {"KRB5:<SAN:Principal>comp2", 0},
++        {"KRB5:<SAN:Principal>another", 0},
++        {"KRB5:<SAN:Principal>test/comp2/another@SSSD.TEST", 0},
++        {"KRB5:<SAN:Principal>^test/comp2/another@SSSD.TEST$", 0},
++        {"KRB5:<SAN:pkinitSAN>^test/comp2/another@SSSD.TEST$", 0},
++        {NULL, 0}
++    };
++
+     ret = sss_certmap_init(NULL, ext_debug, NULL, &ctx);
+     assert_int_equal(ret, EOK);
+     assert_non_null(ctx);
+@@ -937,6 +1014,24 @@ static void test_sss_certmap_match_cert(void **state)
+ 
+         sss_certmap_free_ctx(ctx);
+     }
++
++    for (c = 0; match_tests_3[c].rule != NULL; c++) {
++        ret = sss_certmap_init(NULL, ext_debug, NULL, &ctx);
++        assert_int_equal(ret, EOK);
++        assert_non_null(ctx);
++        assert_null(ctx->prio_list);
++
++        print_error("Checking matching rule [%s]\n", match_tests_3[c].rule);
++
++        ret = sss_certmap_add_rule(ctx, 1, match_tests_3[c].rule, NULL, NULL);
++        assert_int_equal(ret, EOK);
++
++        ret = sss_certmap_match_cert(ctx, discard_const(test_cert3_der),
++                                     sizeof(test_cert3_der));
++        assert_int_equal(ret, match_tests_3[c].result);
++
++        sss_certmap_free_ctx(ctx);
++    }
+ }
+ 
+ static void test_sss_certmap_add_mapping_rule(void **state)
+@@ -1385,6 +1480,8 @@ static void test_sss_certmap_get_search_filter(void **state)
+     assert_non_null(filter);
+     assert_string_equal(filter, "(userCertificate;binary=" TEST_CERT2_BIN")");
+     assert_null(domains);
++
++    sss_certmap_free_ctx(ctx);
+ }
+ 
+ int main(int argc, const char *argv[])
+@@ -1439,5 +1536,9 @@ int main(int argc, const char *argv[])
+     nspr_nss_cleanup();
+ #endif
+ 
++#ifdef HAVE_LIBCRYPTO
++    CRYPTO_cleanup_all_ex_data(); /* to make valgrind happy */
++#endif
++
+     return rv;
+ }
+-- 
+2.14.1
+

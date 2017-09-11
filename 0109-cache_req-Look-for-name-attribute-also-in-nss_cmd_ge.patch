@@ -1,0 +1,61 @@
+From 2e72ababbbadda4c4036f99528460c1d595e0941 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 21 Aug 2017 11:42:43 +0200
+Subject: [PATCH 109/115] cache_req: Look for name attribute also in
+ nss_cmd_getsidbyid
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We always check negcache after getting data from backend since commit
+4c09cd008967c5c0ec358dc658ffc6fc1cef2697 because we usually do have a name
+in begging of requests "* by ID".
+
+We were not interested in name in request sid by id before. However, function
+cache_req_search_ncache_filter always expect name otherwise it returns
+ERR_INTERNAL.
+
+[sssd[nss]] [cache_req_set_plugin] (0x2000): CR #8: Setting "Object by ID" plugin
+[sssd[nss]] [cache_req_send] (0x0400): CR #8: New request 'Object by ID'
+[sssd[nss]] [cache_req_select_domains] (0x0400): CR #8: Performing a multi-domain search
+[sssd[nss]] [cache_req_search_domains] (0x0400): CR #8: Search will check the cache and check the data provider
+[sssd[nss]] [cache_req_validate_domain_type] (0x2000): Request type POSIX-only for domain sssdad2012r2.com type POSIX is valid
+[sssd[nss]] [cache_req_set_domain] (0x0400): CR #8: Using domain [sssdad2012r2.com]
+[sssd[nss]] [cache_req_search_send] (0x0400): CR #8: Looking up ID:233600513@sssdad2012r2.com
+[sssd[nss]] [cache_req_search_ncache] (0x0400): CR #8: Checking negative cache for [ID:233600513@sssdad2012r2.com]
+[sssd[nss]] [sss_ncache_check_str] (0x2000): Checking negative cache for [NCE/UID/sssdad2012r2.com/233600513]
+[sssd[nss]] [cache_req_search_ncache] (0x0400): CR #8: [ID:233600513@sssdad2012r2.com] is not present in negative cache
+[sssd[nss]] [cache_req_search_cache] (0x0400): CR #8: Looking up [ID:233600513@sssdad2012r2.com] in cache
+[sssd[nss]] [cache_req_search_send] (0x0400): CR #8: Returning [ID:233600513@sssdad2012r2.com] from cache
+[sssd[nss]] [cache_req_search_ncache_filter] (0x0400): CR #8: Filtering out results by negative cache
+[sssd[nss]] [cache_req_search_ncache_filter] (0x0020): CR #8: sss_get_name_from_msg() returned NULL, which should never happen in this scenario!
+[sssd[nss]] [cache_req_process_result] (0x0400): CR #8: Finished: Error 1432158209: Internal Error
+[sssd[nss]] [nss_protocol_done] (0x4000): Sending reply: error [1432158209]: Internal Error
+[sssd[nss]] [client_recv] (0x0200): Client disconnected!
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3485
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/common/cache_req/cache_req_data.c | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/src/responder/common/cache_req/cache_req_data.c b/src/responder/common/cache_req/cache_req_data.c
+index 8726e139ffeaaf876f162f6048c86c2145db8662..48264a321dc603f9708ba71c44542363b11a71ba 100644
+--- a/src/responder/common/cache_req/cache_req_data.c
++++ b/src/responder/common/cache_req/cache_req_data.c
+@@ -26,7 +26,9 @@ static const char **
+ cache_req_data_create_attrs(TALLOC_CTX *mem_ctx,
+                             const char **requested)
+ {
+-    static const char *defattrs[] = { SYSDB_DEFAULT_ATTRS };
++    static const char *defattrs[] = { SYSDB_DEFAULT_ATTRS, SYSDB_NAME,
++                                      OVERRIDE_PREFIX SYSDB_NAME,
++                                      SYSDB_DEFAULT_OVERRIDE_NAME };
+     static size_t defnum = sizeof(defattrs) / sizeof(defattrs[0]);
+     const char **attrs;
+     size_t reqnum;
+-- 
+2.14.1
+

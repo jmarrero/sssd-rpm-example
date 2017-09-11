@@ -1,0 +1,212 @@
+From d46d59e78600aa72176df7217c94743b7e71881a Mon Sep 17 00:00:00 2001
+From: Justin Stephenson <jstephen@redhat.com>
+Date: Wed, 3 May 2017 16:36:57 -0400
+Subject: [PATCH 111/115] DP: Add Generic DP Request Probes
+
+Add the ability to analyze performance and monitor Data Provider
+requests at a high-level, probes fire when a request is sent and when
+a request is completed.
+
+Request name, domain, target, method, and return code information
+is passed as target variables to the systemtap probe tapsets which
+can be used in systemtap scripts.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3061
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ Makefile.am                              |  9 +++++
+ src/providers/data_provider/dp_request.c |  5 +++
+ src/systemtap/sssd.stp.in                | 18 +++++++++
+ src/systemtap/sssd_functions.stp         | 68 ++++++++++++++++++++++++++++++++
+ src/systemtap/sssd_probes.d              |  5 +++
+ 5 files changed, 105 insertions(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index 42d7e4a1751202cb47658c37d38487c558b780af..f61560135f3bf233a71bf219c4a773d3dcc03ab0 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1587,6 +1587,9 @@ sssd_be_LDADD = \
+ sssd_be_LDFLAGS = \
+     -Wl,--version-script,$(srcdir)/src/providers/sssd_be.exports \
+     -export-dynamic
++if BUILD_SYSTEMTAP
++sssd_be_LDADD += stap_generated_probes.lo
++endif
+ 
+ if BUILD_PYTHON_BINDINGS
+ sss_obfuscate_pythondir = $(sbindir)
+@@ -1893,6 +1896,9 @@ libdlopen_test_providers_la_LIBADD = \
+     $(SSSD_LIBS) \
+     $(CARES_LIBS) \
+     $(SSSD_INTERNAL_LTLIBS)
++if BUILD_SYSTEMTAP
++libdlopen_test_providers_la_LIBADD += stap_generated_probes.lo
++endif
+ libdlopen_test_providers_la_LDFLAGS = \
+     -shared \
+     -avoid-version \
+@@ -3317,6 +3323,9 @@ test_dp_request_LDADD = \
+     $(LIBADD_DL) \
+     libsss_test_common.la \
+     $(NULL)
++if BUILD_SYSTEMTAP
++test_dp_request_LDADD += stap_generated_probes.lo
++endif
+ 
+ test_dp_builtin_SOURCES = \
+     src/providers/data_provider/dp_modules.c \
+diff --git a/src/providers/data_provider/dp_request.c b/src/providers/data_provider/dp_request.c
+index 6c0a0b72dc958ca4160c9f2f134405a515769fe9..a6bc020e0649760c46637d6f90569248792f7f04 100644
+--- a/src/providers/data_provider/dp_request.c
++++ b/src/providers/data_provider/dp_request.c
+@@ -27,6 +27,7 @@
+ #include "providers/backend.h"
+ #include "util/dlinklist.h"
+ #include "util/util.h"
++#include "util/probes.h"
+ 
+ struct dp_req {
+     struct data_provider *provider;
+@@ -309,6 +310,7 @@ struct tevent_req *dp_req_send(TALLOC_CTX *mem_ctx,
+         goto immediately;
+     }
+ 
++    PROBE(DP_REQ_SEND, domain, dp_req->name, target, method);
+     state->dp_req = dp_req;
+     if (_request_name != NULL) {
+         request_name = talloc_strdup(mem_ctx, dp_req->name);
+@@ -363,6 +365,9 @@ static void dp_req_done(struct tevent_req *subreq)
+     talloc_zfree(subreq);
+     state->dp_req->handler_req = NULL;
+ 
++    PROBE(DP_REQ_DONE, state->dp_req->name, state->dp_req->target,
++          state->dp_req->method, ret, sss_strerror(ret));
++
+     DP_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->dp_req->name,
+                  "Request handler finished [%d]: %s", ret, sss_strerror(ret));
+ 
+diff --git a/src/systemtap/sssd.stp.in b/src/systemtap/sssd.stp.in
+index 199916383105c34e60f3cb9b06d04d6c483b9712..25a68cd04e4df529b113055f6c3968fb8d71b168 100644
+--- a/src/systemtap/sssd.stp.in
++++ b/src/systemtap/sssd.stp.in
+@@ -254,3 +254,21 @@ probe sdap_nested_group_process_recv = process("@libdir@/sssd/libsss_ldap_common
+     probestr = sprintf("-> %s(orig_dn=[%s])",
+                        $$name, orig_dn);
+ }
++
++## Data Provider Request Probes
++probe dp_req_send = process("@libexecdir@/sssd/sssd_be").mark("dp_req_send")
++{
++    dp_req_domain = user_string($arg1, "NULL");
++    dp_req_name = user_string($arg2, "NULL");
++    dp_req_target = $arg3;
++    dp_req_method = $arg4;
++}
++
++probe dp_req_done = process("@libexecdir@/sssd/sssd_be").mark("dp_req_done")
++{
++    dp_req_name = user_string($arg1, "NULL");
++    dp_req_target = $arg2;
++    dp_req_method = $arg3;
++    dp_ret = $arg4;
++    dp_errorstr = user_string($arg5, "NULL");
++}
+diff --git a/src/systemtap/sssd_functions.stp b/src/systemtap/sssd_functions.stp
+index bad194eadb1b7154e85bb05c42240323896abe45..e249aac986969e21b8c251e642324e85b74cf3c8 100644
+--- a/src/systemtap/sssd_functions.stp
++++ b/src/systemtap/sssd_functions.stp
+@@ -1,3 +1,13 @@
++// constants
++global TARGET_ID=0, TARGET_AUTH=1, TARGET_ACCESS=2, TARGET_CHPASS=3,
++       TARGET_SUDO=4, TARGET_AUTOFS=5, TARGET_SELINUX=6, TARGET_HOSTID=7,
++       TARGET_SUBDOMAINS=8, TARGET_SENTINEL=9
++
++global METHOD_CHECK_ONLINE=0, METHOD_ACCOUNT_HANDLER=1, METHOD_AUTH_HANDLER=2,
++       METHOD_ACCESS_HANDLER=3, METHOD_SELINUX_HANDLER=4, METHOD_SUDO_HANDLER=5,
++       METHOD_AUTOFS_HANDLER=6, METHOD_HOSTID_HANDLER=7, METHOD_DOMAINS_HANDLER=8,
++       METHOD_SENTINEL=9
++
+ function acct_req_desc(entry_type)
+ {
+     if (entry_type == 0x0001) {
+@@ -64,3 +74,61 @@ function sssd_acct_req_probestr(fc_name, entry_type, filter_type,
+                        filter_value, extra_value)
+     return probestr
+ }
++
++function dp_target_str(target)
++{
++    if (target == TARGET_ID) {
++        str_target = "ID"
++    } else if (target == TARGET_AUTH) {
++        str_target = "AUTH"
++    } else if (target == TARGET_ACCESS) {
++        str_target = "ACCESS"
++    } else if (target == TARGET_CHPASS) {
++        str_target = "CHPASS"
++    } else if (target == TARGET_SUDO) {
++        str_target = "SUDO"
++    } else if (target == TARGET_AUTOFS) {
++        str_target = "AUTOFS"
++    } else if (target == TARGET_SELINUX) {
++        str_target = "SELINUX"
++    } else if (target == TARGET_HOSTID) {
++        str_target = "HOSTID"
++    } else if (target == TARGET_SUBDOMAINS) {
++        str_target = "SUBDOMAINS"
++    } else if (target == TARGET_SENTINEL) {
++        str_target = "TARGET_SENTINEL"
++    } else {
++        str_target = "UNKNOWN"
++    }
++
++    return str_target
++}
++
++function dp_method_str(method)
++{
++    if (method == METHOD_CHECK_ONLINE) {
++        str_method = "Check Online"
++    } else if (method == METHOD_ACCOUNT_HANDLER) {
++        str_method = "Account Handler"
++    } else if (method == METHOD_AUTH_HANDLER) {
++        str_method = "Auth Handler"
++    } else if (method == METHOD_ACCESS_HANDLER) {
++        str_method = "Access Handler"
++    } else if (method == METHOD_SELINUX_HANDLER) {
++        str_method = "SELinux Handler"
++    } else if (method == METHOD_SUDO_HANDLER) {
++        str_method = "Sudo Handler"
++    } else if (method == METHOD_AUTOFS_HANDLER) {
++        str_method = "Autofs Handler"
++    } else if (method == METHOD_HOSTID_HANDLER) {
++        str_method = "HostID Handler"
++    } else if (method == METHOD_DOMAINS_HANDLER) {
++        str_method = "Domains Handler"
++    } else if (method == METHOD_SENTINEL) {
++        str_method = "Method Sentinel"
++    } else {
++        str_method = "UNKNOWN"
++    }
++
++    return str_method
++}
+diff --git a/src/systemtap/sssd_probes.d b/src/systemtap/sssd_probes.d
+index 33339b415cd084d2a9348a5cd5f46065c0504233..c0d526871e1a8e5a4ccbac427a239b9525130578 100644
+--- a/src/systemtap/sssd_probes.d
++++ b/src/systemtap/sssd_probes.d
+@@ -65,4 +65,9 @@ provider sssd {
+     probe sdap_nested_group_sysdb_search_groups_post();
+     probe sdap_nested_group_populate_search_users_pre();
+     probe sdap_nested_group_populate_search_users_post();
++
++    probe dp_req_send(const char *domain, const char *dp_req_name,
++                      int target, int method);
++    probe dp_req_done(const char *dp_req_name, int target, int method,
++                      int ret, const char *errorstr);
+ }
+-- 
+2.14.1
+
