@@ -32,7 +32,7 @@
 
 Name: sssd
 Version: 1.15.3
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -155,6 +155,7 @@ Patch0112: 0112-CONTRIB-Add-DP-Request-analysis-script.patch
 Patch0113: 0113-MAN-Add-sssd-systemtap-man-page.patch
 Patch0114: 0114-TESTS-Use-NULL-for-pointer-not-0.patch
 Patch0115: 0115-SUDO-Use-initgr_with_views-when-looking-up-a-sudo-us.patch
+Patch0116: 0116-sysdb-sanitize-search-filter-input.patch
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 
 ### Dependencies ###
@@ -1354,6 +1355,11 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Oct 11 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-5
+- Resolves: rhbz#1499354 - CVE-2017-12173 sssd: unsanitized input when
+                           searching in local cache database access on
+                           the sock_file system_bus_socket
+
 * Mon Sep 11 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-4
 - Resolves: rhbz#1488327 - SELinux is preventing selinux_child from write
                            access on the sock_file system_bus_socket
