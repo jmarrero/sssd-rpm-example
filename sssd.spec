@@ -156,6 +156,7 @@ Patch0113: 0113-MAN-Add-sssd-systemtap-man-page.patch
 Patch0114: 0114-TESTS-Use-NULL-for-pointer-not-0.patch
 Patch0115: 0115-SUDO-Use-initgr_with_views-when-looking-up-a-sudo-us.patch
 Patch0116: 0116-sysdb-sanitize-search-filter-input.patch
+Patch0117: 0117-BUILD-Accept-krb5-1.16-for-building-the-PAC-plugin.patch
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 
 ### Dependencies ###
