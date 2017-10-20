@@ -3,9 +3,6 @@
 # we don't want to provide private python extension libs
 %define __provides_exclude_from %{python2_sitearch}/.*\.so$|%{python3_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
 
-# Allow the lang file to be empty
-%define _empty_manifest_terminate_build 0
-
 %define _hardened_build 1
 
     %global enable_polkit_rules_option --disable-polkit-rules-path
