@@ -31,8 +31,8 @@
 %endif
 
 Name: sssd
-Version: 1.15.3
-Release: 5%{?dist}
+Version: 1.16.0
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -41,122 +41,6 @@ Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
-Patch0001: 0001-Fix-minor-typos.patch
-Patch0002: 0002-CACHE_REQ-Propagate-num_results-to-cache_req_state.patch
-Patch0003: 0003-NSS-Move-shell-options-to-common-responder.patch
-Patch0004: 0004-NSS-Move-nss_get_shell_override-to-responder-utils.patch
-Patch0005: 0005-CONFIG-Add-session_recording-section.patch
-Patch0006: 0006-BUILD-Support-configuring-session-recording-shell.patch
-Patch0007: 0007-UTIL-Add-session-recording-conf-management-module.patch
-Patch0008: 0008-RESPONDER-Add-session-recording-conf-loading.patch
-Patch0009: 0009-DP-Add-session-recording-conf-loading.patch
-Patch0010: 0010-SYSDB-Add-sessionRecording-attribute-macro.patch
-Patch0011: 0011-DP-Load-override_space-into-be_ctx.patch
-Patch0012: 0012-DP-Update-viewname-for-all-providers.patch
-Patch0013: 0013-DP-Overlay-sessionRecording-attribute-on-initgr.patch
-Patch0014: 0014-CACHE_REQ-Pull-sessionRecording-attrs-from-initgr.patch
-Patch0015: 0015-NSS-Substitute-session-recording-shell.patch
-Patch0016: 0016-PAM-Export-original-shell-to-tlog-rec-session.patch
-Patch0017: 0017-INTG-Add-session-recording-tests.patch
-Patch0018: 0018-MAN-Describe-session-recording-configuration.patch
-Patch0019: 0019-SPEC-Use-language-file-for-sssd-kcm.patch
-Patch0020: 0020-MAN-Don-t-tell-the-user-to-autostart-sssd-kcm.servic.patch
-Patch0021: 0021-CACHE_REQ-Fix-warning-may-be-used-uninitialized.patch
-Patch0022: 0022-INTG-Add-with-session-recording-bin-false-to-intgche.patch
-Patch0023: 0023-Moving-headers-used-by-both-server-and-client-to-spe.patch
-Patch0024: 0024-libwbclient-sssd-update-interface-to-version-0.14.patch
-Patch0025: 0025-IFP-Do-not-fail-when-a-GHOST-group-is-not-found.patch
-Patch0026: 0026-SHARED-Return-warning-back-about-minimal-header-file.patch
-Patch0027: 0027-intg-Disable-add_remove-tests.patch
-Patch0028: 0028-UTIL-Set-udp_preference_limit-0-in-krb5-snippet.patch
-Patch0029: 0029-Fix-minor-typos.patch
-Patch0030: 0030-Fix-minor-typos-in-docs.patch
-Patch0031: 0031-SPEC-require-http-parser-only-on-rhel7.4.patch
-Patch0032: 0032-intg-Increase-startup-timeouts-for-kcm-and-secrets.patch
-Patch0033: 0033-sudo-add-a-threshold-option-to-reduce-size-of-rules-.patch
-Patch0034: 0034-libwbclient-Change-return-code-for-wbcAuthenticateUs.patch
-Patch0035: 0035-libwbclient-Fix-warning-statement-with-no-effect.patch
-Patch0036: 0036-ldap_child-Removing-duplicate-log-message.patch
-Patch0037: 0037-IFP-fix-typo-in-option-name-in-man-pages.patch
-Patch0038: 0038-IFP-Filter-with-in-infopipe-group-methods.patch
-Patch0039: 0039-IFP-Fix-of-limit-0-unlimited-result.patch
-Patch0040: 0040-IFP-Change-ifp_list_ctx_remaining_capacity-return-ty.patch
-Patch0041: 0041-IFP-Don-t-pre-allocate-the-amount-of-entries-request.patch
-Patch0042: 0042-IPA_ACCESS-Remove-not-used-attribute.patch
-Patch0043: 0043-IPA-Make-ipa_hbac_sysdb_save-more-generic.patch
-Patch0044: 0044-IPA-Leave-only-HBAC-specific-defines-in-ipa_hbac_pri.patch
-Patch0045: 0045-IPA_ACCESS-Make-hbac_get_cache_rules-more-generic.patch
-Patch0046: 0046-IPA_ACCESS-Make-ipa_purge_hbac-more-generic.patch
-Patch0047: 0047-IPA_RULES_COMMON-Introduce-ipa_common_save_rules.patch
-Patch0048: 0048-IPA_RULES_COMMON-Introduce-ipa_common_get_hostgroupn.patch
-Patch0049: 0049-IPA_ACCESS-Make-use-of-struct-ipa_common_entries.patch
-Patch0050: 0050-IPA_COMMON-Introduce-ipa_get_host_attrs.patch
-Patch0051: 0051-UTIL-move-files-selinux-.c-under-util-directory.patch
-Patch0052: 0052-UTIL-Add-sss_create_dir.patch
-Patch0053: 0053-DESKPROFILE-Introduce-the-new-IPA-session-provider.patch
-Patch0054: 0054-HBAC-Fix-tevent-hierarchy-in-ipa_hbac_rule_info_send.patch
-Patch0055: 0055-HBAC-Document-ipa_hbac_rule_info_next-s-behaviour.patch
-Patch0056: 0056-HBAC-Remove-a-cosmetic-extra-space-from-an-if-clause.patch
-Patch0057: 0057-HBAC-Improve-readability-of-ipa_hbac_rule_info_send.patch
-Patch0058: 0058-HBAC-Enforce-coding-style-on-ipa_hbac_rule_info_send.patch
-Patch0059: 0059-HBAC-Enforce-coding-style-ipa_hbac_rule_info_recv.patch
-Patch0060: 0060-HBAC-Add-a-debug-message-in-case-ipa_hbac_rule_info_.patch
-Patch0061: 0061-HBAC-Not-having-rules-should-not-be-logged-as-error.patch
-Patch0062: 0062-DESKPROFILE-Add-ipa_deskprofile_request_interval.patch
-Patch0063: 0063-NEGCACHE-Add-some-comments-about-each-step-of-sss_nc.patch
-Patch0064: 0064-NEGCACHE-Always-add-root-to-the-negative-cache.patch
-Patch0065: 0065-TEST_NEGCACHE-Test-that-root-is-always-added-to-ncac.patch
-Patch0066: 0066-NEGCACHE-Descend-to-all-subdomains-when-adding-user-.patch
-Patch0067: 0067-CACHE_REQ-Don-t-error-out-when-searching-by-id-0.patch
-Patch0068: 0068-NSS-Don-t-error-out-when-deleting-an-entry-which-has.patch
-Patch0069: 0069-NEGCACHE-Add-root-s-uid-gid-to-ncache.patch
-Patch0070: 0070-TEST_NEGCACHE-Ensure-root-s-uid-and-gid-are-always-a.patch
-Patch0071: 0071-TESTS-Add-wrappers-to-request-a-user-or-a-group-by-I.patch
-Patch0072: 0072-TESTS-Add-files-provider-tests-that-request-a-user-a.patch
-Patch0073: 0073-TESTS-Add-regression-tests-to-try-if-resolving-root-.patch
-Patch0074: 0074-localauth-plugin-change-return-code-of-sss_an2ln.patch
-Patch0075: 0075-tests-add-unit-tests-for-krb5-localauth-plugin.patch
-Patch0076: 0076-CONFDB-Set-a-default-value-for-subdomain_refresh_int.patch
-Patch0077: 0077-CONFDB-Do-not-crash-with-an-invalid-domain_type-or-c.patch
-Patch0078: 0078-SDAP-Add-a-debug-message-to-explain-why-a-backend-wa.patch
-Patch0079: 0079-SDAP-Don-t-call-be_mark_offline-because-sdap_id_conn.patch
-Patch0080: 0080-PYTHON-Define-constants-as-bytes-instead-of-strings.patch
-Patch0081: 0081-IPA-format-fixes.patch
-Patch0082: 0082-SPEC-rhel8-will-have-python3-as-well.patch
-Patch0083: 0083-SPEC-Fix-unowned-directory.patch
-Patch0084: 0084-IPA-Only-attempt-migration-for-the-joined-domain.patch
-Patch0085: 0085-SECRETS-Remove-unused-declarations.patch
-Patch0086: 0086-SECRETS-Do-not-link-with-c-ares.patch
-Patch0087: 0087-SECRETS-Store-quotas-in-a-per-hive-configuration-str.patch
-Patch0088: 0088-SECRETS-Read-the-quotas-for-cn-secrets-from-secrets-.patch
-Patch0089: 0089-SECRETS-Rename-local_db_req.basedn-to-local_db_req.r.patch
-Patch0090: 0090-SECRETS-Use-separate-quotas-for-kcm-and-secrets-hive.patch
-Patch0091: 0091-TESTS-Test-that-ccaches-can-be-stored-after-max_secr.patch
-Patch0092: 0092-SECRETS-Add-a-new-option-to-control-per-UID-limits.patch
-Patch0093: 0093-SECRETS-Support-0-as-unlimited-for-the-quotas.patch
-Patch0094: 0094-TESTS-Relax-the-assert-in-test_idle_timeout.patch
-Patch0095: 0095-IPA-Reword-the-DEBUG-message-about-SRV-resolution-on.patch
-Patch0097: 0097-SYSDB-Add-sysdb_search_by_orig_dn.patch
-Patch0098: 0098-TESTS-Add-tests-for-sysdb_search_-users-groups-_by_o.patch
-Patch0099: 0099-IPA-Use-sysdb_search_-_by_orig_dn-_hbac_users.c.patch
-Patch0100: 0100-SDAP-Use-sysdb_search_-_by_orig_dn-in-sdap_async_nes.patch
-Patch0101: 0101-SDAP-Use-sysdb_search_-_by_orig_dn-in-sdap_async_gro.patch
-Patch0102: 0102-IPA-Use-sysdb_search_-_by_orig_dn-in-_subdomains_ext.patch
-Patch0103: 0103-MAN-Improve-description-of-trusted-domain-section-in.patch
-Patch0104: 0104-certmap-add-OpenSSL-implementation.patch
-Patch0105: 0105-MAN-Improve-failover-documentation-by-explaining-the.patch
-Patch0106: 0106-MAN-Document-that-the-secrets-provider-can-only-be-s.patch
-Patch0107: 0107-SELINUX-Use-getseuserbyname-to-get-IPA-seuser.patch
-Patch0108: 0108-certmap-Suppress-warning-Wmissing-braces.patch
-Patch0109: 0109-cache_req-Look-for-name-attribute-also-in-nss_cmd_ge.patch
-Patch0110: 0110-ipa-make-sure-view-name-is-initialized-at-startup.patch
-Patch0111: 0111-DP-Add-Generic-DP-Request-Probes.patch
-Patch0112: 0112-CONTRIB-Add-DP-Request-analysis-script.patch
-Patch0113: 0113-MAN-Add-sssd-systemtap-man-page.patch
-Patch0114: 0114-TESTS-Use-NULL-for-pointer-not-0.patch
-Patch0115: 0115-SUDO-Use-initgr_with_views-when-looking-up-a-sudo-us.patch
-Patch0116: 0116-sysdb-sanitize-search-filter-input.patch
-Patch0117: 0117-BUILD-Accept-krb5-1.16-for-building-the-PAC-plugin.patch
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 
 ### Dependencies ###
@@ -1356,6 +1240,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Oct 20 2017 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-1
+- New upstream release 1.16.0
+- https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_16_0.html
+
 * Wed Oct 11 2017 Lukas Slebodnik <lslebodn@redhat.com> - 1.15.3-5
 - Resolves: rhbz#1499354 - CVE-2017-12173 sssd: unsanitized input when
                            searching in local cache database access on

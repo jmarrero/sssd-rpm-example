@@ -1,5 +1,5 @@
 From 5381ad1bd7693a6681f00bef093241f13e3a2c4f Mon Sep 17 00:00:00 2001
-From: Lukas Slebodnik <lslebodn@redhat.com>
+From: Lukas Slebodnik <lslebodn@fedoraproject.org>
 Date: Mon, 12 Dec 2016 21:56:16 +0100
 Subject: [PATCH] SYSTEMD: Use capabilities
 
@@ -16,7 +16,7 @@ index 05cfd3705084dbff8b46fb07e736612612c58b70..e7bbbdb5093f52e4b71e3c85a9082192
  ExecStart=@sbindir@/sssd -i -f
  Type=notify
  NotifyAccess=main
-+CapabilityBoundingSet=CAP_IPC_LOCK CAP_CHOWN CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_KILL CAP_NET_ADMIN CAP_SYS_NICE CAP_FOWNER CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_BLOCK_SUSPEND
++CapabilityBoundingSet=CAP_IPC_LOCK CAP_CHOWN CAP_DAC_READ_SEARCH CAP_KILL CAP_NET_ADMIN CAP_SYS_NICE CAP_FOWNER CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_BLOCK_SUSPEND
  
  [Install]
  WantedBy=multi-user.target
