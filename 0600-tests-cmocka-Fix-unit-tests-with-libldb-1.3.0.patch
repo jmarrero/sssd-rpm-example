@@ -1,0 +1,160 @@
+From 7a68d005503df7f650d6ff987714b2c5d50bb9d7 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@fedoraproject.org>
+Date: Sat, 21 Oct 2017 16:05:04 +0200
+Subject: [PATCH] tests/cmocka: Fix unit tests with libldb 1.3.0
+
+---
+ src/tests/cmocka/test_nss_srv.c     | 32 ++++++++++++++++----------------
+ src/tests/cmocka/test_sysdb_views.c | 32 ++++++++++++++++----------------
+ 2 files changed, 32 insertions(+), 32 deletions(-)
+
+diff --git a/src/tests/cmocka/test_nss_srv.c b/src/tests/cmocka/test_nss_srv.c
+index ccedf96beaecfaa4232bbe456d5e5a8394098483..1fc2e545ae5c9811953c5a6e4f9c97c6fb948473 100644
+--- a/src/tests/cmocka/test_nss_srv.c
++++ b/src/tests/cmocka/test_nss_srv.c
+@@ -1738,13 +1738,13 @@ static int test_nss_getgrnam_check_mix_dom(uint32_t status,
+     tmp_ctx = talloc_new(nss_test_ctx);
+     assert_non_null(tmp_ctx);
+ 
+-    exp_members[0] = sss_tc_fqname(tmp_ctx,
++    exp_members[0] = testmember1.pw_name;
++    exp_members[1] = testmember2.pw_name;
++    exp_members[2] = sss_tc_fqname(tmp_ctx,
+                                    nss_test_ctx->subdom->names,
+                                    nss_test_ctx->subdom,
+                                    submember1.pw_name);
+-    assert_non_null(exp_members[0]);
+-    exp_members[1] = testmember1.pw_name;
+-    exp_members[2] = testmember2.pw_name;
++    assert_non_null(exp_members[2]);
+ 
+     assert_int_equal(status, EOK);
+ 
+@@ -1830,19 +1830,13 @@ static int test_nss_getgrnam_check_mix_dom_fqdn(uint32_t status,
+     tmp_ctx = talloc_new(nss_test_ctx);
+     assert_non_null(tmp_ctx);
+ 
+-    exp_members[0] = sss_tc_fqname(tmp_ctx,
+-                                   nss_test_ctx->subdom->names,
+-                                   nss_test_ctx->subdom,
+-                                   submember1.pw_name);
+-    assert_non_null(exp_members[0]);
+-
+     if (nss_test_ctx->tctx->dom->fqnames) {
+-        exp_members[1] = sss_tc_fqname(tmp_ctx, nss_test_ctx->tctx->dom->names,
++        exp_members[0] = sss_tc_fqname(tmp_ctx, nss_test_ctx->tctx->dom->names,
+                                        nss_test_ctx->tctx->dom, testmember1.pw_name);
+-        assert_non_null(exp_members[1]);
+-        exp_members[2] = sss_tc_fqname(tmp_ctx, nss_test_ctx->tctx->dom->names,
++        assert_non_null(exp_members[0]);
++        exp_members[1] = sss_tc_fqname(tmp_ctx, nss_test_ctx->tctx->dom->names,
+                                        nss_test_ctx->tctx->dom, testmember2.pw_name);
+-        assert_non_null(exp_members[2]);
++        assert_non_null(exp_members[1]);
+ 
+         expected.gr_name = sss_tc_fqname(tmp_ctx,
+                                          nss_test_ctx->tctx->dom->names,
+@@ -1850,11 +1844,17 @@ static int test_nss_getgrnam_check_mix_dom_fqdn(uint32_t status,
+                                          testgroup_members.gr_name);
+         assert_non_null(expected.gr_name);
+     } else {
+-        exp_members[1] = testmember1.pw_name;
+-        exp_members[2] = testmember2.pw_name;
++        exp_members[0] = testmember1.pw_name;
++        exp_members[1] = testmember2.pw_name;
+         expected.gr_name = testgroup_members.gr_name;
+     }
+ 
++    exp_members[2] = sss_tc_fqname(tmp_ctx,
++                                   nss_test_ctx->subdom->names,
++                                   nss_test_ctx->subdom,
++                                   submember1.pw_name);
++    assert_non_null(exp_members[2]);
++
+     assert_int_equal(status, EOK);
+ 
+     ret = parse_group_packet(body, blen, &gr, &nmem);
+diff --git a/src/tests/cmocka/test_sysdb_views.c b/src/tests/cmocka/test_sysdb_views.c
+index 0378254b4440b29c3182faf2adde8c3db8a4ce97..3fb5211826e798c105b710894409c17e338a7b66 100644
+--- a/src/tests/cmocka/test_sysdb_views.c
++++ b/src/tests/cmocka/test_sysdb_views.c
+@@ -660,9 +660,9 @@ static void check_enumpwent(int ret, struct sss_domain_info *dom,
+     assert_int_equal(ret, EOK);
+     assert_int_equal(res->count, N_ELEMENTS(users)-1);
+ 
+-    assert_user_attrs(res->msgs[0], dom, "barney", views);
+-    assert_user_attrs(res->msgs[1], dom, "alice", views);
+-    assert_user_attrs(res->msgs[2], dom, "bob", views);
++    assert_user_attrs(res->msgs[0], dom, "alice", views);
++    assert_user_attrs(res->msgs[1], dom, "bob", views);
++    assert_user_attrs(res->msgs[2], dom, "barney", views);
+ }
+ 
+ static void test_sysdb_enumpwent(void **state)
+@@ -703,8 +703,8 @@ static void test_sysdb_enumpwent_filter(void **state)
+     ret = sysdb_enumpwent_filter(test_ctx, test_ctx->domain, "b*", 0, &res);
+     assert_int_equal(ret, EOK);
+     assert_int_equal(res->count, 2);
+-    assert_user_attrs(res->msgs[0], test_ctx->domain, "barney", false);
+-    assert_user_attrs(res->msgs[1], test_ctx->domain, "bob", false);
++    assert_user_attrs(res->msgs[0], test_ctx->domain, "bob", false);
++    assert_user_attrs(res->msgs[1], test_ctx->domain, "barney", false);
+ 
+     ret = sysdb_enumpwent_filter(test_ctx, test_ctx->domain, "c*", 0, &res);
+     assert_int_equal(ret, EOK);
+@@ -749,8 +749,8 @@ static void test_sysdb_enumpwent_filter_views(void **state)
+                                             "b*", NULL, &res);
+     assert_int_equal(ret, EOK);
+     assert_int_equal(res->count, 2);
+-    assert_user_attrs(res->msgs[0], test_ctx->domain, "barney", true);
+-    assert_user_attrs(res->msgs[1], test_ctx->domain, "bob", true);
++    assert_user_attrs(res->msgs[0], test_ctx->domain, "bob", true);
++    assert_user_attrs(res->msgs[1], test_ctx->domain, "barney", true);
+ 
+     addtl_filter = talloc_asprintf(test_ctx, "(%s<=%d)",
+                                    SYSDB_LAST_UPDATE, 1235);
+@@ -896,12 +896,12 @@ static void check_enumgrent(int ret, struct sss_domain_info *dom,
+ {
+     assert_int_equal(ret, EOK);
+     assert_int_equal(res->count, N_ELEMENTS(groups)-1);
+-    assert_group_attrs(res->msgs[0], dom, "three",
+-                       views ? TEST_GID_OVERRIDE_BASE + 2 : 0);
+-    assert_group_attrs(res->msgs[1], dom, "one",
++    assert_group_attrs(res->msgs[0], dom, "one",
+                        views ? TEST_GID_OVERRIDE_BASE : 0);
+-    assert_group_attrs(res->msgs[2], dom, "two",
++    assert_group_attrs(res->msgs[1], dom, "two",
+                        views ? TEST_GID_OVERRIDE_BASE + 1 : 0);
++    assert_group_attrs(res->msgs[2], dom, "three",
++                       views ? TEST_GID_OVERRIDE_BASE + 2 : 0);
+ }
+ 
+ static void test_sysdb_enumgrent(void **state)
+@@ -942,8 +942,8 @@ static void test_sysdb_enumgrent_filter(void **state)
+     ret = sysdb_enumgrent_filter(test_ctx, test_ctx->domain, "t*", 0, &res);
+     assert_int_equal(ret, EOK);
+     assert_int_equal(res->count, 2);
+-    assert_group_attrs(res->msgs[0], test_ctx->domain, "three", 0);
+-    assert_group_attrs(res->msgs[1], test_ctx->domain, "two", 0);
++    assert_group_attrs(res->msgs[0], test_ctx->domain, "two", 0);
++    assert_group_attrs(res->msgs[1], test_ctx->domain, "three", 0);
+ 
+     ret = sysdb_enumgrent_filter(test_ctx, test_ctx->domain, "x*", 0, &res);
+     assert_int_equal(ret, EOK);
+@@ -988,10 +988,10 @@ static void test_sysdb_enumgrent_filter_views(void **state)
+                                             "t*", NULL, &res);
+     assert_int_equal(ret, EOK);
+     assert_int_equal(res->count, 2);
+-    assert_group_attrs(res->msgs[0], test_ctx->domain,
++    assert_group_attrs(res->msgs[0], test_ctx->domain, "two",
++                       TEST_GID_OVERRIDE_BASE + 1);
++    assert_group_attrs(res->msgs[1], test_ctx->domain,
+                        "three", TEST_GID_OVERRIDE_BASE + 2);
+-    assert_group_attrs(res->msgs[1], test_ctx->domain, "two",
+-                       TEST_GID_OVERRIDE_BASE + 1);
+ 
+     addtl_filter = talloc_asprintf(test_ctx, "(%s<=%d)",
+                                    SYSDB_LAST_UPDATE, 1235);
+-- 
+2.14.2
+

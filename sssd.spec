@@ -39,6 +39,7 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
+Patch0600: 0600-tests-cmocka-Fix-unit-tests-with-libldb-1.3.0.patch
 
 ### Dependencies ###
 
