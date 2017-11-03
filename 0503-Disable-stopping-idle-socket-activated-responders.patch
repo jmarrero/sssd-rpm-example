@@ -1,5 +1,5 @@
 From 232305dd10b81955a3ee9dfc6d56c2d76ad5706f Mon Sep 17 00:00:00 2001
-From: Lukas Slebodnik <lslebodn@redhat.com>
+From: Lukas Slebodnik <lslebodn@fedoraproject.org>
 Date: Fri, 3 Nov 2017 16:18:14 +0100
 Subject: [PATCH] Disable stopping idle socket activated responders
 
