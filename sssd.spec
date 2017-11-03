@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.16.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -38,7 +38,9 @@ Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
+Patch0001: 0001-KCM-Fix-restart-during-after-upgrade.patch
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
+Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
 Patch0600: 0600-tests-cmocka-Fix-unit-tests-with-libldb-1.3.0.patch
 
 ### Dependencies ###
@@ -1238,6 +1240,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Nov 03 2017 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-2
+- Resolves: upstream#3529 - sssd-kcm Fix restart during/after upgrade
+
 * Fri Oct 20 2017 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-1
 - New upstream release 1.16.0
 - https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_16_0.html
