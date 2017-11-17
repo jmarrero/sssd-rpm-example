@@ -1,0 +1,900 @@
+From 5e6622722e84d594298a8324f3685a1bda2b5868 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Fri, 29 Sep 2017 16:16:01 +0200
+Subject: [PATCH 03/11] nss-idmap: add nss like calls with timeout and flags
+
+This patch adds new calls to libsss_nss_idmap to get NSS like user and
+group information directly from SSSD without using the system's NSS
+interfaces.
+
+Additionally a timeout and a flags options are added which are not
+available for system's NSS.
+
+Related to https://pagure.io/SSSD/sssd/issue/2478
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ Makefile.am                                  |  22 +-
+ configure.ac                                 |  13 +
+ src/sss_client/common.c                      |   9 +-
+ src/sss_client/common_private.h              |  41 +++
+ src/sss_client/idmap/common_ex.c             | 105 +++++++
+ src/sss_client/idmap/sss_nss_ex.c            | 402 +++++++++++++++++++++++++++
+ src/sss_client/idmap/sss_nss_idmap.exports   |  10 +
+ src/sss_client/idmap/sss_nss_idmap.h         | 135 +++++++++
+ src/sss_client/idmap/sss_nss_idmap_private.h |  30 ++
+ 9 files changed, 757 insertions(+), 10 deletions(-)
+ create mode 100644 src/sss_client/common_private.h
+ create mode 100644 src/sss_client/idmap/common_ex.c
+ create mode 100644 src/sss_client/idmap/sss_nss_ex.c
+ create mode 100644 src/sss_client/idmap/sss_nss_idmap_private.h
+
+diff --git a/Makefile.am b/Makefile.am
+index dc2f4b1857ce5bd376544488348731be29b6b293..dd25d1f7ea1be66388aa1b393bac290c4d7501a2 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1159,13 +1159,28 @@ pkgconfig_DATA += src/sss_client/idmap/sss_nss_idmap.pc
+ libsss_nss_idmap_la_DEPENDENCIES = src/sss_client/idmap/sss_nss_idmap.exports
+ libsss_nss_idmap_la_SOURCES = \
+     src/sss_client/idmap/sss_nss_idmap.c \
++    src/sss_client/idmap/sss_nss_ex.c \
++    src/sss_client/idmap/sss_nss_idmap_private.h \
+     src/sss_client/common.c \
+-    src/util/strtonum.c
++    src/sss_client/idmap/common_ex.c \
++    src/sss_client/nss_mc_passwd.c \
++    src/sss_client/nss_passwd.c \
++    src/sss_client/nss_mc_group.c \
++    src/sss_client/nss_group.c \
++    src/sss_client/nss_mc_initgr.c \
++    src/sss_client/nss_mc_common.c \
++    src/util/strtonum.c \
++    src/util/murmurhash3.c \
++    src/util/io.c \
++    $(NULL)
+ libsss_nss_idmap_la_LIBADD = \
+-    $(CLIENT_LIBS)
++    $(LIBCLOCK_GETTIME) \
++    $(CLIENT_LIBS) \
++    -lpthread \
++    $(NULL)
+ libsss_nss_idmap_la_LDFLAGS = \
+     -Wl,--version-script,$(srcdir)/src/sss_client/idmap/sss_nss_idmap.exports \
+-    -version-info 3:0:3
++    -version-info 4:0:4
+ 
+ dist_noinst_DATA += src/sss_client/idmap/sss_nss_idmap.exports
+ 
+@@ -3624,6 +3639,7 @@ libnss_sss_la_SOURCES = \
+     src/sss_client/sss_cli.h \
+     src/sss_client/nss_compat.h \
+     src/sss_client/nss_common.h \
++    src/sss_client/common_private.h \
+     src/sss_client/nss_mc_common.c \
+     src/util/io.c \
+     src/util/murmurhash3.c \
+diff --git a/configure.ac b/configure.ac
+index 7037927b5f7045b29d3774c85758e00e35e6def6..7e699d33e342c70d210d3f320c8a29a99e0c78a6 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -75,6 +75,19 @@ AC_SEARCH_LIBS([timer_create], [rt posix4],
+ AC_SUBST([LIBADD_TIMER])
+ LIBS=$SAVE_LIBS
+ 
++# Check library for the clock_gettime function
++SAVE_LIBS=$LIBS
++LIBS=
++LIBCLOCK_GETTIME=
++AC_SEARCH_LIBS([clock_gettime], [rt posix4],
++    [AC_DEFINE([HAVE_LIBRT], [1],
++         [Define if you have the librt library or equivalent.])
++     LIBCLOCK_GETTIME="$LIBS"],
++    [AC_MSG_ERROR([unable to find library for the clock_gettime() function])])
++
++AC_SUBST([LIBCLOCK_GETTIME])
++LIBS=$SAVE_LIBS
++
+ # Check for presence of modern functions for setting file timestamps
+ AC_CHECK_FUNCS([ utimensat \
+                  futimens ])
+diff --git a/src/sss_client/common.c b/src/sss_client/common.c
+index e5e0cbf854e4c977c03f9b1ca1ac90bfd8cbdb77..40252a35281dc4e94c712c3e7f8253af8b19b35a 100644
+--- a/src/sss_client/common.c
++++ b/src/sss_client/common.c
+@@ -43,6 +43,7 @@
+ #include <libintl.h>
+ #define _(STRING) dgettext (PACKAGE, STRING)
+ #include "sss_cli.h"
++#include "common_private.h"
+ 
+ #if HAVE_PTHREAD
+ #include <pthread.h>
+@@ -1113,13 +1114,7 @@ errno_t sss_strnlen(const char *str, size_t maxlen, size_t *len)
+ #if HAVE_PTHREAD
+ typedef void (*sss_mutex_init)(void);
+ 
+-struct sss_mutex {
+-    pthread_mutex_t mtx;
+-
+-    int old_cancel_state;
+-};
+-
+-static struct sss_mutex sss_nss_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER };
++struct sss_mutex sss_nss_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER };
+ 
+ static struct sss_mutex sss_pam_mtx = { .mtx  = PTHREAD_MUTEX_INITIALIZER };
+ 
+diff --git a/src/sss_client/common_private.h b/src/sss_client/common_private.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..a98d2c062caeecdbab02ecdaa6ae44d688a791bb
+--- /dev/null
++++ b/src/sss_client/common_private.h
+@@ -0,0 +1,41 @@
++/*
++    SSSD
++
++    SSS client - private calls
++
++    Authors:
++        Sumit Bose <sbose@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef COMMON_PRIVATE_H_
++#define COMMON_PRIVATE_H_
++
++#include "config.h"
++
++#if HAVE_PTHREAD
++#include <pthread.h>
++
++struct sss_mutex {
++    pthread_mutex_t mtx;
++
++    int old_cancel_state;
++};
++
++#endif /* HAVE_PTHREAD */
++
++#endif /* COMMON_PRIVATE_H_ */
+diff --git a/src/sss_client/idmap/common_ex.c b/src/sss_client/idmap/common_ex.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..5efe9fabed7896ce674615472dbb256c4eae2144
+--- /dev/null
++++ b/src/sss_client/idmap/common_ex.c
+@@ -0,0 +1,105 @@
++/*
++    Authors:
++        Sumit Bose <sbose@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    SSSD's enhanced NSS API
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <time.h>
++#include <errno.h>
++
++#include "sss_cli.h"
++#include "common_private.h"
++
++extern struct sss_mutex sss_nss_mtx;
++
++#define SEC_FROM_MSEC(ms) ((ms) / 1000)
++#define NSEC_FROM_MSEC(ms) (((ms) % 1000) * 1000 * 1000)
++
++/* adopted from timersub() defined in /usr/include/sys/time.h */
++#define TIMESPECSUB(a, b, result)                                             \
++  do {                                                                        \
++    (result)->tv_sec = (a)->tv_sec - (b)->tv_sec;                             \
++    (result)->tv_nsec = (a)->tv_nsec - (b)->tv_nsec;                          \
++    if ((result)->tv_nsec < 0) {                                              \
++      --(result)->tv_sec;                                                     \
++      (result)->tv_nsec += 1000000000;                                        \
++    }                                                                         \
++  } while (0)
++
++#define TIMESPEC_TO_MS(ts) (  ((ts)->tv_sec * 1000) \
++                            + ((ts)->tv_nsec) / (1000 * 1000) )
++
++static int sss_mt_timedlock(struct sss_mutex *m, struct timespec *endtime)
++{
++    int ret;
++
++    ret = pthread_mutex_timedlock(&m->mtx, endtime);
++    if (ret != 0) {
++        return ret;
++    }
++    pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &m->old_cancel_state);
++
++    return 0;
++}
++
++int sss_nss_timedlock(unsigned int timeout_ms, int *time_left_ms)
++{
++    int ret;
++    int left;
++    struct timespec starttime;
++    struct timespec endtime;
++    struct timespec diff;
++
++    /* make sure there is no overrun when calculating the time left */
++    if (timeout_ms > INT_MAX) {
++        timeout_ms = INT_MAX;
++    }
++
++    ret = clock_gettime(CLOCK_REALTIME, &starttime);
++    if (ret != 0) {
++        return ret;
++    }
++    endtime.tv_sec = starttime.tv_sec + SEC_FROM_MSEC(timeout_ms);
++    endtime.tv_nsec = starttime.tv_nsec + NSEC_FROM_MSEC(timeout_ms);
++
++    ret = sss_mt_timedlock(&sss_nss_mtx, &endtime);
++
++    if (ret == 0) {
++        ret = clock_gettime(CLOCK_REALTIME, &endtime);
++        if (ret != 0) {
++            return ret;
++        }
++
++        if (timeout_ms == 0) {
++            *time_left_ms = 0;
++        } else {
++            TIMESPECSUB(&endtime, &starttime, &diff);
++            left = timeout_ms - TIMESPEC_TO_MS(&diff);
++            if (left <= 0) {
++                return EIO;
++            } else if (left > SSS_CLI_SOCKET_TIMEOUT) {
++                *time_left_ms = SSS_CLI_SOCKET_TIMEOUT;
++            } else {
++                *time_left_ms = left;
++            }
++        }
++    }
++
++    return ret;
++}
+diff --git a/src/sss_client/idmap/sss_nss_ex.c b/src/sss_client/idmap/sss_nss_ex.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..582d1373ec35305cf128e04fd3d705457d304789
+--- /dev/null
++++ b/src/sss_client/idmap/sss_nss_ex.c
+@@ -0,0 +1,402 @@
++/*
++    SSSD
++
++    Extended NSS Responder Interface
++
++    Authors:
++        Sumit Bose <sbose@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++#include <stdlib.h>
++#include <errno.h>
++
++#include <sys/param.h> /* for MIN() */
++
++#include "sss_client/sss_cli.h"
++#include "sss_client/nss_mc.h"
++#include "sss_client/nss_common.h"
++#include "sss_client/idmap/sss_nss_idmap.h"
++#include "sss_client/idmap/sss_nss_idmap_private.h"
++
++#ifndef discard_const
++#define discard_const(ptr) ((void *)((uintptr_t)(ptr)))
++#endif
++
++struct sss_nss_initgr_rep {
++    gid_t *groups;
++    long int *ngroups;
++    long int *start;
++};
++
++struct nss_input {
++    union {
++        const char *name;
++        uid_t uid;
++        gid_t gid;
++    } input;
++    struct sss_cli_req_data rd;
++    enum sss_cli_command cmd;
++    union {
++        struct sss_nss_pw_rep pwrep;
++        struct sss_nss_gr_rep grrep;
++        struct sss_nss_initgr_rep initgrrep;
++    } result;
++};
++
++errno_t sss_nss_mc_get(struct nss_input *inp)
++{
++    switch(inp->cmd) {
++    case SSS_NSS_GETPWNAM:
++        return sss_nss_mc_getpwnam(inp->input.name, (inp->rd.len - 1),
++                                   inp->result.pwrep.result,
++                                   inp->result.pwrep.buffer,
++                                   inp->result.pwrep.buflen);
++        break;
++    case SSS_NSS_GETPWUID:
++        return sss_nss_mc_getpwuid(inp->input.uid,
++                                   inp->result.pwrep.result,
++                                   inp->result.pwrep.buffer,
++                                   inp->result.pwrep.buflen);
++        break;
++    case SSS_NSS_GETGRNAM:
++        return sss_nss_mc_getgrnam(inp->input.name, (inp->rd.len - 1),
++                                   inp->result.grrep.result,
++                                   inp->result.grrep.buffer,
++                                   inp->result.grrep.buflen);
++        break;
++    case SSS_NSS_GETGRGID:
++        return sss_nss_mc_getgrgid(inp->input.gid,
++                                   inp->result.grrep.result,
++                                   inp->result.grrep.buffer,
++                                   inp->result.grrep.buflen);
++        break;
++    case SSS_NSS_INITGR:
++        return sss_nss_mc_initgroups_dyn(inp->input.name, (inp->rd.len - 1),
++                                         -1 /* currently ignored */,
++                                         inp->result.initgrrep.start,
++                                         inp->result.initgrrep.ngroups,
++                                         &(inp->result.initgrrep.groups),
++                                         *(inp->result.initgrrep.ngroups));
++        break;
++    default:
++        return EINVAL;
++    }
++}
++
++int sss_get_ex(struct nss_input *inp, uint32_t flags, unsigned int timeout)
++{
++    uint8_t *repbuf = NULL;
++    size_t replen;
++    size_t len;
++    uint32_t num_results;
++    int ret;
++    int time_left;
++    int errnop;
++    size_t c;
++    gid_t *new_groups;
++    size_t idx;
++
++    ret = sss_nss_mc_get(inp);
++    switch (ret) {
++    case 0:
++        return 0;
++    case ERANGE:
++        return ERANGE;
++    case ENOENT:
++        /* fall through, we need to actively ask the parent
++         * if no entry is found */
++        break;
++    default:
++        /* if using the mmaped cache failed,
++         * fall back to socket based comms */
++        break;
++    }
++
++    sss_nss_timedlock(timeout, &time_left);
++
++    /* previous thread might already initialize entry in mmap cache */
++    ret = sss_nss_mc_get(inp);
++    switch (ret) {
++    case 0:
++        ret = 0;
++        goto out;
++    case ERANGE:
++        ret = ERANGE;
++        goto out;
++    case ENOENT:
++        /* fall through, we need to actively ask the parent
++         * if no entry is found */
++        break;
++    default:
++        /* if using the mmaped cache failed,
++         * fall back to socket based comms */
++        break;
++    }
++
++    ret = sss_nss_make_request_timeout(inp->cmd, &inp->rd, time_left,
++                                       &repbuf, &replen, &errnop);
++    if (ret != NSS_STATUS_SUCCESS) {
++        ret = errnop != 0 ? errnop : EIO;
++        goto out;
++    }
++
++    /* Get number of results from repbuf. */
++    SAFEALIGN_COPY_UINT32(&num_results, repbuf, NULL);
++
++    /* no results if not found */
++    if (num_results == 0) {
++        ret = ENOENT;
++        goto out;
++    }
++
++    if (inp->cmd == SSS_NSS_INITGR) {
++        if ((*(inp->result.initgrrep.ngroups) - *(inp->result.initgrrep.start))
++                    < num_results) {
++            new_groups = realloc(inp->result.initgrrep.groups,
++                                 (num_results + *(inp->result.initgrrep.start))
++                                    * sizeof(gid_t));
++            if (new_groups == NULL) {
++                ret = ENOMEM;
++                goto out;
++            }
++
++            inp->result.initgrrep.groups = new_groups;
++        }
++        *(inp->result.initgrrep.ngroups) = num_results
++                                            + *(inp->result.initgrrep.start);
++
++        idx = 2 * sizeof(uint32_t);
++        for (c = 0; c < num_results; c++) {
++            SAFEALIGN_COPY_UINT32(
++                &(inp->result.initgrrep.groups[*(inp->result.initgrrep.start)]),
++                repbuf + idx, &idx);
++            *(inp->result.initgrrep.start) += 1;
++        }
++
++        ret = 0;
++        goto out;
++    }
++
++    /* only 1 result is accepted for this function */
++    if (num_results != 1) {
++        ret = EBADMSG;
++        goto out;
++    }
++
++    len = replen - 8;
++    if (inp->cmd == SSS_NSS_GETPWNAM || inp->cmd == SSS_NSS_GETPWUID) {
++        ret = sss_nss_getpw_readrep(&(inp->result.pwrep), repbuf+8, &len);
++    } else if (inp->cmd == SSS_NSS_GETGRNAM || inp->cmd == SSS_NSS_GETGRGID) {
++        ret = sss_nss_getgr_readrep(&(inp->result.grrep), repbuf+8, &len);
++    } else {
++        ret = EINVAL;
++        goto out;
++    }
++    if (ret) {
++        goto out;
++    }
++
++    if (len == 0) {
++        /* no extra data */
++        ret = 0;
++        goto out;
++    }
++
++out:
++    free(repbuf);
++
++    sss_nss_unlock();
++    return ret;
++}
++
++int sss_nss_getpwnam_timeout(const char *name, struct passwd *pwd,
++                             char *buffer, size_t buflen,
++                             struct passwd **result,
++                             uint32_t flags, unsigned int timeout)
++{
++    int ret;
++    struct nss_input inp = {
++        .input.name = name,
++        .cmd = SSS_NSS_GETPWNAM,
++        .rd.data = name,
++        .result.pwrep.result = pwd,
++        .result.pwrep.buffer = buffer,
++        .result.pwrep.buflen = buflen};
++
++    if (buffer == NULL || buflen == 0) {
++        return ERANGE;
++    }
++
++    ret = sss_strnlen(name, SSS_NAME_MAX, &inp.rd.len);
++    if (ret != 0) {
++        return EINVAL;
++    }
++    inp.rd.len++;
++
++    *result = NULL;
++
++    ret = sss_get_ex(&inp, flags, timeout);
++    if (ret == 0) {
++        *result = inp.result.pwrep.result;
++    }
++    return ret;
++}
++
++int sss_nss_getpwuid_timeout(uid_t uid, struct passwd *pwd,
++                             char *buffer, size_t buflen,
++                             struct passwd **result,
++                             uint32_t flags, unsigned int timeout)
++{
++    int ret;
++    uint32_t user_uid = uid;
++    struct nss_input inp = {
++        .input.uid = uid,
++        .cmd = SSS_NSS_GETPWUID,
++        .rd.len = sizeof(uint32_t),
++        .rd.data = &user_uid,
++        .result.pwrep.result = pwd,
++        .result.pwrep.buffer = buffer,
++        .result.pwrep.buflen = buflen};
++
++    if (buffer == NULL || buflen == 0) {
++        return ERANGE;
++    }
++
++    *result = NULL;
++
++    ret = sss_get_ex(&inp, flags, timeout);
++    if (ret == 0) {
++        *result = inp.result.pwrep.result;
++    }
++    return ret;
++}
++
++int sss_nss_getgrnam_timeout(const char *name, struct group *grp,
++                             char *buffer, size_t buflen, struct group **result,
++                             uint32_t flags, unsigned int timeout)
++{
++    int ret;
++    struct nss_input inp = {
++        .input.name = name,
++        .cmd = SSS_NSS_GETGRNAM,
++        .rd.data = name,
++        .result.grrep.result = grp,
++        .result.grrep.buffer = buffer,
++        .result.grrep.buflen = buflen};
++
++    if (buffer == NULL || buflen == 0) {
++        return ERANGE;
++    }
++
++    ret = sss_strnlen(name, SSS_NAME_MAX, &inp.rd.len);
++    if (ret != 0) {
++        return EINVAL;
++    }
++    inp.rd.len++;
++
++    *result = NULL;
++
++    ret = sss_get_ex(&inp, flags, timeout);
++    if (ret == 0) {
++        *result = inp.result.grrep.result;
++    }
++    return ret;
++}
++
++int sss_nss_getgrgid_timeout(gid_t gid, struct group *grp,
++                             char *buffer, size_t buflen, struct group **result,
++                             uint32_t flags, unsigned int timeout)
++{
++    int ret;
++    uint32_t group_gid = gid;
++    struct nss_input inp = {
++        .input.gid = gid,
++        .cmd = SSS_NSS_GETGRGID,
++        .rd.len = sizeof(uint32_t),
++        .rd.data = &group_gid,
++        .result.grrep.result = grp,
++        .result.grrep.buffer = buffer,
++        .result.grrep.buflen = buflen};
++
++    if (buffer == NULL || buflen == 0) {
++        return ERANGE;
++    }
++
++    *result = NULL;
++
++    ret = sss_get_ex(&inp, flags, timeout);
++    if (ret == 0) {
++        *result = inp.result.grrep.result;
++    }
++    return ret;
++}
++
++int sss_nss_getgrouplist_timeout(const char *name, gid_t group,
++                                 gid_t *groups, int *ngroups,
++                                 uint32_t flags, unsigned int timeout)
++{
++    int ret;
++    gid_t *new_groups;
++    long int new_ngroups;
++    long int start = 1;
++    struct nss_input inp = {
++        .input.name = name,
++        .cmd = SSS_NSS_INITGR,
++        .rd.data = name};
++
++    if (groups == NULL || ngroups == NULL || *ngroups == 0) {
++        return EINVAL;
++    }
++
++    ret = sss_strnlen(name, SSS_NAME_MAX, &inp.rd.len);
++    if (ret != 0) {
++        return ret;
++    }
++    inp.rd.len++;
++
++    new_ngroups = MAX(1, *ngroups);
++    new_groups = malloc(new_ngroups * sizeof(gid_t));
++    if (new_groups == NULL) {
++        free(discard_const(inp.rd.data));
++        return ENOMEM;
++    }
++    new_groups[0] = group;
++
++    inp.result.initgrrep.groups = new_groups,
++    inp.result.initgrrep.ngroups = &new_ngroups;
++    inp.result.initgrrep.start = &start;
++
++
++    ret = sss_get_ex(&inp, flags, timeout);
++    free(discard_const(inp.rd.data));
++    if (ret != 0) {
++        free(new_groups);
++        return ret;
++    }
++
++    memcpy(groups, new_groups, MIN(*ngroups, start) * sizeof(gid_t));
++    free(new_groups);
++
++    if (start > *ngroups) {
++        ret = ERANGE;
++    } else {
++        ret = 0;
++    }
++    *ngroups = start;
++
++    return ret;
++}
+diff --git a/src/sss_client/idmap/sss_nss_idmap.exports b/src/sss_client/idmap/sss_nss_idmap.exports
+index 49dac6fc9351b0ca98cd46e83b85ec8ef0075a0d..788d05ecc3bd56fa88e68a98b9c8096cf7140a09 100644
+--- a/src/sss_client/idmap/sss_nss_idmap.exports
++++ b/src/sss_client/idmap/sss_nss_idmap.exports
+@@ -31,3 +31,13 @@ SSS_NSS_IDMAP_0.3.0 {
+     global:
+         sss_nss_getlistbycert;
+ } SSS_NSS_IDMAP_0.2.0;
++
++SSS_NSS_IDMAP_0.4.0 {
++    # public functions
++    global:
++        sss_nss_getpwnam_timeout;
++        sss_nss_getpwuid_timeout;
++        sss_nss_getgrnam_timeout;
++        sss_nss_getgrgid_timeout;
++        sss_nss_getgrouplist_timeout;
++} SSS_NSS_IDMAP_0.3.0;
+diff --git a/src/sss_client/idmap/sss_nss_idmap.h b/src/sss_client/idmap/sss_nss_idmap.h
+index cbf19479ff9ec6e0d6e07e1f7e48a1571e147740..2334b6cb3fb8ef62e4ce3a7187c7affaeaa034e7 100644
+--- a/src/sss_client/idmap/sss_nss_idmap.h
++++ b/src/sss_client/idmap/sss_nss_idmap.h
+@@ -26,6 +26,9 @@
+ #define SSS_NSS_IDMAP_H_
+ 
+ #include <stdint.h>
++#include <sys/types.h>
++#include <pwd.h>
++#include <grp.h>
+ 
+ /**
+  * Object types
+@@ -159,4 +162,136 @@ int sss_nss_getlistbycert(const char *cert, char ***fq_name,
+  * @param[in] kv_list Key-value list returned by sss_nss_getorigbyname().
+  */
+ void sss_nss_free_kv(struct sss_nss_kv *kv_list);
++
++/**
++ * Flags to control the behavior and the results for sss_*_ex() calls
++ */
++
++#define SSS_NSS_EX_FLAG_NO_FLAGS 0
++
++#ifdef IPA_389DS_PLUGIN_HELPER_CALLS
++
++/**
++ * @brief Return user information based on the user name
++ *
++ * @param[in]  name       same as for getpwnam_r(3)
++ * @param[in]  pwd        same as for getpwnam_r(3)
++ * @param[in]  buffer     same as for getpwnam_r(3)
++ * @param[in]  buflen     same as for getpwnam_r(3)
++ * @param[out] result     same as for getpwnam_r(3)
++ * @param[in]  flags      flags to control the behavior and the results of the
++ *                        call
++ * @param[in]  timeout    timeout in milliseconds
++ *
++ * @return
++ *  - 0:
++ *  - ENOENT:    no user with the given name found
++ *  - ERANGE:    Insufficient buffer space supplied
++ *  - ETIME:     request timed out but was send to SSSD
++ *  - ETIMEDOUT: request timed out but was not send to SSSD
++ */
++int sss_nss_getpwnam_timeout(const char *name, struct passwd *pwd,
++                             char *buffer, size_t buflen,
++                             struct passwd **result,
++                             uint32_t flags, unsigned int timeout);
++
++/**
++ * @brief Return user information based on the user uid
++ *
++ * @param[in]  uid        same as for getpwuid_r(3)
++ * @param[in]  pwd        same as for getpwuid_r(3)
++ * @param[in]  buffer     same as for getpwuid_r(3)
++ * @param[in]  buflen     same as for getpwuid_r(3)
++ * @param[out] result     same as for getpwuid_r(3)
++ * @param[in]  flags      flags to control the behavior and the results of the
++ *                        call
++ * @param[in]  timeout    timeout in milliseconds
++ *
++ * @return
++ *  - 0:
++ *  - ENOENT:    no user with the given uid found
++ *  - ERANGE:    Insufficient buffer space supplied
++ *  - ETIME:     request timed out but was send to SSSD
++ *  - ETIMEDOUT: request timed out but was not send to SSSD
++ */
++int sss_nss_getpwuid_timeout(uid_t uid, struct passwd *pwd,
++                             char *buffer, size_t buflen,
++                             struct passwd **result,
++                             uint32_t flags, unsigned int timeout);
++
++/**
++ * @brief Return group information based on the group name
++ *
++ * @param[in]  name       same as for getgrnam_r(3)
++ * @param[in]  pwd        same as for getgrnam_r(3)
++ * @param[in]  buffer     same as for getgrnam_r(3)
++ * @param[in]  buflen     same as for getgrnam_r(3)
++ * @param[out] result     same as for getgrnam_r(3)
++ * @param[in]  flags      flags to control the behavior and the results of the
++ *                        call
++ * @param[in]  timeout    timeout in milliseconds
++ *
++ * @return
++ *  - 0:
++ *  - ENOENT:    no group with the given name found
++ *  - ERANGE:    Insufficient buffer space supplied
++ *  - ETIME:     request timed out but was send to SSSD
++ *  - ETIMEDOUT: request timed out but was not send to SSSD
++ */
++int sss_nss_getgrnam_timeout(const char *name, struct group *grp,
++                             char *buffer, size_t buflen, struct group **result,
++                             uint32_t flags, unsigned int timeout);
++
++/**
++ * @brief Return group information based on the group gid
++ *
++ * @param[in]  gid        same as for getgrgid_r(3)
++ * @param[in]  pwd        same as for getgrgid_r(3)
++ * @param[in]  buffer     same as for getgrgid_r(3)
++ * @param[in]  buflen     same as for getgrgid_r(3)
++ * @param[out] result     same as for getgrgid_r(3)
++ * @param[in]  flags      flags to control the behavior and the results of the
++ *                        call
++ * @param[in]  timeout    timeout in milliseconds
++ *
++ * @return
++ *  - 0:
++ *  - ENOENT:    no group with the given gid found
++ *  - ERANGE:    Insufficient buffer space supplied
++ *  - ETIME:     request timed out but was send to SSSD
++ *  - ETIMEDOUT: request timed out but was not send to SSSD
++ */
++int sss_nss_getgrgid_timeout(gid_t gid, struct group *grp,
++                             char *buffer, size_t buflen, struct group **result,
++                             uint32_t flags, unsigned int timeout);
++
++/**
++ * @brief Return a list of groups to which a user belongs
++ *
++ * @param[in]      name       name of the user
++ * @param[in]      group      same as second argument of getgrouplist(3)
++ * @param[in]      groups     array of gid_t of size ngroups, will be filled
++ *                            with GIDs of groups the user belongs to
++ * @param[in,out]  ngroups    size of the groups array on input. On output it
++ *                            will contain the actual number of groups the
++ *                            user belongs to. With a return value of 0 the
++ *                            groups array was large enough to hold all group.
++ *                            With a return valu of ERANGE the array was not
++ *                            large enough and ngroups will have the needed
++ *                            size.
++ * @param[in]  flags          flags to control the behavior and the results of
++ *                            the call
++ * @param[in]  timeout        timeout in milliseconds
++ *
++ * @return
++ *  - 0:         success
++ *  - ENOENT:    no user with the given name found
++ *  - ERANGE:    Insufficient buffer space supplied
++ *  - ETIME:     request timed out but was send to SSSD
++ *  - ETIMEDOUT: request timed out but was not send to SSSD
++ */
++int sss_nss_getgrouplist_timeout(const char *name, gid_t group,
++                                 gid_t *groups, int *ngroups,
++                                 uint32_t flags, unsigned int timeout);
++#endif /* IPA_389DS_PLUGIN_HELPER_CALLS */
+ #endif /* SSS_NSS_IDMAP_H_ */
+diff --git a/src/sss_client/idmap/sss_nss_idmap_private.h b/src/sss_client/idmap/sss_nss_idmap_private.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..afcd8e355981b9a2dc29a62bab143756b39ed654
+--- /dev/null
++++ b/src/sss_client/idmap/sss_nss_idmap_private.h
+@@ -0,0 +1,30 @@
++/*
++    SSSD
++
++    NSS Responder ID-mapping interface - private calls
++
++    Authors:
++        Sumit Bose <sbose@redhat.com>
++
++    Copyright (C) 2017 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef SSS_NSS_IDMAP_PRIVATE_H_
++#define SSS_NSS_IDMAP_PRIVATE_H_
++
++int sss_nss_timedlock(unsigned int timeout_ms, int *time_left_ms);
++
++#endif /* SSS_NSS_IDMAP_PRIVATE_H_ */
+-- 
+2.14.3
+

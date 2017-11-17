@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.16.0
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -39,6 +39,17 @@ BuildRoot: %(mktemp -ud %{_tmppath}/%{name}-%{version}-%{release}-XXXXXX)
 
 ### Patches ###
 Patch0001: 0001-KCM-Fix-restart-during-after-upgrade.patch
+Patch0002: 0002-sss_client-create-nss_common.h.patch
+Patch0003: 0003-nss-idmap-add-nss-like-calls-with-timeout-and-flags.patch
+Patch0004: 0004-NSS-add-_EX-version-of-some-requests.patch
+Patch0005: 0005-NSS-add-support-for-SSS_NSS_EX_FLAG_NO_CACHE.patch
+Patch0006: 0006-CACHE_REQ-Add-cache_req_data_set_bypass_dp.patch
+Patch0007: 0007-nss-make-memcache_delete_entry-public.patch
+Patch0008: 0008-NSS-add-support-for-SSS_NSS_EX_FLAG_INVALIDATE_CACHE.patch
+Patch0009: 0009-NSS-TESTS-add-unit-tests-for-_EX-requests.patch
+Patch0010: 0010-nss-idmap-add-timeout-version-of-old-sss_nss_-calls.patch
+Patch0011: 0011-nss-idmap-allow-empty-buffer-with-SSS_NSS_EX_FLAG_IN.patch
+
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
 Patch0600: 0600-tests-cmocka-Fix-unit-tests-with-libldb-1.3.0.patch
@@ -1251,6 +1262,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Nov 17 2017 Jakub Hrozek <jhrozek@redhat.com> - 1.16.0-3
+- Backport extended NSS API from upstream master branch
+
 * Fri Nov 03 2017 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-2
 - Resolves: upstream#3529 - sssd-kcm Fix restart during/after upgrade
 

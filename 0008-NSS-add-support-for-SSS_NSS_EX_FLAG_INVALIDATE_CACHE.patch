@@ -1,0 +1,364 @@
+From 55f7d8034d783c01789d76a2b9ffc901045e8af8 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 24 Oct 2017 14:10:53 +0200
+Subject: [PATCH 08/11] NSS: add support for SSS_NSS_EX_FLAG_INVALIDATE_CACHE
+
+The patch adds support for the SSS_NSS_EX_FLAG_INVALIDATE_CACHE flag and
+makes the existing code more flexible and handle additional flags.
+
+If SSS_NSS_EX_FLAG_INVALIDATE_CACHE is set the requested object is only
+looked up in the cache and if it was found on-disk and memory cache
+entries will be invalidated.
+
+Related to https://pagure.io/SSSD/sssd/issue/2478
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/nss/nss_cmd.c            | 141 +++++++++++++++++++++++++++++++--
+ src/responder/nss/nss_protocol.c       |   1 +
+ src/responder/nss/nss_protocol.h       |   1 +
+ src/responder/nss/nss_protocol_grent.c |   9 ++-
+ src/responder/nss/nss_protocol_pwent.c |   6 +-
+ src/sss_client/idmap/sss_nss_ex.c      |  20 ++++-
+ src/sss_client/idmap/sss_nss_idmap.h   |   8 +-
+ 7 files changed, 171 insertions(+), 15 deletions(-)
+
+diff --git a/src/responder/nss/nss_cmd.c b/src/responder/nss/nss_cmd.c
+index c5ddd2f2cc2122cd169ea991b94a14eb5bad095f..545257a0be7e91e9de767a57848bb77c5791db4e 100644
+--- a/src/responder/nss/nss_cmd.c
++++ b/src/responder/nss/nss_cmd.c
+@@ -50,6 +50,26 @@ nss_cmd_ctx_create(TALLOC_CTX *mem_ctx,
+     return cmd_ctx;
+ }
+ 
++static errno_t eval_flags(struct nss_cmd_ctx *cmd_ctx,
++                          struct cache_req_data *data)
++{
++    if ((cmd_ctx->flags & SSS_NSS_EX_FLAG_NO_CACHE) != 0
++            && (cmd_ctx->flags & SSS_NSS_EX_FLAG_INVALIDATE_CACHE) != 0) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Flags SSS_NSS_EX_FLAG_NO_CACHE and "
++                                   "SSS_NSS_EX_FLAG_INVALIDATE_CACHE are "
++                                   "mutually exclusive.\n");
++        return EINVAL;
++    }
++
++    if ((cmd_ctx->flags & SSS_NSS_EX_FLAG_NO_CACHE) != 0) {
++        cache_req_data_set_bypass_cache(data, true);
++    } else if ((cmd_ctx->flags & SSS_NSS_EX_FLAG_INVALIDATE_CACHE) != 0) {
++        cache_req_data_set_bypass_dp(data, true);
++    }
++
++    return EOK;
++}
++
+ static void nss_getby_done(struct tevent_req *subreq);
+ static void nss_getlistby_done(struct tevent_req *subreq);
+ 
+@@ -65,7 +85,6 @@ static errno_t nss_getby_name(struct cli_ctx *cli_ctx,
+     struct tevent_req *subreq;
+     const char *rawname;
+     errno_t ret;
+-    uint32_t flags = 0;
+ 
+     cmd_ctx = nss_cmd_ctx_create(cli_ctx, cli_ctx, type, fill_fn);
+     if (cmd_ctx == NULL) {
+@@ -73,8 +92,9 @@ static errno_t nss_getby_name(struct cli_ctx *cli_ctx,
+         goto done;
+     }
+ 
++    cmd_ctx->flags = 0;
+     if (ex_version) {
+-        ret = nss_protocol_parse_name_ex(cli_ctx, &rawname, &flags);
++        ret = nss_protocol_parse_name_ex(cli_ctx, &rawname, &cmd_ctx->flags);
+     } else {
+         ret = nss_protocol_parse_name(cli_ctx, &rawname);
+     }
+@@ -92,8 +112,10 @@ static errno_t nss_getby_name(struct cli_ctx *cli_ctx,
+         goto done;
+     }
+ 
+-    if ((flags & SSS_NSS_EX_FLAG_NO_CACHE) != 0) {
+-        cache_req_data_set_bypass_cache(data, true);
++    ret = eval_flags(cmd_ctx, data);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "eval_flags failed.\n");
++        goto done;
+     }
+ 
+     subreq = nss_get_object_send(cmd_ctx, cli_ctx->ev, cli_ctx,
+@@ -129,7 +151,6 @@ static errno_t nss_getby_id(struct cli_ctx *cli_ctx,
+     struct tevent_req *subreq;
+     uint32_t id;
+     errno_t ret;
+-    uint32_t flags = 0;
+ 
+     cmd_ctx = nss_cmd_ctx_create(cli_ctx, cli_ctx, type, fill_fn);
+     if (cmd_ctx == NULL) {
+@@ -138,7 +159,7 @@ static errno_t nss_getby_id(struct cli_ctx *cli_ctx,
+     }
+ 
+     if (ex_version) {
+-        ret = nss_protocol_parse_id_ex(cli_ctx, &id, &flags);
++        ret = nss_protocol_parse_id_ex(cli_ctx, &id, &cmd_ctx->flags);
+     } else {
+         ret = nss_protocol_parse_id(cli_ctx, &id);
+     }
+@@ -156,8 +177,10 @@ static errno_t nss_getby_id(struct cli_ctx *cli_ctx,
+         goto done;
+     }
+ 
+-    if ((flags & SSS_NSS_EX_FLAG_NO_CACHE) != 0) {
+-        cache_req_data_set_bypass_cache(data, true);
++    ret = eval_flags(cmd_ctx, data);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "eval_flags failed.\n");
++        goto done;
+     }
+ 
+     subreq = nss_get_object_send(cmd_ctx, cli_ctx->ev, cli_ctx,
+@@ -425,6 +448,98 @@ done:
+     return EOK;
+ }
+ 
++static errno_t invalidate_cache(struct nss_cmd_ctx *cmd_ctx,
++                                struct cache_req_result *result)
++{
++    int ret;
++    enum sss_mc_type memcache_type;
++    const char *name;
++    char *output_name = NULL;
++    bool is_user;
++    struct sysdb_attrs *attrs = NULL;
++
++    switch (cmd_ctx->type) {
++    case CACHE_REQ_INITGROUPS:
++    case CACHE_REQ_INITGROUPS_BY_UPN:
++        memcache_type = SSS_MC_INITGROUPS;
++        is_user = true;
++        break;
++    case CACHE_REQ_USER_BY_NAME:
++    case CACHE_REQ_USER_BY_ID:
++        memcache_type = SSS_MC_PASSWD;
++        is_user = true;
++        break;
++    case CACHE_REQ_GROUP_BY_NAME:
++    case CACHE_REQ_GROUP_BY_ID:
++        memcache_type = SSS_MC_GROUP;
++        is_user = false;
++        break;
++    default:
++        /* nothing to do */
++        return EOK;
++    }
++
++    /* Find output name to invalidate memory cache entry*/
++    name = sss_get_name_from_msg(result->domain, result->msgs[0]);
++    if (name == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Found object has no name.\n");
++        return EINVAL;
++    }
++    ret = sss_output_fqname(cmd_ctx, result->domain, name,
++                            cmd_ctx->nss_ctx->rctx->override_space,
++                            &output_name);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "sss_output_fqname failed.\n");
++        return ret;
++    }
++
++    memcache_delete_entry(cmd_ctx->nss_ctx, cmd_ctx->nss_ctx->rctx, NULL,
++                          output_name, 0, memcache_type);
++    if (memcache_type == SSS_MC_INITGROUPS) {
++        /* Invalidate the passwd data as well */
++        memcache_delete_entry(cmd_ctx->nss_ctx, cmd_ctx->nss_ctx->rctx,
++                              result->domain, output_name, 0, SSS_MC_PASSWD);
++    }
++    talloc_free(output_name);
++
++    /* Use sysdb name to invalidate disk cache entry */
++    name = ldb_msg_find_attr_as_string(result->msgs[0], SYSDB_NAME, NULL);
++    if (name == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Found object has no name.\n");
++        return EINVAL;
++    }
++
++    if (memcache_type == SSS_MC_INITGROUPS) {
++        attrs = sysdb_new_attrs(cmd_ctx);
++        if (attrs == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, "sysdb_new_attrs failed.\n");
++            return ENOMEM;
++        }
++
++        ret = sysdb_attrs_add_time_t(attrs, SYSDB_INITGR_EXPIRE, 1);
++        if (ret != EOK) {
++            talloc_free(attrs);
++            DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_add_time_t failed.\n");
++            return ret;
++        }
++
++        ret = sysdb_set_user_attr(result->domain, name, attrs, SYSDB_MOD_REP);
++        talloc_free(attrs);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "sysdb_set_user_attr failed.\n");
++            return ret;
++        }
++    }
++
++    ret = sysdb_invalidate_cache_entry(result->domain, name, is_user);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "sysdb_invalidate_cache_entry failed.\n");
++        return ret;
++    }
++
++    return EOK;
++}
++
+ static void nss_getby_done(struct tevent_req *subreq)
+ {
+     struct cache_req_result *result;
+@@ -440,6 +555,16 @@ static void nss_getby_done(struct tevent_req *subreq)
+         goto done;
+     }
+ 
++    if ((cmd_ctx->flags & SSS_NSS_EX_FLAG_INVALIDATE_CACHE) != 0) {
++        ret = invalidate_cache(cmd_ctx, result);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "Failed to invalidate cache for [%s].\n",
++                                     cmd_ctx->rawname);
++            nss_protocol_done(cmd_ctx->cli_ctx, ret);
++            goto done;
++        }
++    }
++
+     nss_protocol_reply(cmd_ctx->cli_ctx, cmd_ctx->nss_ctx, cmd_ctx,
+                        result, cmd_ctx->fill_fn);
+ 
+diff --git a/src/responder/nss/nss_protocol.c b/src/responder/nss/nss_protocol.c
+index 17bfc4f4e71960a72e9e04622eac95b94a865ec7..2655386498754c46fbb363bdd1f976f9ded6a434 100644
+--- a/src/responder/nss/nss_protocol.c
++++ b/src/responder/nss/nss_protocol.c
+@@ -233,6 +233,7 @@ nss_protocol_parse_id_ex(struct cli_ctx *cli_ctx, uint32_t *_id,
+     SAFEALIGN_COPY_UINT32(&flags, body + sizeof(uint32_t), NULL);
+ 
+     *_id = id;
++    *_flags = flags;
+ 
+     return EOK;
+ }
+diff --git a/src/responder/nss/nss_protocol.h b/src/responder/nss/nss_protocol.h
+index ca5b040237dc18acdca9a7a3a7a7dbb64265aa95..76724d2b2db7b11c9147fa927e39abab731328b2 100644
+--- a/src/responder/nss/nss_protocol.h
++++ b/src/responder/nss/nss_protocol.h
+@@ -50,6 +50,7 @@ struct nss_cmd_ctx {
+     struct nss_ctx *nss_ctx;
+     struct nss_state_ctx *state_ctx;
+     nss_protocol_fill_packet_fn fill_fn;
++    uint32_t flags;
+ 
+     /* For initgroups- */
+     const char *rawname;
+diff --git a/src/responder/nss/nss_protocol_grent.c b/src/responder/nss/nss_protocol_grent.c
+index ee228c722a153a1ba7aa8a1b30a1e551108424bb..6f6ae57dd97b000ad3cf174b0f649d46981563e2 100644
+--- a/src/responder/nss/nss_protocol_grent.c
++++ b/src/responder/nss/nss_protocol_grent.c
+@@ -274,8 +274,10 @@ nss_protocol_fill_grent(struct nss_ctx *nss_ctx,
+ 
+         num_results++;
+ 
+-        /* Do not store entry in memory cache during enumeration. */
+-        if (!cmd_ctx->enumeration) {
++        /* Do not store entry in memory cache during enumeration or when
++         * requested. */
++        if (!cmd_ctx->enumeration
++                && (cmd_ctx->flags & SSS_NSS_EX_FLAG_INVALIDATE_CACHE) == 0) {
+             members = (char *)&body[rp_members];
+             members_size = body_len - rp_members;
+             ret = sss_mmap_cache_gr_store(&nss_ctx->grp_mc_ctx, name, &pwfield,
+@@ -390,7 +392,8 @@ nss_protocol_fill_initgr(struct nss_ctx *nss_ctx,
+         num_results++;
+     }
+ 
+-    if (nss_ctx->initgr_mc_ctx) {
++    if (nss_ctx->initgr_mc_ctx
++                && (cmd_ctx->flags & SSS_NSS_EX_FLAG_INVALIDATE_CACHE) == 0) {
+         to_sized_string(&rawname, cmd_ctx->rawname);
+         to_sized_string(&unique_name, result->lookup_name);
+ 
+diff --git a/src/responder/nss/nss_protocol_pwent.c b/src/responder/nss/nss_protocol_pwent.c
+index db5c071e2ff172a2267c08c9817fecfbcc7cabc3..f449ec69b6a86a6db2aaed368e217c1a791faaa2 100644
+--- a/src/responder/nss/nss_protocol_pwent.c
++++ b/src/responder/nss/nss_protocol_pwent.c
+@@ -295,8 +295,10 @@ nss_protocol_fill_pwent(struct nss_ctx *nss_ctx,
+ 
+         num_results++;
+ 
+-        /* Do not store entry in memory cache during enumeration. */
+-        if (!cmd_ctx->enumeration) {
++        /* Do not store entry in memory cache during enumeration or when
++         * requested. */
++        if (!cmd_ctx->enumeration
++                && (cmd_ctx->flags & SSS_NSS_EX_FLAG_INVALIDATE_CACHE) == 0) {
+             ret = sss_mmap_cache_pw_store(&nss_ctx->pwd_mc_ctx, name, &pwfield,
+                                           uid, gid, &gecos, &homedir, &shell);
+             if (ret != EOK) {
+diff --git a/src/sss_client/idmap/sss_nss_ex.c b/src/sss_client/idmap/sss_nss_ex.c
+index edb3ea652ef7032b76c8f815b9f83fe185a669ea..148eb7b35ec236b6272dd203a0035399cfdef73d 100644
+--- a/src/sss_client/idmap/sss_nss_ex.c
++++ b/src/sss_client/idmap/sss_nss_ex.c
+@@ -103,6 +103,18 @@ errno_t sss_nss_mc_get(struct nss_input *inp)
+     }
+ }
+ 
++static int check_flags(uint32_t flags)
++{
++    /* SSS_NSS_EX_FLAG_NO_CACHE and SSS_NSS_EX_FLAG_INVALIDATE_CACHE are
++     * mutually exclusive */
++    if ((flags & SSS_NSS_EX_FLAG_NO_CACHE) != 0
++            && (flags & SSS_NSS_EX_FLAG_INVALIDATE_CACHE) != 0) {
++        return EINVAL;
++    }
++
++    return 0;
++}
++
+ int sss_get_ex(struct nss_input *inp, uint32_t flags, unsigned int timeout)
+ {
+     uint8_t *repbuf = NULL;
+@@ -117,7 +129,13 @@ int sss_get_ex(struct nss_input *inp, uint32_t flags, unsigned int timeout)
+     size_t idx;
+     bool skip_mc = false;
+ 
+-    if ((flags & SSS_NSS_EX_FLAG_NO_CACHE) != 0) {
++    ret = check_flags(flags);
++    if (ret != 0) {
++        return ret;
++    }
++
++    if ((flags & SSS_NSS_EX_FLAG_NO_CACHE) != 0
++            || (flags & SSS_NSS_EX_FLAG_INVALIDATE_CACHE) != 0) {
+         skip_mc = true;
+     }
+ 
+diff --git a/src/sss_client/idmap/sss_nss_idmap.h b/src/sss_client/idmap/sss_nss_idmap.h
+index 1649830afbb80c617fd339f054aef8bc8e585fb9..3755643312f05a31d1cf1aa76dfc22848ef1e3ec 100644
+--- a/src/sss_client/idmap/sss_nss_idmap.h
++++ b/src/sss_client/idmap/sss_nss_idmap.h
+@@ -170,9 +170,15 @@ void sss_nss_free_kv(struct sss_nss_kv *kv_list);
+ #define SSS_NSS_EX_FLAG_NO_FLAGS 0
+ 
+ /** Always request data from the server side, client must be privileged to do
+- *  so, see nss_trusted_users option in man sssd.conf for details */
++ *  so, see nss_trusted_users option in man sssd.conf for details.
++ *  This flag cannot be used together with SSS_NSS_EX_FLAG_INVALIDATE_CACHE */
+ #define SSS_NSS_EX_FLAG_NO_CACHE (1 << 0)
+ 
++/** Invalidate the data in the caches, client must be privileged to do
++ *  so, see nss_trusted_users option in man sssd.conf for details.
++ *  This flag cannot be used together with SSS_NSS_EX_FLAG_NO_CACHE */
++#define SSS_NSS_EX_FLAG_INVALIDATE_CACHE (1 << 1)
++
+ #ifdef IPA_389DS_PLUGIN_HELPER_CALLS
+ 
+ /**
+-- 
+2.14.3
+
