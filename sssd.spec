@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 1.16.0
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -49,10 +49,12 @@ Patch0008: 0008-NSS-add-support-for-SSS_NSS_EX_FLAG_INVALIDATE_CACHE.patch
 Patch0009: 0009-NSS-TESTS-add-unit-tests-for-_EX-requests.patch
 Patch0010: 0010-nss-idmap-add-timeout-version-of-old-sss_nss_-calls.patch
 Patch0011: 0011-nss-idmap-allow-empty-buffer-with-SSS_NSS_EX_FLAG_IN.patch
+Patch0012: 0012-TESTS-Order-list-of-entries-in-some-lists.patch
+Patch0013: 0013-CACHE_REQ-Copy-the-cr_domain-list-for-each-request.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
-Patch0600: 0600-tests-cmocka-Fix-unit-tests-with-libldb-1.3.0.patch
+Patch0504: 0504-KCM-temporary-increase-hardcoded-buffers.patch
 
 ### Dependencies ###
 
@@ -1251,6 +1253,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Nov 21 2017 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-4
+- Resolves: rhbz#1494002 - sssd_nss crashed in cache_req_search_domains_next
+
 * Fri Nov 17 2017 Jakub Hrozek <jhrozek@redhat.com> - 1.16.0-3
 - Backport extended NSS API from upstream master branch
 

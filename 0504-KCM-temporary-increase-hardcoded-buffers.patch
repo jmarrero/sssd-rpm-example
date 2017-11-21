@@ -1,0 +1,41 @@
+From 3f2845f98ad28e57cf6a2a3ce33ff01d417c4a45 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@fedoraproject.org>
+Date: Tue, 21 Nov 2017 17:48:16 +0100
+Subject: [PATCH] KCM: temporary increase hardcoded buffers
+
+Temporary workaround:
+https://pagure.io/SSSD/sssd/issue/3386
+---
+ src/responder/kcm/kcmsrv_ops.c | 2 +-
+ src/util/tev_curl.c            | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ops.c b/src/responder/kcm/kcmsrv_ops.c
+index 7a78e9d6b36b4aa3d31ad467216244f733f4a57b..5af567c0d19d347e28cdeada22d15807fb8bc0d5 100644
+--- a/src/responder/kcm/kcmsrv_ops.c
++++ b/src/responder/kcm/kcmsrv_ops.c
+@@ -31,7 +31,7 @@
+ #include "responder/kcm/kcmsrv_ops.h"
+ #include "responder/kcm/kcmsrv_ccache.h"
+ 
+-#define KCM_REPLY_MAX 16384
++#define KCM_REPLY_MAX 131072
+ 
+ struct kcm_op_ctx {
+     struct kcm_resp_ctx *kcm_data;
+diff --git a/src/util/tev_curl.c b/src/util/tev_curl.c
+index 4c2f1ec9ff0127ccfd72010460ed75dad43e9ce3..a51003f4118d4dc0dcb697469b861d277cd1b917 100644
+--- a/src/util/tev_curl.c
++++ b/src/util/tev_curl.c
+@@ -35,7 +35,7 @@
+ #include "util/tev_curl.h"
+ 
+ #define TCURL_IOBUF_CHUNK   1024
+-#define TCURL_IOBUF_MAX    16384
++#define TCURL_IOBUF_MAX   131072
+ 
+ static bool global_is_curl_initialized;
+ 
+-- 
+2.15.0
+

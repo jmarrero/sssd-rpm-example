@@ -1,0 +1,141 @@
+From 0f44eefe2ce75a0814c8688495477f6c57f3d39a Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Fri, 20 Oct 2017 09:26:43 +0200
+Subject: [PATCH] CACHE_REQ: Copy the cr_domain list for each request
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Let's copy the cr_domain list for each request as this list may be
+free'd due to a refresh domains request.
+
+Resolves: https://pagure.io/SSSD/sssd/issue/3551
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/responder/common/cache_req/cache_req.c        | 14 +++++++--
+ src/responder/common/cache_req/cache_req_domain.c | 38 +++++++++++++++++++++++
+ src/responder/common/cache_req/cache_req_domain.h |  5 +++
+ 3 files changed, 55 insertions(+), 2 deletions(-)
+
+diff --git a/src/responder/common/cache_req/cache_req.c b/src/responder/common/cache_req/cache_req.c
+index abcb9cba351b06e833bacde26a504e5ee3445528..5fed7a2ab8beded2fee91f679a12f9a0ff6013ec 100644
+--- a/src/responder/common/cache_req/cache_req.c
++++ b/src/responder/common/cache_req/cache_req.c
+@@ -699,6 +699,7 @@ struct cache_req_state {
+     const char *domain_name;
+ 
+     /* work data */
++    struct cache_req_domain *cr_domains;
+     struct cache_req_result **results;
+     size_t num_results;
+     bool first_iteration;
+@@ -953,6 +954,7 @@ static errno_t cache_req_select_domains(struct tevent_req *req,
+     bool bypass_cache;
+     bool bypass_dp;
+     bool search;
++    errno_t ret;
+ 
+     state = tevent_req_data(req, struct cache_req_state);
+ 
+@@ -964,12 +966,20 @@ static errno_t cache_req_select_domains(struct tevent_req *req,
+         return EOK;
+     }
+ 
++    ret = cache_req_domain_copy_cr_domains(state,
++                                           state->cr->rctx->cr_domains,
++                                           &state->cr_domains);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "cache_req_copy_cr_domains() failed\n");
++        return EINVAL;
++    }
++
+     if (domain_name != NULL) {
+         CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr,
+                         "Performing a single domain search\n");
+ 
+         cr_domain = cache_req_domain_get_domain_by_name(
+-                                    state->cr->rctx->cr_domains, domain_name);
++                                    state->cr_domains, domain_name);
+         if (cr_domain == NULL) {
+             return ERR_DOMAIN_NOT_FOUND;
+         }
+@@ -978,7 +988,7 @@ static errno_t cache_req_select_domains(struct tevent_req *req,
+         CACHE_REQ_DEBUG(SSSDBG_TRACE_FUNC, state->cr,
+                         "Performing a multi-domain search\n");
+ 
+-        cr_domain = state->cr->rctx->cr_domains;
++        cr_domain = state->cr_domains;
+         check_next = true;
+     }
+ 
+diff --git a/src/responder/common/cache_req/cache_req_domain.c b/src/responder/common/cache_req/cache_req_domain.c
+index 7b58f7c94a77881429f870bc5162fb2fe0aa57c6..15893ba548f6d0e3979010d6d5bbf27441d5fa97 100644
+--- a/src/responder/common/cache_req/cache_req_domain.c
++++ b/src/responder/common/cache_req/cache_req_domain.c
+@@ -47,6 +47,44 @@ cache_req_domain_get_domain_by_name(struct cache_req_domain *domains,
+     return ret;
+ }
+ 
++errno_t
++cache_req_domain_copy_cr_domains(TALLOC_CTX *mem_ctx,
++                                 struct cache_req_domain *src,
++                                 struct cache_req_domain **_dest)
++{
++    struct cache_req_domain *cr_domains = NULL;
++    struct cache_req_domain *cr_domain;
++    struct cache_req_domain *iter;
++    errno_t ret;
++
++    if (src == NULL) {
++        return EINVAL;
++    }
++
++    DLIST_FOR_EACH(iter, src) {
++        cr_domain = talloc_zero(mem_ctx, struct cache_req_domain);
++        if (cr_domain == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
++
++        cr_domain->domain = iter->domain;
++        cr_domain->fqnames = iter->fqnames;
++
++        DLIST_ADD_END(cr_domains, cr_domain, struct cache_req_domain *);
++    }
++
++    *_dest = cr_domains;
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        cache_req_domain_list_zfree(&cr_domains);
++    }
++
++    return ret;
++}
++
+ void cache_req_domain_list_zfree(struct cache_req_domain **cr_domains)
+ {
+     struct cache_req_domain *p, *q, *r;
+diff --git a/src/responder/common/cache_req/cache_req_domain.h b/src/responder/common/cache_req/cache_req_domain.h
+index 3780a5d8d88d76e100738d28d1dd0e697edf5eae..ebdc71dd635d5d8a5d06e30e96c5d4101b6d98bf 100644
+--- a/src/responder/common/cache_req/cache_req_domain.h
++++ b/src/responder/common/cache_req/cache_req_domain.h
+@@ -50,6 +50,11 @@ cache_req_domain_new_list_from_domain_resolution_order(
+                                         const char *domain_resolution_order,
+                                         struct cache_req_domain **_cr_domains);
+ 
++errno_t
++cache_req_domain_copy_cr_domains(TALLOC_CTX *mem_ctx,
++                                 struct cache_req_domain *src,
++                                 struct cache_req_domain **_dest);
++
+ void cache_req_domain_list_zfree(struct cache_req_domain **cr_domains);
+ 
+ 
+-- 
+2.15.0
+
