@@ -122,9 +122,7 @@ BuildRequires: nss_wrapper
 BuildRequires: libnl3-devel
 BuildRequires: systemd-devel
 BuildRequires: cifs-utils-devel
-%if 0
 BuildRequires: libnfsidmap-devel
-%endif
 BuildRequires: samba4-devel
 BuildRequires: libsmbclient-devel
 BuildRequires: systemtap-sdt-devel
@@ -156,9 +154,7 @@ Requires: libldb >= %{ldb_version}
 Requires: sssd-client%{?_isa} = %{version}-%{release}
 Recommends: libsss_sudo = %{version}-%{release}
 Recommends: libsss_autofs%{?_isa} = %{version}-%{release}
-%if 0
 Recommends: sssd-nfs-idmap = %{version}-%{release}
-%endif
 Requires: libsss_idmap = %{version}-%{release}
 Requires(post): systemd-units chkconfig
 Requires(preun): systemd-units chkconfig
@@ -549,7 +545,6 @@ Conflicts: sssd-common < %{version}-%{release}
 The idmap_sss module provides a way for Winbind to call SSSD to map UIDs/GIDs
 and SIDs.
 
-%if 0
 %package nfs-idmap
 Summary: SSSD plug-in for NFSv4 rpc.idmapd
 Group:  Applications/System
@@ -560,7 +555,6 @@ Conflicts: sssd-common < %{version}-%{release}
 The libnfsidmap sssd module provides a way for rpc.idmapd to call SSSD to map
 UIDs/GIDs to names and vice versa. It can be also used for mapping principal
 (user) name to IDs(UID or GID) or to obtain groups which user are member of.
-%endif
 
 %package -n libsss_certmap
 Summary: SSSD Certficate Mapping Library
@@ -630,7 +624,6 @@ autoreconf -ivf
     --enable-nsslibdir=%{_libdir} \
     --enable-pammoddir=%{_libdir}/security \
     --enable-nfsidmaplibdir=%{_libdir}/libnfsidmap \
-    --without-nfsv4-idmapd-plugin \
     --disable-static \
     --disable-rpath \
     --with-initscript=systemd \
@@ -641,8 +634,6 @@ autoreconf -ivf
     %{?enable_systemtap_opt} \
 
 
-rm -fv ./src/man/uk/sss_rpcidmapd.5.xml
-rm -fv ./src/man/ca/sss_rpcidmapd.5.xml
 make %{?_smp_mflags} all docs
 
 %check
@@ -1114,11 +1105,9 @@ done
 %{_libdir}/samba/idmap/sss.so
 %{_mandir}/man8/idmap_sss.8*
 
-%if 0
 %files nfs-idmap -f sssd_nfs_idmap.lang
 %{_mandir}/man5/sss_rpcidmapd.5*
 %{_libdir}/libnfsidmap/sss.so
-%endif
 
 %files -n libsss_certmap -f libsss_certmap.lang
 %defattr(-,root,root,-)
