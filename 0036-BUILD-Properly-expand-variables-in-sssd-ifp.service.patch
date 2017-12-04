@@ -1,0 +1,50 @@
+From c514089df0e3c357bb8465bca297806b253569e9 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 7 Nov 2017 17:11:52 +0100
+Subject: [PATCH 36/79] BUILD: Properly expand variables in sssd-ifp.service
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+systemd[1]: [/usr/lib/systemd/system/sssd-ifp.service:9]
+    Path '-@environment_file@' is not absolute, ignoring.
+
+sh-4.2# systemctl cat sssd-ifp.service
+ # /usr/lib/systemd/system/sssd-ifp.service
+[Unit]
+Description=SSSD IFP Service responder
+Documentation=man:sssd-ifp(5)
+After=sssd.service
+BindsTo=sssd.service
+
+[Service]
+Environment=DEBUG_LOGGER=--logger=files
+EnvironmentFile=-@environment_file@
+Type=dbus
+BusName=org.freedesktop.sssd.infopipe
+ExecStart=/usr/libexec/sssd/sssd_ifp --uid 0 --gid 0 --dbus-activated ${DEBUG_LOGGER}
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3433
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ Makefile.am | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index 286ba47e3c421864362717be5258de960efca9f2..bbc90d9bad4d22ca0284ea95281a487d42399c05 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1491,7 +1491,7 @@ EXTRA_DIST += \
+     src/responder/ifp/org.freedesktop.sssd.infopipe.service.in \
+     $(NULL)
+ 
+-ifp_edit_cmd = $(SED) \
++ifp_edit_cmd = $(edit_cmd) \
+         -e 's|@ifp_exec_cmd[@]|$(ifp_exec_cmd)|g' \
+         -e 's|@ifp_systemdservice[@]|$(ifp_systemdservice)|g' \
+         -e 's|@ifp_restart[@]|$(ifp_restart)|g'
+-- 
+2.15.1
+

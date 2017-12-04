@@ -1,0 +1,191 @@
+From 78643d6c3b10c370cbefe0194a6b40f31aebe29b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 2 Nov 2017 14:58:38 +0100
+Subject: [PATCH 58/79] dp: add method to refresh access control rules
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Related:
+https://pagure.io/SSSD/sssd/issue/2840
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/data_provider/dp.h                 |  2 ++
+ src/providers/data_provider/dp_iface.c           |  6 ++++++
+ src/providers/data_provider/dp_iface.h           |  4 ++++
+ src/providers/data_provider/dp_iface.xml         |  6 ++++++
+ src/providers/data_provider/dp_iface_generated.c | 27 ++++++++++++++++++++++++
+ src/providers/data_provider/dp_iface_generated.h | 16 ++++++++++++++
+ src/providers/data_provider/dp_target_auth.c     | 14 ++++++++++++
+ 7 files changed, 75 insertions(+)
+
+diff --git a/src/providers/data_provider/dp.h b/src/providers/data_provider/dp.h
+index 9cdbe5b3a56ba159f9a10df6e010e616e4aefcac..aa5b781158c54545b26034602bb25db46b189e87 100644
+--- a/src/providers/data_provider/dp.h
++++ b/src/providers/data_provider/dp.h
+@@ -83,6 +83,8 @@ enum dp_methods {
+     DPM_DOMAINS_HANDLER,
+     DPM_SESSION_HANDLER,
+ 
++    DPM_REFRESH_ACCESS_RULES,
++
+     DP_METHOD_SENTINEL
+ };
+ 
+diff --git a/src/providers/data_provider/dp_iface.c b/src/providers/data_provider/dp_iface.c
+index 4b2b0ddca68be8899f7285b4d881a91444b99362..28d70e686f63a3572ac595f493aa1d59436c563f 100644
+--- a/src/providers/data_provider/dp_iface.c
++++ b/src/providers/data_provider/dp_iface.c
+@@ -48,10 +48,16 @@ struct iface_dp_failover iface_dp_failover = {
+     .ListServers = dp_failover_list_servers
+ };
+ 
++struct iface_dp_access_control iface_dp_access_control = {
++    { &iface_dp_access_control_meta, 0 },
++    .RefreshRules = dp_access_control_refresh_rules_handler
++};
++
+ static struct sbus_iface_map dp_map[] = {
+     { DP_PATH, &iface_dp.vtable },
+     { DP_PATH, &iface_dp_backend.vtable },
+     { DP_PATH, &iface_dp_failover.vtable },
++    { DP_PATH, &iface_dp_access_control.vtable },
+     { NULL, NULL }
+ };
+ 
+diff --git a/src/providers/data_provider/dp_iface.h b/src/providers/data_provider/dp_iface.h
+index 8ae7a2ad7a61f82b000493f3309926cd932211f6..759b9e6c9eb7f53836ae0b641b34e6c31e65779f 100644
+--- a/src/providers/data_provider/dp_iface.h
++++ b/src/providers/data_provider/dp_iface.h
+@@ -76,4 +76,8 @@ errno_t dp_failover_list_servers(struct sbus_request *sbus_req,
+                                  void *dp_cli,
+                                  const char *service_name);
+ 
++/* org.freedesktop.sssd.DataProvider.AccessControl */
++errno_t dp_access_control_refresh_rules_handler(struct sbus_request *sbus_req,
++                                                void *dp_cli);
++
+ #endif /* DP_IFACE_H_ */
+diff --git a/src/providers/data_provider/dp_iface.xml b/src/providers/data_provider/dp_iface.xml
+index a3969873ad1660c71ebdcae7a951757f5254c865..2bfa9dfa7e9d02d2d12c3358967f6969438a97a2 100644
+--- a/src/providers/data_provider/dp_iface.xml
++++ b/src/providers/data_provider/dp_iface.xml
+@@ -32,6 +32,12 @@
+         </method>
+     </interface>
+ 
++    <interface name="org.freedesktop.sssd.DataProvider.AccessControl">
++        <annotation value="iface_dp_access_control" name="org.freedesktop.DBus.GLib.CSymbol"/>
++        <method name="RefreshRules">
++        </method>
++    </interface>
++
+     <interface name="org.freedesktop.sssd.dataprovider">
+         <annotation value="iface_dp" name="org.freedesktop.DBus.GLib.CSymbol"/>
+         <method name="pamHandler">
+diff --git a/src/providers/data_provider/dp_iface_generated.c b/src/providers/data_provider/dp_iface_generated.c
+index e2e0216bd98c498b2b34c524ba615b70564420a2..11ee2e24a69cc8d4d19fdbeed613e76081aef15d 100644
+--- a/src/providers/data_provider/dp_iface_generated.c
++++ b/src/providers/data_provider/dp_iface_generated.c
+@@ -187,6 +187,33 @@ const struct sbus_interface_meta iface_dp_failover_meta = {
+     sbus_invoke_get_all, /* GetAll invoker */
+ };
+ 
++int iface_dp_access_control_RefreshRules_finish(struct sbus_request *req)
++{
++   return sbus_request_return_and_finish(req,
++                                         DBUS_TYPE_INVALID);
++}
++
++/* methods for org.freedesktop.sssd.DataProvider.AccessControl */
++const struct sbus_method_meta iface_dp_access_control__methods[] = {
++    {
++        "RefreshRules", /* name */
++        NULL, /* no in_args */
++        NULL, /* no out_args */
++        offsetof(struct iface_dp_access_control, RefreshRules),
++        NULL, /* no invoker */
++    },
++    { NULL, }
++};
++
++/* interface info for org.freedesktop.sssd.DataProvider.AccessControl */
++const struct sbus_interface_meta iface_dp_access_control_meta = {
++    "org.freedesktop.sssd.DataProvider.AccessControl", /* name */
++    iface_dp_access_control__methods,
++    NULL, /* no signals */
++    NULL, /* no properties */
++    sbus_invoke_get_all, /* GetAll invoker */
++};
++
+ /* arguments for org.freedesktop.sssd.dataprovider.autofsHandler */
+ const struct sbus_arg_meta iface_dp_autofsHandler__in[] = {
+     { "dp_flags", "u" },
+diff --git a/src/providers/data_provider/dp_iface_generated.h b/src/providers/data_provider/dp_iface_generated.h
+index b7f63fb438d7b3024a0f66de0a5d15cc3d426f44..541a90b0b5a5bc0a346cbd04974d33c8bb0983c5 100644
+--- a/src/providers/data_provider/dp_iface_generated.h
++++ b/src/providers/data_provider/dp_iface_generated.h
+@@ -26,6 +26,10 @@
+ #define IFACE_DP_FAILOVER_ACTIVESERVER "ActiveServer"
+ #define IFACE_DP_FAILOVER_LISTSERVERS "ListServers"
+ 
++/* constants for org.freedesktop.sssd.DataProvider.AccessControl */
++#define IFACE_DP_ACCESS_CONTROL "org.freedesktop.sssd.DataProvider.AccessControl"
++#define IFACE_DP_ACCESS_CONTROL_REFRESHRULES "RefreshRules"
++
+ /* constants for org.freedesktop.sssd.dataprovider */
+ #define IFACE_DP "org.freedesktop.sssd.dataprovider"
+ #define IFACE_DP_PAMHANDLER "pamHandler"
+@@ -88,6 +92,15 @@ int iface_dp_failover_ActiveServer_finish(struct sbus_request *req, const char *
+ /* finish function for ListServers */
+ int iface_dp_failover_ListServers_finish(struct sbus_request *req, const char *arg_servers[], int len_servers);
+ 
++/* vtable for org.freedesktop.sssd.DataProvider.AccessControl */
++struct iface_dp_access_control {
++    struct sbus_vtable vtable; /* derive from sbus_vtable */
++    int (*RefreshRules)(struct sbus_request *req, void *data);
++};
++
++/* finish function for RefreshRules */
++int iface_dp_access_control_RefreshRules_finish(struct sbus_request *req);
++
+ /* vtable for org.freedesktop.sssd.dataprovider */
+ struct iface_dp {
+     struct sbus_vtable vtable; /* derive from sbus_vtable */
+@@ -130,6 +143,9 @@ extern const struct sbus_interface_meta iface_dp_backend_meta;
+ /* interface info for org.freedesktop.sssd.DataProvider.Failover */
+ extern const struct sbus_interface_meta iface_dp_failover_meta;
+ 
++/* interface info for org.freedesktop.sssd.DataProvider.AccessControl */
++extern const struct sbus_interface_meta iface_dp_access_control_meta;
++
+ /* interface info for org.freedesktop.sssd.dataprovider */
+ extern const struct sbus_interface_meta iface_dp_meta;
+ 
+diff --git a/src/providers/data_provider/dp_target_auth.c b/src/providers/data_provider/dp_target_auth.c
+index 6bb3313b2de002466e5ca84464c962acd2412bfa..4b47975569a04a4d79aef4c16fcacf92c295de25 100644
+--- a/src/providers/data_provider/dp_target_auth.c
++++ b/src/providers/data_provider/dp_target_auth.c
+@@ -306,3 +306,17 @@ void dp_pam_handler_selinux_done(struct tevent_req *req)
+     dp_pam_reply(state->sbus_req, state->request_name, pd);
+     return;
+ }
++
++errno_t dp_access_control_refresh_rules_handler(struct sbus_request *sbus_req,
++                                                void *dp_cli)
++{
++    const char *key;
++
++    key = "RefreshRules";
++
++    dp_req_with_reply(dp_cli, NULL, "Refresh Access Control Rules", key,
++                      sbus_req, DPT_ACCESS, DPM_REFRESH_ACCESS_RULES, 0, NULL,
++                      dp_req_reply_default, void *);
++
++    return EOK;
++}
+-- 
+2.15.1
+

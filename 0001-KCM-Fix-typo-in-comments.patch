@@ -1,0 +1,38 @@
+From fd7226ff51eb9af70d0fcb63727cd1a48ab0534b Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 23 Oct 2017 07:35:52 +0200
+Subject: [PATCH 01/79] KCM: Fix typo in comments
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/responder/kcm/kcmsrv_ccache_json.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ccache_json.c b/src/responder/kcm/kcmsrv_ccache_json.c
+index 8199bc613e4204859438e1cd820f3f4b2123dd7e..f1cca9880d128d05ad1edfc5c3b2f709d1a67d48 100644
+--- a/src/responder/kcm/kcmsrv_ccache_json.c
++++ b/src/responder/kcm/kcmsrv_ccache_json.c
+@@ -265,7 +265,7 @@ static json_t *princ_data_to_json(TALLOC_CTX *mem_ctx,
+  *      {
+  *          "type": "number",
+  *          "realm": "string",
+- *          "componenents": [ "elem1", "elem2", ...]
++ *          "components": [ "elem1", "elem2", ...]
+  *      }
+  */
+ static json_t *princ_to_json(TALLOC_CTX *mem_ctx,
+@@ -400,7 +400,7 @@ static json_t *creds_to_json_array(struct kcm_cred *creds)
+  *      principal : {
+  *          "type": "number",
+  *          "realm": "string",
+- *          "componenents": [ "elem1", "elem2", ...]
++ *          "components": [ "elem1", "elem2", ...]
+  *      }
+  *      creds : [
+  *                  {
+-- 
+2.15.1
+

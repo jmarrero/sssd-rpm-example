@@ -1,0 +1,160 @@
+From 48f58549e2b687ba405162bd5db23f1c323732f7 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 1 Nov 2017 14:57:17 +0100
+Subject: [PATCH 16/79] AD: Remember last site discovered in sysdb
+
+This can speed up sssd startup.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3265
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/db/sysdb_subdomains.c                 |  2 +-
+ src/providers/ad/ad_init.c                |  2 +-
+ src/providers/ad/ad_srv.c                 | 21 +++++++++++++++++++++
+ src/providers/ad/ad_srv.h                 |  1 +
+ src/providers/ad/ad_subdomains.c          |  2 +-
+ src/providers/ipa/ipa_subdomains_server.c |  2 +-
+ 6 files changed, 26 insertions(+), 4 deletions(-)
+
+diff --git a/src/db/sysdb_subdomains.c b/src/db/sysdb_subdomains.c
+index cb5de1afe3e8c9692789c5d2679eb3a4e6e1cdb2..353561765904efe4bd698c38949a1b290ecf0b80 100644
+--- a/src/db/sysdb_subdomains.c
++++ b/src/db/sysdb_subdomains.c
+@@ -1291,7 +1291,7 @@ sysdb_get_site(TALLOC_CTX *mem_ctx,
+                const char **_site)
+ {
+     TALLOC_CTX *tmp_ctx;
+-    struct ldb_res *res;
++    struct ldb_result *res;
+     struct ldb_dn *dn;
+     const char *attrs[] = { SYSDB_SITE, NULL };
+     errno_t ret;
+diff --git a/src/providers/ad/ad_init.c b/src/providers/ad/ad_init.c
+index 131e960d4c623398506f834742400df9c786b86b..e62025d4acd24844a5c7082d00c597516f35de16 100644
+--- a/src/providers/ad/ad_init.c
++++ b/src/providers/ad/ad_init.c
+@@ -199,7 +199,7 @@ static errno_t ad_init_srv_plugin(struct be_ctx *be_ctx,
+         return EOK;
+     }
+ 
+-    srv_ctx = ad_srv_plugin_ctx_init(be_ctx, be_ctx->be_res,
++    srv_ctx = ad_srv_plugin_ctx_init(be_ctx, be_ctx, be_ctx->be_res,
+                                      default_host_dbs, ad_options->id,
+                                      hostname, ad_domain,
+                                      ad_site_override);
+diff --git a/src/providers/ad/ad_srv.c b/src/providers/ad/ad_srv.c
+index be1ba0f237add894566ae713ce5e29fd202d414c..4fa1668605e131b2e31802b1401f49fc6e00a23b 100644
+--- a/src/providers/ad/ad_srv.c
++++ b/src/providers/ad/ad_srv.c
+@@ -34,6 +34,7 @@
+ #include "providers/fail_over_srv.h"
+ #include "providers/ldap/sdap.h"
+ #include "providers/ldap/sdap_async.h"
++#include "db/sysdb.h"
+ 
+ #define AD_SITE_DOMAIN_FMT "%s._sites.%s"
+ 
+@@ -475,6 +476,7 @@ int ad_get_client_site_recv(TALLOC_CTX *mem_ctx,
+ }
+ 
+ struct ad_srv_plugin_ctx {
++    struct be_ctx *be_ctx;
+     struct be_resolv_ctx *be_res;
+     enum host_database *host_dbs;
+     struct sdap_options *opts;
+@@ -486,6 +488,7 @@ struct ad_srv_plugin_ctx {
+ 
+ struct ad_srv_plugin_ctx *
+ ad_srv_plugin_ctx_init(TALLOC_CTX *mem_ctx,
++                       struct be_ctx *be_ctx,
+                        struct be_resolv_ctx *be_res,
+                        enum host_database *host_dbs,
+                        struct sdap_options *opts,
+@@ -494,12 +497,14 @@ ad_srv_plugin_ctx_init(TALLOC_CTX *mem_ctx,
+                        const char *ad_site_override)
+ {
+     struct ad_srv_plugin_ctx *ctx = NULL;
++    errno_t ret;
+ 
+     ctx = talloc_zero(mem_ctx, struct ad_srv_plugin_ctx);
+     if (ctx == NULL) {
+         return NULL;
+     }
+ 
++    ctx->be_ctx = be_ctx;
+     ctx->be_res = be_res;
+     ctx->host_dbs = host_dbs;
+     ctx->opts = opts;
+@@ -524,6 +529,15 @@ ad_srv_plugin_ctx_init(TALLOC_CTX *mem_ctx,
+         if (ctx->current_site == NULL) {
+             goto fail;
+         }
++    } else {
++        ret = sysdb_get_site(ctx, be_ctx->domain, &ctx->current_site);
++        if (ret != EOK) {
++            /* Not fatal. */
++            DEBUG(SSSDBG_MINOR_FAILURE,
++                  "Unable to get current site from cache [%d]: %s\n",
++                  ret, sss_strerror(ret));
++            ctx->current_site = NULL;
++        }
+     }
+ 
+     return ctx;
+@@ -556,6 +570,13 @@ ad_srv_plugin_ctx_switch_site(struct ad_srv_plugin_ctx *ctx,
+     talloc_zfree(ctx->current_site);
+     ctx->current_site = site;
+ 
++    ret = sysdb_set_site(ctx->be_ctx->domain, ctx->current_site);
++    if (ret != EOK) {
++        /* Not fatal. */
++        DEBUG(SSSDBG_MINOR_FAILURE, "Unable to store site information "
++              "[%d]: %s\n", ret, sss_strerror(ret));
++    }
++
+     return EOK;
+ }
+ 
+diff --git a/src/providers/ad/ad_srv.h b/src/providers/ad/ad_srv.h
+index ae5efe44755fa09f74064014cce749e35b1831da..fddef686762e57bb95d648247131d39a797aa516 100644
+--- a/src/providers/ad/ad_srv.h
++++ b/src/providers/ad/ad_srv.h
+@@ -25,6 +25,7 @@ struct ad_srv_plugin_ctx;
+ 
+ struct ad_srv_plugin_ctx *
+ ad_srv_plugin_ctx_init(TALLOC_CTX *mem_ctx,
++                       struct be_ctx *be_ctx,
+                        struct be_resolv_ctx *be_res,
+                        enum host_database *host_dbs,
+                        struct sdap_options *opts,
+diff --git a/src/providers/ad/ad_subdomains.c b/src/providers/ad/ad_subdomains.c
+index 280aa54c23bf61e60d23ea91bd44a39f9f43d155..3fb9b950f171d85817cce35ac92ad7c4974ccb68 100644
+--- a/src/providers/ad/ad_subdomains.c
++++ b/src/providers/ad/ad_subdomains.c
+@@ -245,7 +245,7 @@ ad_subdom_ad_ctx_new(struct be_ctx *be_ctx,
+     ad_options->id_ctx = ad_id_ctx;
+ 
+     /* use AD plugin */
+-    srv_ctx = ad_srv_plugin_ctx_init(be_ctx, be_ctx->be_res,
++    srv_ctx = ad_srv_plugin_ctx_init(be_ctx, be_ctx, be_ctx->be_res,
+                                      default_host_dbs,
+                                      ad_id_ctx->ad_options->id,
+                                      hostname,
+diff --git a/src/providers/ipa/ipa_subdomains_server.c b/src/providers/ipa/ipa_subdomains_server.c
+index 10166d162f746fde176e6c7c2bfbe3906b1bfddc..d670a156b37608d20d49d79131138f02e4abf82b 100644
+--- a/src/providers/ipa/ipa_subdomains_server.c
++++ b/src/providers/ipa/ipa_subdomains_server.c
+@@ -305,7 +305,7 @@ ipa_ad_ctx_new(struct be_ctx *be_ctx,
+     ad_site_override = dp_opt_get_string(ad_options->basic, AD_SITE);
+ 
+     /* use AD plugin */
+-    srv_ctx = ad_srv_plugin_ctx_init(be_ctx, be_ctx->be_res,
++    srv_ctx = ad_srv_plugin_ctx_init(be_ctx, be_ctx, be_ctx->be_res,
+                                      default_host_dbs,
+                                      ad_id_ctx->ad_options->id,
+                                      id_ctx->server_mode->hostname,
+-- 
+2.15.1
+

@@ -1,0 +1,157 @@
+From 77ff1aa3fdb0231f649d5bb3e583bf8244ad23ba Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 2 Nov 2017 14:59:57 +0100
+Subject: [PATCH 60/79] ifp: add method to refresh access control rules in
+ domain
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Related:
+https://pagure.io/SSSD/sssd/issue/2840
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/ifp/ifp_domains.c         | 22 ++++++++++++++++++++++
+ src/responder/ifp/ifp_domains.h         |  3 +++
+ src/responder/ifp/ifp_iface.c           |  3 ++-
+ src/responder/ifp/ifp_iface.xml         |  3 +++
+ src/responder/ifp/ifp_iface_generated.c | 13 +++++++++++++
+ src/responder/ifp/ifp_iface_generated.h |  5 +++++
+ 6 files changed, 48 insertions(+), 1 deletion(-)
+
+diff --git a/src/responder/ifp/ifp_domains.c b/src/responder/ifp/ifp_domains.c
+index 977bbfcbe818f08873ce072d34fdcf900cabf52f..cd7e2fc7aeff5467514269e5b078b0da88ab4f50 100644
+--- a/src/responder/ifp/ifp_domains.c
++++ b/src/responder/ifp/ifp_domains.c
+@@ -630,3 +630,25 @@ int ifp_domains_domain_list_servers(struct sbus_request *sbus_req,
+ 
+     return EOK;
+ }
++
++int ifp_domains_domain_refresh_access_rules(struct sbus_request *sbus_req,
++                                            void *data)
++{
++    struct ifp_ctx *ifp_ctx;
++    struct sss_domain_info *dom;
++
++    ifp_ctx = talloc_get_type(data, struct ifp_ctx);
++
++    dom = get_domain_info_from_req(sbus_req, data);
++    if (dom == NULL) {
++        sbus_request_reply_error(sbus_req, SBUS_ERROR_UNKNOWN_DOMAIN,
++                                 "Unknown domain");
++        return EOK;
++    }
++
++    rdp_message_send_and_reply(sbus_req, ifp_ctx->rctx, dom, DP_PATH,
++                               IFACE_DP_ACCESS_CONTROL,
++                               IFACE_DP_ACCESS_CONTROL_REFRESHRULES);
++
++    return EOK;
++}
+diff --git a/src/responder/ifp/ifp_domains.h b/src/responder/ifp/ifp_domains.h
+index 621ba6158e285911cb8298cef212219dfd3afec8..d8cc9d34c92cd04b6db432c1fc0e179a717001da 100644
+--- a/src/responder/ifp/ifp_domains.h
++++ b/src/responder/ifp/ifp_domains.h
+@@ -108,4 +108,7 @@ int ifp_domains_domain_list_servers(struct sbus_request *sbus_req,
+                                     void *data,
+                                     const char *service);
+ 
++int ifp_domains_domain_refresh_access_rules(struct sbus_request *sbus_req,
++                                            void *data);
++
+ #endif /* IFP_DOMAINS_H_ */
+diff --git a/src/responder/ifp/ifp_iface.c b/src/responder/ifp/ifp_iface.c
+index 3293b92d750d33b2ecf77a03098c5169d052c924..f995e28f99f9489ca17fbc51fa6894d458f9e21f 100644
+--- a/src/responder/ifp/ifp_iface.c
++++ b/src/responder/ifp/ifp_iface.c
+@@ -79,7 +79,8 @@ struct iface_ifp_domains_domain iface_ifp_domains_domain = {
+     .IsOnline = ifp_domains_domain_is_online,
+     .ListServices = ifp_domains_domain_list_services,
+     .ActiveServer = ifp_domains_domain_active_server,
+-    .ListServers = ifp_domains_domain_list_servers
++    .ListServers = ifp_domains_domain_list_servers,
++    .RefreshAccessRules = ifp_domains_domain_refresh_access_rules
+ };
+ 
+ struct iface_ifp_users iface_ifp_users = {
+diff --git a/src/responder/ifp/ifp_iface.xml b/src/responder/ifp/ifp_iface.xml
+index 39385e866f31131c7860001ae4d6e6b51105aa52..1aa7eac03f0a3dc86f1d25883ac37f2fabf6b9e8 100644
+--- a/src/responder/ifp/ifp_iface.xml
++++ b/src/responder/ifp/ifp_iface.xml
+@@ -112,6 +112,9 @@
+             <arg name="service_name" type="s" direction="in" />
+             <arg name="servers" type="as" direction="out" />
+         </method>
++
++        <method name="RefreshAccessRules">
++        </method>
+     </interface>
+ 
+     <interface name="org.freedesktop.sssd.infopipe.Cache">
+diff --git a/src/responder/ifp/ifp_iface_generated.c b/src/responder/ifp/ifp_iface_generated.c
+index 6943e38e3b6d2fc9e09ade1a863905c8d81a39ba..c2cdbf5b0ef3d59068aeed7a8f45099c14c4a94a 100644
+--- a/src/responder/ifp/ifp_iface_generated.c
++++ b/src/responder/ifp/ifp_iface_generated.c
+@@ -552,6 +552,12 @@ int iface_ifp_domains_domain_ListServers_finish(struct sbus_request *req, const
+                                          DBUS_TYPE_INVALID);
+ }
+ 
++int iface_ifp_domains_domain_RefreshAccessRules_finish(struct sbus_request *req)
++{
++   return sbus_request_return_and_finish(req,
++                                         DBUS_TYPE_INVALID);
++}
++
+ /* methods for org.freedesktop.sssd.infopipe.Domains.Domain */
+ const struct sbus_method_meta iface_ifp_domains_domain__methods[] = {
+     {
+@@ -582,6 +588,13 @@ const struct sbus_method_meta iface_ifp_domains_domain__methods[] = {
+         offsetof(struct iface_ifp_domains_domain, ListServers),
+         invoke_s_method,
+     },
++    {
++        "RefreshAccessRules", /* name */
++        NULL, /* no in_args */
++        NULL, /* no out_args */
++        offsetof(struct iface_ifp_domains_domain, RefreshAccessRules),
++        NULL, /* no invoker */
++    },
+     { NULL, }
+ };
+ 
+diff --git a/src/responder/ifp/ifp_iface_generated.h b/src/responder/ifp/ifp_iface_generated.h
+index 30752bf063de1f2530c7451f01cc22ad3e863185..f1e6c80bab27d0ed581abc566a178e6857794805 100644
+--- a/src/responder/ifp/ifp_iface_generated.h
++++ b/src/responder/ifp/ifp_iface_generated.h
+@@ -57,6 +57,7 @@
+ #define IFACE_IFP_DOMAINS_DOMAIN_LISTSERVICES "ListServices"
+ #define IFACE_IFP_DOMAINS_DOMAIN_ACTIVESERVER "ActiveServer"
+ #define IFACE_IFP_DOMAINS_DOMAIN_LISTSERVERS "ListServers"
++#define IFACE_IFP_DOMAINS_DOMAIN_REFRESHACCESSRULES "RefreshAccessRules"
+ 
+ /* constants for org.freedesktop.sssd.infopipe.Cache */
+ #define IFACE_IFP_CACHE "org.freedesktop.sssd.infopipe.Cache"
+@@ -209,6 +210,7 @@ struct iface_ifp_domains_domain {
+     int (*ListServices)(struct sbus_request *req, void *data);
+     int (*ActiveServer)(struct sbus_request *req, void *data, const char *arg_service);
+     int (*ListServers)(struct sbus_request *req, void *data, const char *arg_service_name);
++    int (*RefreshAccessRules)(struct sbus_request *req, void *data);
+ };
+ 
+ /* finish function for IsOnline */
+@@ -223,6 +225,9 @@ int iface_ifp_domains_domain_ActiveServer_finish(struct sbus_request *req, const
+ /* finish function for ListServers */
+ int iface_ifp_domains_domain_ListServers_finish(struct sbus_request *req, const char *arg_servers[], int len_servers);
+ 
++/* finish function for RefreshAccessRules */
++int iface_ifp_domains_domain_RefreshAccessRules_finish(struct sbus_request *req);
++
+ /* vtable for org.freedesktop.sssd.infopipe.Cache */
+ struct iface_ifp_cache {
+     struct sbus_vtable vtable; /* derive from sbus_vtable */
+-- 
+2.15.1
+

@@ -1,0 +1,139 @@
+From 0b9d469b90b38b864134100de2a999152fe85507 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 2 Nov 2017 14:59:19 +0100
+Subject: [PATCH 59/79] ipa: implement method to refresh HBAC rules
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Related:
+https://pagure.io/SSSD/sssd/issue/2840
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ipa/ipa_access.c | 68 ++++++++++++++++++++++++++++++++++++++++--
+ src/providers/ipa/ipa_access.h | 10 +++++++
+ src/providers/ipa/ipa_init.c   |  4 +++
+ 3 files changed, 80 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_access.c b/src/providers/ipa/ipa_access.c
+index 32ccf541c9436b633e7724b2c44ee545810a7fb8..de9f68170b6e9c38fd8b6d23f1d565250bbf78d2 100644
+--- a/src/providers/ipa/ipa_access.c
++++ b/src/providers/ipa/ipa_access.c
+@@ -682,8 +682,8 @@ done:
+ 
+ errno_t
+ ipa_pam_access_handler_recv(TALLOC_CTX *mem_ctx,
+-                             struct tevent_req *req,
+-                             struct pam_data **_data)
++                            struct tevent_req *req,
++                            struct pam_data **_data)
+ {
+     struct ipa_pam_access_handler_state *state = NULL;
+ 
+@@ -695,3 +695,67 @@ ipa_pam_access_handler_recv(TALLOC_CTX *mem_ctx,
+ 
+     return EOK;
+ }
++
++struct ipa_refresh_access_rules_state {
++    int dummy;
++};
++
++static void ipa_refresh_access_rules_done(struct tevent_req *subreq);
++
++struct tevent_req *
++ipa_refresh_access_rules_send(TALLOC_CTX *mem_ctx,
++                              struct ipa_access_ctx *access_ctx,
++                              void *no_input_data,
++                              struct dp_req_params *params)
++{
++    struct ipa_refresh_access_rules_state *state;
++    struct tevent_req *subreq;
++    struct tevent_req *req;
++
++    DEBUG(SSSDBG_TRACE_FUNC, "Refreshing HBAC rules\n");
++
++    req = tevent_req_create(mem_ctx, &state,
++                            struct ipa_refresh_access_rules_state);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to create tevent request!\n");
++        return NULL;
++    }
++
++    subreq = ipa_fetch_hbac_send(state, params->ev, params->be_ctx, access_ctx);
++    if (subreq == NULL) {
++        tevent_req_error(req, ENOMEM);
++        tevent_req_post(req, params->ev);
++        return req;
++    }
++
++    tevent_req_set_callback(subreq, ipa_refresh_access_rules_done, req);
++
++    return req;
++}
++
++static void ipa_refresh_access_rules_done(struct tevent_req *subreq)
++{
++    struct tevent_req *req;
++    errno_t ret;
++
++    req = tevent_req_callback_data(subreq, struct tevent_req);
++
++    ret = ipa_fetch_hbac_recv(subreq);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    tevent_req_done(req);
++    return;
++}
++
++errno_t ipa_refresh_access_rules_recv(TALLOC_CTX *mem_ctx,
++                                      struct tevent_req *req,
++                                      void **_no_output_data)
++{
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    return EOK;
++}
+diff --git a/src/providers/ipa/ipa_access.h b/src/providers/ipa/ipa_access.h
+index de690350218bd47165a2b48c10059b8de96b718a..9cec0d1063fd39380a77093526e3240523752075 100644
+--- a/src/providers/ipa/ipa_access.h
++++ b/src/providers/ipa/ipa_access.h
+@@ -63,4 +63,14 @@ ipa_pam_access_handler_recv(TALLOC_CTX *mem_ctx,
+                              struct tevent_req *req,
+                              struct pam_data **_data);
+ 
++struct tevent_req *
++ipa_refresh_access_rules_send(TALLOC_CTX *mem_ctx,
++                              struct ipa_access_ctx *access_ctx,
++                              void *no_input_data,
++                              struct dp_req_params *params);
++
++errno_t ipa_refresh_access_rules_recv(TALLOC_CTX *mem_ctx,
++                                      struct tevent_req *req,
++                                      void **_no_output_data);
++
+ #endif /* _IPA_ACCESS_H_ */
+diff --git a/src/providers/ipa/ipa_init.c b/src/providers/ipa/ipa_init.c
+index 5b7c8e1348f561901782c872078a0e7391d4ff75..f335d51fd65959d256c54a5d92c594a24e895b7c 100644
+--- a/src/providers/ipa/ipa_init.c
++++ b/src/providers/ipa/ipa_init.c
+@@ -831,6 +831,10 @@ errno_t sssm_ipa_access_init(TALLOC_CTX *mem_ctx,
+                   ipa_pam_access_handler_send, ipa_pam_access_handler_recv, access_ctx,
+                   struct ipa_access_ctx, struct pam_data, struct pam_data *);
+ 
++    dp_set_method(dp_methods, DPM_REFRESH_ACCESS_RULES,
++                      ipa_refresh_access_rules_send, ipa_refresh_access_rules_recv, access_ctx,
++                      struct ipa_access_ctx, void, void *);
++
+     ret = EOK;
+ 
+ done:
+-- 
+2.15.1
+

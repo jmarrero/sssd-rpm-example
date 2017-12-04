@@ -1,0 +1,605 @@
+From bde80e6ec191e80231b24328209342cf92bb7723 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 11 Oct 2017 14:54:54 +0200
+Subject: [PATCH 27/79] NSS: add *_EX version of some requests
+
+To be able to send the flags to the SSSD responder new request types
+with an _EX postfix are added which expect and additional 32bit flag
+field after the name or the id of the requested object.
+
+Related to https://pagure.io/SSSD/sssd/issue/2478
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/nss/nss_cmd.c       |  76 +++++++++++++++++++++-----
+ src/responder/nss/nss_protocol.c  |  81 ++++++++++++++++++++++++++++
+ src/responder/nss/nss_protocol.h  |   8 +++
+ src/sss_client/idmap/sss_nss_ex.c | 110 +++++++++++++++++++++++++++-----------
+ src/sss_client/sss_cli.h          |   7 +++
+ 5 files changed, 237 insertions(+), 45 deletions(-)
+
+diff --git a/src/responder/nss/nss_cmd.c b/src/responder/nss/nss_cmd.c
+index ebf66dfe0444b83aed20d58d36ddf70d2f4fa1f9..974eaccc93cea3a330007735676da69eb9b84141 100644
+--- a/src/responder/nss/nss_cmd.c
++++ b/src/responder/nss/nss_cmd.c
+@@ -54,6 +54,7 @@ static void nss_getby_done(struct tevent_req *subreq);
+ static void nss_getlistby_done(struct tevent_req *subreq);
+ 
+ static errno_t nss_getby_name(struct cli_ctx *cli_ctx,
++                              bool ex_version,
+                               enum cache_req_type type,
+                               const char **attrs,
+                               enum sss_mc_type memcache,
+@@ -64,6 +65,7 @@ static errno_t nss_getby_name(struct cli_ctx *cli_ctx,
+     struct tevent_req *subreq;
+     const char *rawname;
+     errno_t ret;
++    uint32_t flags = 0;
+ 
+     cmd_ctx = nss_cmd_ctx_create(cli_ctx, cli_ctx, type, fill_fn);
+     if (cmd_ctx == NULL) {
+@@ -71,7 +73,11 @@ static errno_t nss_getby_name(struct cli_ctx *cli_ctx,
+         goto done;
+     }
+ 
+-    ret = nss_protocol_parse_name(cli_ctx, &rawname);
++    if (ex_version) {
++        ret = nss_protocol_parse_name_ex(cli_ctx, &rawname, &flags);
++    } else {
++        ret = nss_protocol_parse_name(cli_ctx, &rawname);
++    }
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Invalid request message!\n");
+         goto done;
+@@ -108,6 +114,7 @@ done:
+ }
+ 
+ static errno_t nss_getby_id(struct cli_ctx *cli_ctx,
++                            bool ex_version,
+                             enum cache_req_type type,
+                             const char **attrs,
+                             enum sss_mc_type memcache,
+@@ -118,6 +125,7 @@ static errno_t nss_getby_id(struct cli_ctx *cli_ctx,
+     struct tevent_req *subreq;
+     uint32_t id;
+     errno_t ret;
++    uint32_t flags = 0;
+ 
+     cmd_ctx = nss_cmd_ctx_create(cli_ctx, cli_ctx, type, fill_fn);
+     if (cmd_ctx == NULL) {
+@@ -125,7 +133,11 @@ static errno_t nss_getby_id(struct cli_ctx *cli_ctx,
+         goto done;
+     }
+ 
+-    ret = nss_protocol_parse_id(cli_ctx, &id);
++    if (ex_version) {
++        ret = nss_protocol_parse_id_ex(cli_ctx, &id, &flags);
++    } else {
++        ret = nss_protocol_parse_id(cli_ctx, &id);
++    }
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Invalid request message!\n");
+         goto done;
+@@ -766,14 +778,26 @@ static errno_t nss_endent(struct cli_ctx *cli_ctx,
+ 
+ static errno_t nss_cmd_getpwnam(struct cli_ctx *cli_ctx)
+ {
+-    return nss_getby_name(cli_ctx, CACHE_REQ_USER_BY_NAME, NULL, SSS_MC_PASSWD,
+-                          nss_protocol_fill_pwent);
++    return nss_getby_name(cli_ctx, false, CACHE_REQ_USER_BY_NAME, NULL,
++                          SSS_MC_PASSWD, nss_protocol_fill_pwent);
+ }
+ 
+ static errno_t nss_cmd_getpwuid(struct cli_ctx *cli_ctx)
+ {
+-    return nss_getby_id(cli_ctx, CACHE_REQ_USER_BY_ID, NULL, SSS_MC_PASSWD,
+-                        nss_protocol_fill_pwent);
++    return nss_getby_id(cli_ctx, false, CACHE_REQ_USER_BY_ID, NULL,
++                        SSS_MC_PASSWD, nss_protocol_fill_pwent);
++}
++
++static errno_t nss_cmd_getpwnam_ex(struct cli_ctx *cli_ctx)
++{
++    return nss_getby_name(cli_ctx, true, CACHE_REQ_USER_BY_NAME, NULL,
++                          SSS_MC_PASSWD, nss_protocol_fill_pwent);
++}
++
++static errno_t nss_cmd_getpwuid_ex(struct cli_ctx *cli_ctx)
++{
++    return nss_getby_id(cli_ctx, true, CACHE_REQ_USER_BY_ID, NULL,
++                        SSS_MC_PASSWD, nss_protocol_fill_pwent);
+ }
+ 
+ static errno_t nss_cmd_setpwent(struct cli_ctx *cli_ctx)
+@@ -809,16 +833,29 @@ static errno_t nss_cmd_endpwent(struct cli_ctx *cli_ctx)
+ 
+ static errno_t nss_cmd_getgrnam(struct cli_ctx *cli_ctx)
+ {
+-    return nss_getby_name(cli_ctx, CACHE_REQ_GROUP_BY_NAME, NULL, SSS_MC_GROUP,
+-                          nss_protocol_fill_grent);
++    return nss_getby_name(cli_ctx, false, CACHE_REQ_GROUP_BY_NAME, NULL,
++                          SSS_MC_GROUP, nss_protocol_fill_grent);
+ }
+ 
+ static errno_t nss_cmd_getgrgid(struct cli_ctx *cli_ctx)
+ {
+-    return nss_getby_id(cli_ctx, CACHE_REQ_GROUP_BY_ID, NULL, SSS_MC_GROUP,
+-                        nss_protocol_fill_grent);
++    return nss_getby_id(cli_ctx, false, CACHE_REQ_GROUP_BY_ID, NULL,
++                        SSS_MC_GROUP, nss_protocol_fill_grent);
+ }
+ 
++static errno_t nss_cmd_getgrnam_ex(struct cli_ctx *cli_ctx)
++{
++    return nss_getby_name(cli_ctx, true, CACHE_REQ_GROUP_BY_NAME, NULL,
++                          SSS_MC_GROUP, nss_protocol_fill_grent);
++}
++
++static errno_t nss_cmd_getgrgid_ex(struct cli_ctx *cli_ctx)
++{
++    return nss_getby_id(cli_ctx, true, CACHE_REQ_GROUP_BY_ID, NULL,
++                        SSS_MC_GROUP, nss_protocol_fill_grent);
++}
++
++
+ static errno_t nss_cmd_setgrent(struct cli_ctx *cli_ctx)
+ {
+     struct nss_ctx *nss_ctx;
+@@ -852,7 +889,13 @@ static errno_t nss_cmd_endgrent(struct cli_ctx *cli_ctx)
+ 
+ static errno_t nss_cmd_initgroups(struct cli_ctx *cli_ctx)
+ {
+-    return nss_getby_name(cli_ctx, CACHE_REQ_INITGROUPS, NULL,
++    return nss_getby_name(cli_ctx, false, CACHE_REQ_INITGROUPS, NULL,
++                          SSS_MC_INITGROUPS, nss_protocol_fill_initgr);
++}
++
++static errno_t nss_cmd_initgroups_ex(struct cli_ctx *cli_ctx)
++{
++    return nss_getby_name(cli_ctx, true, CACHE_REQ_INITGROUPS, NULL,
+                           SSS_MC_INITGROUPS, nss_protocol_fill_initgr);
+ }
+ 
+@@ -943,7 +986,7 @@ static errno_t nss_cmd_getsidbyname(struct cli_ctx *cli_ctx)
+ {
+     const char *attrs[] = { SYSDB_SID_STR, NULL };
+ 
+-    return nss_getby_name(cli_ctx, CACHE_REQ_OBJECT_BY_NAME, attrs,
++    return nss_getby_name(cli_ctx, false, CACHE_REQ_OBJECT_BY_NAME, attrs,
+                           SSS_MC_NONE, nss_protocol_fill_sid);
+ }
+ 
+@@ -951,7 +994,7 @@ static errno_t nss_cmd_getsidbyid(struct cli_ctx *cli_ctx)
+ {
+     const char *attrs[] = { SYSDB_SID_STR, NULL };
+ 
+-    return nss_getby_id(cli_ctx, CACHE_REQ_OBJECT_BY_ID, attrs,
++    return nss_getby_id(cli_ctx, false, CACHE_REQ_OBJECT_BY_ID, attrs,
+                         SSS_MC_NONE, nss_protocol_fill_sid);
+ }
+ 
+@@ -1006,7 +1049,7 @@ static errno_t nss_cmd_getorigbyname(struct cli_ctx *cli_ctx)
+         attrs = defattrs;
+     }
+ 
+-    return nss_getby_name(cli_ctx, CACHE_REQ_OBJECT_BY_NAME, attrs,
++    return nss_getby_name(cli_ctx, false, CACHE_REQ_OBJECT_BY_NAME, attrs,
+                           SSS_MC_NONE, nss_protocol_fill_orig);
+ }
+ 
+@@ -1051,6 +1094,11 @@ struct sss_cmd_table *get_nss_cmds(void)
+         { SSS_NSS_GETORIGBYNAME, nss_cmd_getorigbyname },
+         { SSS_NSS_GETNAMEBYCERT, nss_cmd_getnamebycert },
+         { SSS_NSS_GETLISTBYCERT, nss_cmd_getlistbycert },
++        { SSS_NSS_GETPWNAM_EX, nss_cmd_getpwnam_ex },
++        { SSS_NSS_GETPWUID_EX, nss_cmd_getpwuid_ex },
++        { SSS_NSS_GETGRNAM_EX, nss_cmd_getgrnam_ex },
++        { SSS_NSS_GETGRGID_EX, nss_cmd_getgrgid_ex },
++        { SSS_NSS_INITGR_EX, nss_cmd_initgroups_ex },
+         { SSS_CLI_NULL, NULL }
+     };
+ 
+diff --git a/src/responder/nss/nss_protocol.c b/src/responder/nss/nss_protocol.c
+index 06fc4d00a7877a7990402f4f2633ddc0bd640b41..17bfc4f4e71960a72e9e04622eac95b94a865ec7 100644
+--- a/src/responder/nss/nss_protocol.c
++++ b/src/responder/nss/nss_protocol.c
+@@ -133,6 +133,61 @@ nss_protocol_parse_name(struct cli_ctx *cli_ctx, const char **_rawname)
+     return EOK;
+ }
+ 
++errno_t
++nss_protocol_parse_name_ex(struct cli_ctx *cli_ctx, const char **_rawname,
++                           uint32_t *_flags)
++{
++    struct cli_protocol *pctx;
++    const char *rawname;
++    uint8_t *body;
++    size_t blen;
++    uint8_t *p;
++    uint32_t flags;
++
++    pctx = talloc_get_type(cli_ctx->protocol_ctx, struct cli_protocol);
++
++    sss_packet_get_body(pctx->creq->in, &body, &blen);
++
++    if (blen < 1 + sizeof(uint32_t)) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Body too short!\n");
++        return EINVAL;
++    }
++
++    /* If first argument not terminated fail. */
++    if (body[blen - 1 - sizeof(uint32_t)] != '\0') {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Body is not null terminated!\n");
++        return EINVAL;
++    }
++
++    p = memchr(body, '\0', blen);
++
++    /* If the body isn't valid UTF-8, fail */
++    if (!sss_utf8_check(body, (p - body))) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "First argument is not UTF-8 string!\n");
++        return EINVAL;
++    }
++
++    rawname = (const char *)body;
++    if (rawname[0] == '\0') {
++        DEBUG(SSSDBG_CRIT_FAILURE, "An empty name was provided!\n");
++        return EINVAL;
++    }
++
++    p++;
++    if ((p - body) + sizeof(uint32_t) != blen) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Body has unexpected size!\n");
++        return EINVAL;
++    }
++
++    SAFEALIGN_COPY_UINT32(&flags, p, NULL);
++    p += sizeof(uint32_t);
++
++    *_rawname = rawname;
++    *_flags = flags;
++
++    return EOK;
++}
++
+ errno_t
+ nss_protocol_parse_id(struct cli_ctx *cli_ctx, uint32_t *_id)
+ {
+@@ -156,6 +211,32 @@ nss_protocol_parse_id(struct cli_ctx *cli_ctx, uint32_t *_id)
+     return EOK;
+ }
+ 
++errno_t
++nss_protocol_parse_id_ex(struct cli_ctx *cli_ctx, uint32_t *_id,
++                         uint32_t *_flags)
++{
++    struct cli_protocol *pctx;
++    uint8_t *body;
++    size_t blen;
++    uint32_t id;
++    uint32_t flags;
++
++    pctx = talloc_get_type(cli_ctx->protocol_ctx, struct cli_protocol);
++
++    sss_packet_get_body(pctx->creq->in, &body, &blen);
++
++    if (blen != 2 * sizeof(uint32_t)) {
++        return EINVAL;
++    }
++
++    SAFEALIGN_COPY_UINT32(&id, body, NULL);
++    SAFEALIGN_COPY_UINT32(&flags, body + sizeof(uint32_t), NULL);
++
++    *_id = id;
++
++    return EOK;
++}
++
+ errno_t
+ nss_protocol_parse_limit(struct cli_ctx *cli_ctx, uint32_t *_limit)
+ {
+diff --git a/src/responder/nss/nss_protocol.h b/src/responder/nss/nss_protocol.h
+index 417b0891615dcb8771d49f7b2f4d276342ca3150..ca5b040237dc18acdca9a7a3a7a7dbb64265aa95 100644
+--- a/src/responder/nss/nss_protocol.h
++++ b/src/responder/nss/nss_protocol.h
+@@ -88,9 +88,17 @@ void nss_protocol_reply(struct cli_ctx *cli_ctx,
+ errno_t
+ nss_protocol_parse_name(struct cli_ctx *cli_ctx, const char **_rawname);
+ 
++errno_t
++nss_protocol_parse_name_ex(struct cli_ctx *cli_ctx, const char **_rawname,
++                           uint32_t *_flags);
++
+ errno_t
+ nss_protocol_parse_id(struct cli_ctx *cli_ctx, uint32_t *_id);
+ 
++errno_t
++nss_protocol_parse_id_ex(struct cli_ctx *cli_ctx, uint32_t *_id,
++                         uint32_t *_flags);
++
+ errno_t
+ nss_protocol_parse_limit(struct cli_ctx *cli_ctx, uint32_t *_limit);
+ 
+diff --git a/src/sss_client/idmap/sss_nss_ex.c b/src/sss_client/idmap/sss_nss_ex.c
+index 582d1373ec35305cf128e04fd3d705457d304789..dc7610a4e528b5126f0d25d84cd3c1a22f683b75 100644
+--- a/src/sss_client/idmap/sss_nss_ex.c
++++ b/src/sss_client/idmap/sss_nss_ex.c
+@@ -61,31 +61,37 @@ errno_t sss_nss_mc_get(struct nss_input *inp)
+ {
+     switch(inp->cmd) {
+     case SSS_NSS_GETPWNAM:
+-        return sss_nss_mc_getpwnam(inp->input.name, (inp->rd.len - 1),
++    case SSS_NSS_GETPWNAM_EX:
++        return sss_nss_mc_getpwnam(inp->input.name, strlen(inp->input.name),
+                                    inp->result.pwrep.result,
+                                    inp->result.pwrep.buffer,
+                                    inp->result.pwrep.buflen);
+         break;
+     case SSS_NSS_GETPWUID:
++    case SSS_NSS_GETPWUID_EX:
+         return sss_nss_mc_getpwuid(inp->input.uid,
+                                    inp->result.pwrep.result,
+                                    inp->result.pwrep.buffer,
+                                    inp->result.pwrep.buflen);
+         break;
+     case SSS_NSS_GETGRNAM:
+-        return sss_nss_mc_getgrnam(inp->input.name, (inp->rd.len - 1),
++    case SSS_NSS_GETGRNAM_EX:
++        return sss_nss_mc_getgrnam(inp->input.name, strlen(inp->input.name),
+                                    inp->result.grrep.result,
+                                    inp->result.grrep.buffer,
+                                    inp->result.grrep.buflen);
+         break;
+     case SSS_NSS_GETGRGID:
++    case SSS_NSS_GETGRGID_EX:
+         return sss_nss_mc_getgrgid(inp->input.gid,
+                                    inp->result.grrep.result,
+                                    inp->result.grrep.buffer,
+                                    inp->result.grrep.buflen);
+         break;
+     case SSS_NSS_INITGR:
+-        return sss_nss_mc_initgroups_dyn(inp->input.name, (inp->rd.len - 1),
++    case SSS_NSS_INITGR_EX:
++        return sss_nss_mc_initgroups_dyn(inp->input.name,
++                                         strlen(inp->input.name),
+                                          -1 /* currently ignored */,
+                                          inp->result.initgrrep.start,
+                                          inp->result.initgrrep.ngroups,
+@@ -163,7 +169,7 @@ int sss_get_ex(struct nss_input *inp, uint32_t flags, unsigned int timeout)
+         goto out;
+     }
+ 
+-    if (inp->cmd == SSS_NSS_INITGR) {
++    if (inp->cmd == SSS_NSS_INITGR || inp->cmd == SSS_NSS_INITGR_EX) {
+         if ((*(inp->result.initgrrep.ngroups) - *(inp->result.initgrrep.start))
+                     < num_results) {
+             new_groups = realloc(inp->result.initgrrep.groups,
+@@ -198,15 +204,24 @@ int sss_get_ex(struct nss_input *inp, uint32_t flags, unsigned int timeout)
+     }
+ 
+     len = replen - 8;
+-    if (inp->cmd == SSS_NSS_GETPWNAM || inp->cmd == SSS_NSS_GETPWUID) {
++
++    switch(inp->cmd) {
++    case SSS_NSS_GETPWNAM:
++    case SSS_NSS_GETPWUID:
++    case SSS_NSS_GETPWNAM_EX:
++    case SSS_NSS_GETPWUID_EX:
+         ret = sss_nss_getpw_readrep(&(inp->result.pwrep), repbuf+8, &len);
+-    } else if (inp->cmd == SSS_NSS_GETGRNAM || inp->cmd == SSS_NSS_GETGRGID) {
++        break;
++    case SSS_NSS_GETGRNAM:
++    case SSS_NSS_GETGRGID:
++    case SSS_NSS_GETGRNAM_EX:
++    case SSS_NSS_GETGRGID_EX:
+         ret = sss_nss_getgr_readrep(&(inp->result.grrep), repbuf+8, &len);
+-    } else {
++        break;
++    default:
+         ret = EINVAL;
+-        goto out;
+     }
+-    if (ret) {
++    if (ret != 0) {
+         goto out;
+     }
+ 
+@@ -223,6 +238,39 @@ out:
+     return ret;
+ }
+ 
++static int make_name_flag_req_data(const char *name, uint32_t flags,
++                                   struct sss_cli_req_data *rd)
++{
++    size_t len;
++    size_t name_len;
++    uint8_t *data;
++    int ret;
++
++    if (name == NULL) {
++        return EINVAL;
++    }
++
++    ret = sss_strnlen(name, SSS_NAME_MAX, &name_len);
++    if (ret != 0) {
++        return ret;
++    }
++    name_len++;
++
++    len = name_len + sizeof(uint32_t);
++    data = malloc(len);
++    if (data == NULL) {
++        return ENOMEM;
++    }
++
++    memcpy(data, name, name_len);
++    SAFEALIGN_COPY_UINT32(data + name_len, &flags, NULL);
++
++    rd->len = len;
++    rd->data = data;
++
++    return 0;
++}
++
+ int sss_nss_getpwnam_timeout(const char *name, struct passwd *pwd,
+                              char *buffer, size_t buflen,
+                              struct passwd **result,
+@@ -231,8 +279,7 @@ int sss_nss_getpwnam_timeout(const char *name, struct passwd *pwd,
+     int ret;
+     struct nss_input inp = {
+         .input.name = name,
+-        .cmd = SSS_NSS_GETPWNAM,
+-        .rd.data = name,
++        .cmd = SSS_NSS_GETPWNAM_EX,
+         .result.pwrep.result = pwd,
+         .result.pwrep.buffer = buffer,
+         .result.pwrep.buflen = buflen};
+@@ -241,15 +288,15 @@ int sss_nss_getpwnam_timeout(const char *name, struct passwd *pwd,
+         return ERANGE;
+     }
+ 
+-    ret = sss_strnlen(name, SSS_NAME_MAX, &inp.rd.len);
++    ret = make_name_flag_req_data(name, flags, &inp.rd);
+     if (ret != 0) {
+-        return EINVAL;
++        return ret;
+     }
+-    inp.rd.len++;
+ 
+     *result = NULL;
+ 
+     ret = sss_get_ex(&inp, flags, timeout);
++    free(discard_const(inp.rd.data));
+     if (ret == 0) {
+         *result = inp.result.pwrep.result;
+     }
+@@ -262,12 +309,12 @@ int sss_nss_getpwuid_timeout(uid_t uid, struct passwd *pwd,
+                              uint32_t flags, unsigned int timeout)
+ {
+     int ret;
+-    uint32_t user_uid = uid;
++    uint32_t req_data[2];
+     struct nss_input inp = {
+         .input.uid = uid,
+-        .cmd = SSS_NSS_GETPWUID,
+-        .rd.len = sizeof(uint32_t),
+-        .rd.data = &user_uid,
++        .cmd = SSS_NSS_GETPWUID_EX,
++        .rd.len = 2 * sizeof(uint32_t),
++        .rd.data = &req_data,
+         .result.pwrep.result = pwd,
+         .result.pwrep.buffer = buffer,
+         .result.pwrep.buflen = buflen};
+@@ -276,6 +323,8 @@ int sss_nss_getpwuid_timeout(uid_t uid, struct passwd *pwd,
+         return ERANGE;
+     }
+ 
++    SAFEALIGN_COPY_UINT32(&req_data[0], &uid, NULL);
++    SAFEALIGN_COPY_UINT32(&req_data[1], &flags, NULL);
+     *result = NULL;
+ 
+     ret = sss_get_ex(&inp, flags, timeout);
+@@ -292,8 +341,7 @@ int sss_nss_getgrnam_timeout(const char *name, struct group *grp,
+     int ret;
+     struct nss_input inp = {
+         .input.name = name,
+-        .cmd = SSS_NSS_GETGRNAM,
+-        .rd.data = name,
++        .cmd = SSS_NSS_GETGRNAM_EX,
+         .result.grrep.result = grp,
+         .result.grrep.buffer = buffer,
+         .result.grrep.buflen = buflen};
+@@ -302,15 +350,15 @@ int sss_nss_getgrnam_timeout(const char *name, struct group *grp,
+         return ERANGE;
+     }
+ 
+-    ret = sss_strnlen(name, SSS_NAME_MAX, &inp.rd.len);
++    ret = make_name_flag_req_data(name, flags, &inp.rd);
+     if (ret != 0) {
+-        return EINVAL;
++        return ret;
+     }
+-    inp.rd.len++;
+ 
+     *result = NULL;
+ 
+     ret = sss_get_ex(&inp, flags, timeout);
++    free(discard_const(inp.rd.data));
+     if (ret == 0) {
+         *result = inp.result.grrep.result;
+     }
+@@ -322,12 +370,12 @@ int sss_nss_getgrgid_timeout(gid_t gid, struct group *grp,
+                              uint32_t flags, unsigned int timeout)
+ {
+     int ret;
+-    uint32_t group_gid = gid;
++    uint32_t req_data[2];
+     struct nss_input inp = {
+         .input.gid = gid,
+-        .cmd = SSS_NSS_GETGRGID,
+-        .rd.len = sizeof(uint32_t),
+-        .rd.data = &group_gid,
++        .cmd = SSS_NSS_GETGRGID_EX,
++        .rd.len = 2 * sizeof(uint32_t),
++        .rd.data = &req_data,
+         .result.grrep.result = grp,
+         .result.grrep.buffer = buffer,
+         .result.grrep.buflen = buflen};
+@@ -336,6 +384,8 @@ int sss_nss_getgrgid_timeout(gid_t gid, struct group *grp,
+         return ERANGE;
+     }
+ 
++    SAFEALIGN_COPY_UINT32(&req_data[0], &gid, NULL);
++    SAFEALIGN_COPY_UINT32(&req_data[1], &flags, NULL);
+     *result = NULL;
+ 
+     ret = sss_get_ex(&inp, flags, timeout);
+@@ -355,18 +405,16 @@ int sss_nss_getgrouplist_timeout(const char *name, gid_t group,
+     long int start = 1;
+     struct nss_input inp = {
+         .input.name = name,
+-        .cmd = SSS_NSS_INITGR,
+-        .rd.data = name};
++        .cmd = SSS_NSS_INITGR_EX};
+ 
+     if (groups == NULL || ngroups == NULL || *ngroups == 0) {
+         return EINVAL;
+     }
+ 
+-    ret = sss_strnlen(name, SSS_NAME_MAX, &inp.rd.len);
++    ret = make_name_flag_req_data(name, flags, &inp.rd);
+     if (ret != 0) {
+         return ret;
+     }
+-    inp.rd.len++;
+ 
+     new_ngroups = MAX(1, *ngroups);
+     new_groups = malloc(new_ngroups * sizeof(gid_t));
+diff --git a/src/sss_client/sss_cli.h b/src/sss_client/sss_cli.h
+index 5329651a9385d138b8ea7237cb5cf4e2b8e5f371..9d2cc00c9957f5680548461129e3e6b777da5091 100644
+--- a/src/sss_client/sss_cli.h
++++ b/src/sss_client/sss_cli.h
+@@ -79,6 +79,9 @@ enum sss_cli_command {
+     SSS_NSS_GETPWENT       = 0x0014,
+     SSS_NSS_ENDPWENT       = 0x0015,
+ 
++    SSS_NSS_GETPWNAM_EX    = 0x0019,
++    SSS_NSS_GETPWUID_EX    = 0x001A,
++
+ /* group */
+ 
+     SSS_NSS_GETGRNAM       = 0x0021,
+@@ -88,6 +91,10 @@ enum sss_cli_command {
+     SSS_NSS_ENDGRENT       = 0x0025,
+     SSS_NSS_INITGR         = 0x0026,
+ 
++    SSS_NSS_GETGRNAM_EX    = 0x0029,
++    SSS_NSS_GETGRGID_EX    = 0x002A,
++    SSS_NSS_INITGR_EX      = 0x002E,
++
+ #if 0
+ /* aliases */
+ 
+-- 
+2.15.1
+

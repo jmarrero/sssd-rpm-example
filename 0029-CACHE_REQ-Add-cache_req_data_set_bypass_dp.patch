@@ -1,0 +1,111 @@
+From c8cba255e7ad59e151693b1fc9ceb9feff744d2b Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 23 Oct 2017 18:26:55 +0200
+Subject: [PATCH 29/79] CACHE_REQ: Add cache_req_data_set_bypass_dp()
+
+Similar to cache_req_data_set_bypass_cache()
+cache_req_data_set_bypass_dp() can be used to control how the cache_req
+framework performs the lookup. If cache_req_data_set_bypass_dp() is used
+with 'true' only a cache lookup is performed and no request is send to
+the backend even if no entry was found.
+
+Related to https://pagure.io/SSSD/sssd/issue/2478
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/common/cache_req/cache_req.c         | 15 +++++++++++++++
+ src/responder/common/cache_req/cache_req.h         |  3 +++
+ src/responder/common/cache_req/cache_req_data.c    | 12 ++++++++++++
+ src/responder/common/cache_req/cache_req_private.h |  2 ++
+ 4 files changed, 32 insertions(+)
+
+diff --git a/src/responder/common/cache_req/cache_req.c b/src/responder/common/cache_req/cache_req.c
+index 5fed7a2ab8beded2fee91f679a12f9a0ff6013ec..110df561101be538e3f0496addfa2e14e42ea918 100644
+--- a/src/responder/common/cache_req/cache_req.c
++++ b/src/responder/common/cache_req/cache_req.c
+@@ -142,6 +142,13 @@ cache_req_create(TALLOC_CTX *mem_ctx,
+ 
+     cr->cache_first = rctx->cache_first;
+     cr->bypass_cache = cr->plugin->bypass_cache || cr->data->bypass_cache;
++    cr->bypass_dp = cr->data->bypass_dp;
++    if (cr->bypass_cache && cr->bypass_dp) {
++        CACHE_REQ_DEBUG(SSSDBG_CRIT_FAILURE, cr,
++                        "Cannot bypass cache and dp at the same time!");
++        talloc_free(cr);
++        return NULL;
++    }
+ 
+     return cr;
+ }
+@@ -658,6 +665,14 @@ static bool cache_req_search_schema(struct cache_req *cr,
+         bypass_cache = true;
+         bypass_dp = false;
+ 
++        if (!first_iteration) {
++            return false;
++        }
++    } else if (cr->bypass_dp) {
++        /* The caller wants to lookup only in the cache */
++        bypass_cache = false;
++        bypass_dp = true;
++
+         if (!first_iteration) {
+             return false;
+         }
+diff --git a/src/responder/common/cache_req/cache_req.h b/src/responder/common/cache_req/cache_req.h
+index c04b2fba6f0445dcfcc9cfe1b5963ac975c39118..2c88853887fc816bba2182d9d9beaa32fa384158 100644
+--- a/src/responder/common/cache_req/cache_req.h
++++ b/src/responder/common/cache_req/cache_req.h
+@@ -127,6 +127,9 @@ void
+ cache_req_data_set_bypass_cache(struct cache_req_data *data,
+                                 bool bypass_cache);
+ 
++void
++cache_req_data_set_bypass_dp(struct cache_req_data *data,
++                             bool bypass_dp);
+ /* Output data. */
+ 
+ struct cache_req_result {
+diff --git a/src/responder/common/cache_req/cache_req_data.c b/src/responder/common/cache_req/cache_req_data.c
+index 48264a321dc603f9708ba71c44542363b11a71ba..ed378274a9a0a68ede8ac99805f3ea4a041382e6 100644
+--- a/src/responder/common/cache_req/cache_req_data.c
++++ b/src/responder/common/cache_req/cache_req_data.c
+@@ -365,3 +365,15 @@ cache_req_data_set_bypass_cache(struct cache_req_data *data,
+ 
+     data->bypass_cache = bypass_cache;
+ }
++
++void
++cache_req_data_set_bypass_dp(struct cache_req_data *data,
++                             bool bypass_dp)
++{
++    if (data == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "cache_req_data should never be NULL\n");
++        return;
++    }
++
++    data->bypass_dp = bypass_dp;
++}
+diff --git a/src/responder/common/cache_req/cache_req_private.h b/src/responder/common/cache_req/cache_req_private.h
+index 9b706ff7d678f543effb77089857a7e8a42a9c51..0f630542d38a277d1819063fa4134bd7d2525c90 100644
+--- a/src/responder/common/cache_req/cache_req_private.h
++++ b/src/responder/common/cache_req/cache_req_private.h
+@@ -42,6 +42,7 @@ struct cache_req {
+     struct sss_domain_info *domain;
+     bool cache_first;
+     bool bypass_cache;
++    bool bypass_dp;
+     /* Only contact domains with this type */
+     enum cache_req_dom_type req_dom_type;
+ 
+@@ -90,6 +91,7 @@ struct cache_req_data {
+     } svc;
+ 
+     bool bypass_cache;
++    bool bypass_dp;
+ };
+ 
+ struct tevent_req *
+-- 
+2.15.1
+

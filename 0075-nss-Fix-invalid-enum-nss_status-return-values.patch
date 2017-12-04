@@ -1,0 +1,150 @@
+From fd0fb14e613f15a7d1fbde86bf371a72d8dfe3b8 Mon Sep 17 00:00:00 2001
+From: Carlos O'Donell <carlos@systemhalted.org>
+Date: Wed, 29 Nov 2017 22:36:39 -0800
+Subject: [PATCH 75/79] nss: Fix invalid enum nss_status return values.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The upstream glibc test nss/bug17079 covers several cases where the
+NSS infrastructure passes invalid pointers to NSS plugins. The plugins
+should return correct results for the invalid values e.g. ERANGE,
+but it should do so by setting *errnop to the error and returning
+NSS_STATUS_TRYAGAIN. This commit fixes the group, netgroup, passwd
+and service handling code to correctly return ERANGE in *errnop
+and NSS_TATUS_TRYAGAIN in the case of invalid buffer (NULL) or
+zero sized buffer length. This fixes the nss/bug17079 regression test
+when run in a test configuration with sss enabled for any of the
+above mentioned services.
+
+Upstream glibc bug:
+Bug 22530 - FAIL: nss/bug17079 due to _nss_sss_getpwuid_r
+https://sourceware.org/bugzilla/show_bug.cgi?id=22530
+
+Merges: https://pagure.io/SSSD/sssd/pull-request/3561
+
+Signed-off-by: Carlos O'Donell <carlos@redhat.com>
+Reviewed-by: Florian Weimer <fweimer@redhat.com>
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ src/sss_client/nss_group.c    | 10 ++++++++--
+ src/sss_client/nss_netgroup.c |  5 ++++-
+ src/sss_client/nss_passwd.c   | 10 ++++++++--
+ src/sss_client/nss_services.c | 15 ++++++++++++---
+ 4 files changed, 32 insertions(+), 8 deletions(-)
+
+diff --git a/src/sss_client/nss_group.c b/src/sss_client/nss_group.c
+index 42fba6242d23fc1d52cfd7be10cf10383010f091..054f30e13f8d5f8300a3e63c9035b98d30473c0e 100644
+--- a/src/sss_client/nss_group.c
++++ b/src/sss_client/nss_group.c
+@@ -522,7 +522,10 @@ enum nss_status _nss_sss_getgrgid_r(gid_t gid, struct group *result,
+     int ret;
+ 
+     /* Caught once glibc passing in buffer == 0x0 */
+-    if (!buffer || !buflen) return ERANGE;
++    if (!buffer || !buflen) {
++	*errnop = ERANGE;
++	return NSS_STATUS_TRYAGAIN;
++    }
+ 
+     ret = sss_nss_mc_getgrgid(gid, result, buffer, buflen);
+     switch (ret) {
+@@ -655,7 +658,10 @@ static enum nss_status internal_getgrent_r(struct group *result,
+     int ret;
+ 
+     /* Caught once glibc passing in buffer == 0x0 */
+-    if (!buffer || !buflen) return ERANGE;
++    if (!buffer || !buflen) {
++	*errnop = ERANGE;
++	return NSS_STATUS_TRYAGAIN;
++    }
+ 
+     /* if there are leftovers return the next one */
+     if (sss_nss_getgrent_data.data != NULL &&
+diff --git a/src/sss_client/nss_netgroup.c b/src/sss_client/nss_netgroup.c
+index 8594fc460514d6f92e786605168fa7d15c7ee913..3a1834a311e6658c6160b5f95a01434fed69ad1c 100644
+--- a/src/sss_client/nss_netgroup.c
++++ b/src/sss_client/nss_netgroup.c
+@@ -231,7 +231,10 @@ static enum nss_status internal_getnetgrent_r(struct __netgrent *result,
+     int ret;
+ 
+     /* Caught once glibc passing in buffer == 0x0 */
+-    if (!buffer || !buflen) return ERANGE;
++    if (!buffer || !buflen) {
++	*errnop = ERANGE;
++	return NSS_STATUS_TRYAGAIN;
++    }
+ 
+     /* If we're already processing result data, continue to
+      * return it.
+diff --git a/src/sss_client/nss_passwd.c b/src/sss_client/nss_passwd.c
+index 61e2a567e684fbc7664b5d425e81cfa28a98e845..5b1c2ce66b0954bc304dfb458f509defa8eed889 100644
+--- a/src/sss_client/nss_passwd.c
++++ b/src/sss_client/nss_passwd.c
+@@ -251,7 +251,10 @@ enum nss_status _nss_sss_getpwuid_r(uid_t uid, struct passwd *result,
+     int ret;
+ 
+     /* Caught once glibc passing in buffer == 0x0 */
+-    if (!buffer || !buflen) return ERANGE;
++    if (!buffer || !buflen) {
++	*errnop = ERANGE;
++	return NSS_STATUS_TRYAGAIN;
++    }
+ 
+     ret = sss_nss_mc_getpwuid(uid, result, buffer, buflen);
+     switch (ret) {
+@@ -376,7 +379,10 @@ static enum nss_status internal_getpwent_r(struct passwd *result,
+     int ret;
+ 
+     /* Caught once glibc passing in buffer == 0x0 */
+-    if (!buffer || !buflen) return ERANGE;
++    if (!buffer || !buflen) {
++	*errnop = ERANGE;
++	return NSS_STATUS_TRYAGAIN;
++    }
+ 
+     /* if there are leftovers return the next one */
+     if (sss_nss_getpwent_data.data != NULL &&
+diff --git a/src/sss_client/nss_services.c b/src/sss_client/nss_services.c
+index 64e0b43e1643e4e76d2381a6b062335c3d513a21..161dad9ae27f822b40af8368e5af38b020d6549a 100644
+--- a/src/sss_client/nss_services.c
++++ b/src/sss_client/nss_services.c
+@@ -177,7 +177,10 @@ _nss_sss_getservbyname_r(const char *name,
+     int ret;
+ 
+     /* Caught once glibc passing in buffer == 0x0 */
+-    if (!buffer || !buflen) return ERANGE;
++    if (!buffer || !buflen) {
++	*errnop = ERANGE;
++	return NSS_STATUS_TRYAGAIN;
++    }
+ 
+     ret = sss_strnlen(name, SSS_NAME_MAX, &name_len);
+     if (ret != 0) {
+@@ -278,7 +281,10 @@ _nss_sss_getservbyport_r(int port, const char *protocol,
+     int ret;
+ 
+     /* Caught once glibc passing in buffer == 0x0 */
+-    if (!buffer || !buflen) return ERANGE;
++    if (!buffer || !buflen) {
++	*errnop = ERANGE;
++	return NSS_STATUS_TRYAGAIN;
++    }
+ 
+     if (protocol) {
+         ret = sss_strnlen(protocol, SSS_NAME_MAX, &proto_len);
+@@ -411,7 +417,10 @@ static enum nss_status internal_getservent_r(struct servent *result,
+     int ret;
+ 
+     /* Caught once glibc passing in buffer == 0x0 */
+-    if (!buffer || !buflen) return ERANGE;
++    if (!buffer || !buflen) {
++	*errnop = ERANGE;
++	return NSS_STATUS_TRYAGAIN;
++    }
+ 
+     /* if there are leftovers return the next one */
+     if (sss_nss_getservent_data.data != NULL &&
+-- 
+2.15.1
+

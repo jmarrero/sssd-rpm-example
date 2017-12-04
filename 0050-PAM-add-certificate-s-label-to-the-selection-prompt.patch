@@ -1,0 +1,273 @@
+From a89494e7c173bb82344099dd84c59cb3b7214484 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 7 Nov 2017 09:52:56 +0100
+Subject: [PATCH 50/79] PAM: add certificate's label to the selection prompt
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Some types of Smartcards contain multiple certificate with the same
+subject-DN for different usages. To make it easier to choose between
+them in case the matching rules allow more than one of them for
+authentication the label assigned to the certificate on the Smartcard is
+shown in the selection prompt as well.
+
+Related to https://pagure.io/SSSD/sssd/issue/3560
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+Tested-by: Scott Poore <spoore@redhat.com>
+---
+ src/p11_child/p11_child_nss.c   | 18 ++++++++++++++----
+ src/responder/pam/pamsrv.h      |  1 +
+ src/responder/pam/pamsrv_p11.c  | 41 +++++++++++++++++++++++++++++++++++++----
+ src/tests/cmocka/test_pam_srv.c | 28 ++++++++++++++--------------
+ 4 files changed, 66 insertions(+), 22 deletions(-)
+
+diff --git a/src/p11_child/p11_child_nss.c b/src/p11_child/p11_child_nss.c
+index e59aba0d1561f58206252f7251ecd88315836b1b..21c508eb1b1b68b3606d0a5eed36573b01f27a19 100644
+--- a/src/p11_child/p11_child_nss.c
++++ b/src/p11_child/p11_child_nss.c
+@@ -130,7 +130,7 @@ int do_work(TALLOC_CTX *mem_ctx, const char *nss_db,
+     CERTCertificate *found_cert = NULL;
+     PK11SlotList *list = NULL;
+     PK11SlotListElement *le;
+-    SECItem *key_id = NULL;
++    const char *label;
+     char *key_id_str = NULL;
+     CERTCertList *valid_certs = NULL;
+     char *cert_b64 = NULL;
+@@ -505,6 +505,17 @@ int do_work(TALLOC_CTX *mem_ctx, const char *nss_db,
+             goto done;
+         }
+ 
++        /* The NSS nickname is typically token_name:label, so the label starts
++         * after the ':'. */
++        if (found_cert->nickname != NULL) {
++            if ((label = strchr(found_cert->nickname, ':')) == NULL) {
++                label = found_cert->nickname;
++            } else {
++                label++;
++            }
++        } else {
++            label = "- no label found -";
++        }
+         talloc_free(cert_b64);
+         cert_b64 = sss_base64_encode(mem_ctx, found_cert->derCert.data,
+                                      found_cert->derCert.len);
+@@ -517,9 +528,9 @@ int do_work(TALLOC_CTX *mem_ctx, const char *nss_db,
+         DEBUG(SSSDBG_TRACE_ALL, "Found certificate has key id [%s].\n",
+               key_id_str);
+ 
+-        multi = talloc_asprintf_append(multi, "%s\n%s\n%s\n%s\n",
++        multi = talloc_asprintf_append(multi, "%s\n%s\n%s\n%s\n%s\n",
+                                        token_name, module_name, key_id_str,
+-                                       cert_b64);
++                                       label, cert_b64);
+     }
+     *_multi = multi;
+ 
+@@ -546,7 +557,6 @@ done:
+         CERT_DestroyCertList(cert_list);
+     }
+ 
+-    SECITEM_FreeItem(key_id, PR_TRUE);
+     PORT_Free(key_id_str);
+ 
+     PORT_Free(signed_random_value.data);
+diff --git a/src/responder/pam/pamsrv.h b/src/responder/pam/pamsrv.h
+index 0bc229212844602ed461d1c7db48bf51ac2e2194..dfd982178446d6327e09afc652018886c08fd88a 100644
+--- a/src/responder/pam/pamsrv.h
++++ b/src/responder/pam/pamsrv.h
+@@ -93,6 +93,7 @@ const char *sss_cai_get_cert(struct cert_auth_info *i);
+ const char *sss_cai_get_token_name(struct cert_auth_info *i);
+ const char *sss_cai_get_module_name(struct cert_auth_info *i);
+ const char *sss_cai_get_key_id(struct cert_auth_info *i);
++const char *sss_cai_get_label(struct cert_auth_info *i);
+ struct cert_auth_info *sss_cai_get_next(struct cert_auth_info *i);
+ struct ldb_result *sss_cai_get_cert_user_objs(struct cert_auth_info *i);
+ void sss_cai_set_cert_user_objs(struct cert_auth_info *i,
+diff --git a/src/responder/pam/pamsrv_p11.c b/src/responder/pam/pamsrv_p11.c
+index ec52c5ae7163d41144fe082643a201b766a1e201..fa2435543ea305f7cdb1e18753525beb373eaf4c 100644
+--- a/src/responder/pam/pamsrv_p11.c
++++ b/src/responder/pam/pamsrv_p11.c
+@@ -43,6 +43,7 @@ struct cert_auth_info {
+     char *token_name;
+     char *module_name;
+     char *key_id;
++    char *label;
+     struct ldb_result *cert_user_objs;
+     struct cert_auth_info *prev;
+     struct cert_auth_info *next;
+@@ -68,6 +69,11 @@ const char *sss_cai_get_key_id(struct cert_auth_info *i)
+     return i != NULL ? i->key_id : NULL;
+ }
+ 
++const char *sss_cai_get_label(struct cert_auth_info *i)
++{
++    return i != NULL ? i->label : NULL;
++}
++
+ struct cert_auth_info *sss_cai_get_next(struct cert_auth_info *i)
+ {
+     return i != NULL ? i->next : NULL;
+@@ -438,6 +444,31 @@ static errno_t parse_p11_child_response(TALLOC_CTX *mem_ctx, uint8_t *buf,
+             goto done;
+         }
+ 
++        if (pn == p) {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "Missing label in p11_child response.\n");
++            ret = EINVAL;
++            goto done;
++        }
++
++        cert_auth_info->label = talloc_strndup(cert_auth_info, (char *) p,
++                                               (pn - p));
++        if (cert_auth_info->label == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, "talloc_strndup failed.\n");
++            ret = ENOMEM;
++            goto done;
++        }
++        DEBUG(SSSDBG_TRACE_ALL, "Found label [%s].\n", cert_auth_info->label);
++
++        p = ++pn;
++        pn = memchr(p, '\n', buf_len - (p - buf));
++        if (pn == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "Missing new-line in p11_child response.\n");
++            ret = EINVAL;
++            goto done;
++        }
++
+         if (pn == p) {
+             DEBUG(SSSDBG_OP_FAILURE, "Missing cert in p11_child response.\n");
+             ret = EINVAL;
+@@ -816,7 +847,8 @@ errno_t pam_check_cert_recv(struct tevent_req *req, TALLOC_CTX *mem_ctx,
+     return EOK;
+ }
+ 
+-static char *get_cert_prompt(TALLOC_CTX *mem_ctx, const char *cert)
++static char *get_cert_prompt(TALLOC_CTX *mem_ctx,
++                             struct cert_auth_info *cert_info)
+ {
+     int ret;
+     struct sss_certmap_ctx *ctx = NULL;
+@@ -839,7 +871,7 @@ static char *get_cert_prompt(TALLOC_CTX *mem_ctx, const char *cert)
+         goto done;
+     }
+ 
+-    der = sss_base64_decode(mem_ctx, cert, &der_size);
++    der = sss_base64_decode(mem_ctx, sss_cai_get_cert(cert_info), &der_size);
+     if (der == NULL) {
+         DEBUG(SSSDBG_OP_FAILURE, "sss_base64_decode failed.\n");
+         goto done;
+@@ -851,7 +883,8 @@ static char *get_cert_prompt(TALLOC_CTX *mem_ctx, const char *cert)
+         goto done;
+     }
+ 
+-    prompt = talloc_strdup(mem_ctx, filter);
++    prompt = talloc_asprintf(mem_ctx, "%s\n%s", sss_cai_get_label(cert_info),
++                                                filter);
+     if (prompt == NULL) {
+         DEBUG(SSSDBG_OP_FAILURE, "talloc_strdup failed.\n");
+     }
+@@ -885,7 +918,7 @@ static errno_t pack_cert_data(TALLOC_CTX *mem_ctx, const char *sysdb_username,
+         username = sysdb_username;
+     }
+ 
+-    prompt = get_cert_prompt(mem_ctx, sss_cai_get_cert(cert_info));
++    prompt = get_cert_prompt(mem_ctx, cert_info);
+     if (prompt == NULL) {
+         DEBUG(SSSDBG_OP_FAILURE, "get_cert_prompt failed.\n");
+         return EIO;
+diff --git a/src/tests/cmocka/test_pam_srv.c b/src/tests/cmocka/test_pam_srv.c
+index f86719f4fb154524fc9620aa8cb583690ca597f3..d7b47507b75044793996bc5156163616a55e05f6 100644
+--- a/src/tests/cmocka/test_pam_srv.c
++++ b/src/tests/cmocka/test_pam_srv.c
+@@ -53,7 +53,7 @@
+ #define TEST_TOKEN_NAME "SSSD Test Token"
+ #define TEST_MODULE_NAME "NSS-Internal"
+ #define TEST_KEY_ID "A5EF7DEE625CA5996C8D1BA7D036708161FD49E7"
+-#define TEST_SUBJECT_DN "CN=ipa-devel.ipa.devel,O=IPA.DEVEL"
++#define TEST_PROMPT "Server-Cert\nCN=ipa-devel.ipa.devel,O=IPA.DEVEL"
+ #define TEST_TOKEN_CERT \
+ "MIIECTCCAvGgAwIBAgIBCTANBgkqhkiG9w0BAQsFADA0MRIwEAYDVQQKDAlJUEEu" \
+ "REVWRUwxHjAcBgNVBAMMFUNlcnRpZmljYXRlIEF1dGhvcml0eTAeFw0xNjA1MjMx" \
+@@ -79,7 +79,7 @@
+ "XyQBwOYRORlnfGyu+Yc9c3E0Wx8Tlznz0lqPR9g="
+ 
+ #define TEST2_KEY_ID "C8D60E009EB195D01A7083EE1D5419251AA87C2C"
+-#define TEST2_SUBJECT_DN "CN=IPA RA,O=IPA.DEVEL"
++#define TEST2_PROMPT "ipaCert\nCN=IPA RA,O=IPA.DEVEL"
+ #define TEST_TOKEN_2ND_CERT \
+ "MIIDazCCAlOgAwIBAgIBBzANBgkqhkiG9w0BAQsFADA0MRIwEAYDVQQKDAlJUEEu" \
+ "REVWRUwxHjAcBgNVBAMMFUNlcnRpZmljYXRlIEF1dGhvcml0eTAeFw0xNjA1MjMx" \
+@@ -837,7 +837,7 @@ static int test_pam_cert_check_gdm_smartcard(uint32_t status, uint8_t *body,
+                                 + sizeof(TEST_TOKEN_NAME)
+                                 + sizeof(TEST_MODULE_NAME)
+                                 + sizeof(TEST_KEY_ID)
+-                                + sizeof(TEST_SUBJECT_DN)));
++                                + sizeof(TEST_PROMPT)));
+ 
+     assert_int_equal(*(body + rp + sizeof("pamuser@"TEST_DOM_NAME) - 1), 0);
+     assert_string_equal(body + rp, "pamuser@"TEST_DOM_NAME);
+@@ -855,9 +855,9 @@ static int test_pam_cert_check_gdm_smartcard(uint32_t status, uint8_t *body,
+     assert_string_equal(body + rp, TEST_KEY_ID);
+     rp += sizeof(TEST_KEY_ID);
+ 
+-    assert_int_equal(*(body + rp + sizeof(TEST_SUBJECT_DN) - 1), 0);
+-    assert_string_equal(body + rp, TEST_SUBJECT_DN);
+-    rp += sizeof(TEST_SUBJECT_DN);
++    assert_int_equal(*(body + rp + sizeof(TEST_PROMPT) - 1), 0);
++    assert_string_equal(body + rp, TEST_PROMPT);
++    rp += sizeof(TEST_PROMPT);
+ 
+     assert_int_equal(rp, blen);
+     return EOK;
+@@ -904,7 +904,7 @@ static int test_pam_cert_check_ex(uint32_t status, uint8_t *body, size_t blen,
+                                 + sizeof(TEST_TOKEN_NAME)
+                                 + sizeof(TEST_MODULE_NAME)
+                                 + sizeof(TEST_KEY_ID)
+-                                + sizeof(TEST_SUBJECT_DN)));
++                                + sizeof(TEST_PROMPT)));
+ 
+     assert_int_equal(*(body + rp + strlen(name)), 0);
+     assert_string_equal(body + rp, name);
+@@ -922,9 +922,9 @@ static int test_pam_cert_check_ex(uint32_t status, uint8_t *body, size_t blen,
+     assert_string_equal(body + rp, TEST_KEY_ID);
+     rp += sizeof(TEST_KEY_ID);
+ 
+-    assert_int_equal(*(body + rp + sizeof(TEST_SUBJECT_DN) - 1), 0);
+-    assert_string_equal(body + rp, TEST_SUBJECT_DN);
+-    rp += sizeof(TEST_SUBJECT_DN);
++    assert_int_equal(*(body + rp + sizeof(TEST_PROMPT) - 1), 0);
++    assert_string_equal(body + rp, TEST_PROMPT);
++    rp += sizeof(TEST_PROMPT);
+ 
+     if (name2 != NULL && *name2 != '\0') {
+         SAFEALIGN_COPY_UINT32(&val, body + rp, &rp);
+@@ -935,7 +935,7 @@ static int test_pam_cert_check_ex(uint32_t status, uint8_t *body, size_t blen,
+                                     + sizeof(TEST_TOKEN_NAME)
+                                     + sizeof(TEST_MODULE_NAME)
+                                     + sizeof(TEST2_KEY_ID)
+-                                    + sizeof(TEST2_SUBJECT_DN)));
++                                    + sizeof(TEST2_PROMPT)));
+ 
+         assert_int_equal(*(body + rp + strlen(name)), 0);
+         assert_string_equal(body + rp, name);
+@@ -953,9 +953,9 @@ static int test_pam_cert_check_ex(uint32_t status, uint8_t *body, size_t blen,
+         assert_string_equal(body + rp, TEST2_KEY_ID);
+         rp += sizeof(TEST2_KEY_ID);
+ 
+-        assert_int_equal(*(body + rp + sizeof(TEST2_SUBJECT_DN) - 1), 0);
+-        assert_string_equal(body + rp, TEST2_SUBJECT_DN);
+-        rp += sizeof(TEST2_SUBJECT_DN);
++        assert_int_equal(*(body + rp + sizeof(TEST2_PROMPT) - 1), 0);
++        assert_string_equal(body + rp, TEST2_PROMPT);
++        rp += sizeof(TEST2_PROMPT);
+     }
+ 
+     assert_int_equal(rp, blen);
+-- 
+2.15.1
+

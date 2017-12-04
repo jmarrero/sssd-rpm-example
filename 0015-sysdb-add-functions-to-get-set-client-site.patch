@@ -1,0 +1,205 @@
+From 8687782eb971d0fa6f8f4420a8616ba943d7252b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 24 Oct 2017 12:09:39 +0200
+Subject: [PATCH 15/79] sysdb: add functions to get/set client site
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/db/sysdb.h                           |  10 +++
+ src/db/sysdb_subdomains.c                | 108 +++++++++++++++++++++++++++++++
+ src/tests/cmocka/test_sysdb_subdomains.c |  28 ++++++++
+ 3 files changed, 146 insertions(+)
+
+diff --git a/src/db/sysdb.h b/src/db/sysdb.h
+index fbbe321072385bd43353ef2f7d0e30667887d128..4192f9085d941814eccd2ac60ce8fb6d4e1bfa67 100644
+--- a/src/db/sysdb.h
++++ b/src/db/sysdb.h
+@@ -154,6 +154,7 @@
+ #define SYSDB_SUBDOMAIN_FOREST "memberOfForest"
+ #define SYSDB_SUBDOMAIN_TRUST_DIRECTION "trustDirection"
+ #define SYSDB_UPN_SUFFIXES "upnSuffixes"
++#define SYSDB_SITE "site"
+ 
+ #define SYSDB_BASE_ID "baseID"
+ #define SYSDB_ID_RANGE_SIZE "idRangeSize"
+@@ -509,6 +510,15 @@ errno_t sysdb_domain_update_domain_resolution_order(
+                                         const char *domain_name,
+                                         const char *domain_resolution_order);
+ 
++errno_t
++sysdb_get_site(TALLOC_CTX *mem_ctx,
++               struct sss_domain_info *dom,
++               const char **_site);
++
++errno_t
++sysdb_set_site(struct sss_domain_info *dom,
++               const char *site);
++
+ errno_t sysdb_subdomain_store(struct sysdb_ctx *sysdb,
+                               const char *name, const char *realm,
+                               const char *flat_name, const char *domain_id,
+diff --git a/src/db/sysdb_subdomains.c b/src/db/sysdb_subdomains.c
+index 2789cc4949fb7be9ad272d7613ed18a64fa8a20a..cb5de1afe3e8c9692789c5d2679eb3a4e6e1cdb2 100644
+--- a/src/db/sysdb_subdomains.c
++++ b/src/db/sysdb_subdomains.c
+@@ -1284,3 +1284,111 @@ done:
+     talloc_free(tmp_ctx);
+     return ret;
+ }
++
++errno_t
++sysdb_get_site(TALLOC_CTX *mem_ctx,
++               struct sss_domain_info *dom,
++               const char **_site)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct ldb_res *res;
++    struct ldb_dn *dn;
++    const char *attrs[] = { SYSDB_SITE, NULL };
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    dn = ldb_dn_new_fmt(tmp_ctx, dom->sysdb->ldb, SYSDB_DOM_BASE, dom->name);
++    if (dn == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = ldb_search(dom->sysdb->ldb, tmp_ctx, &res, dn, LDB_SCOPE_BASE,
++                     attrs, NULL);
++    if (ret != LDB_SUCCESS) {
++        ret = sysdb_error_to_errno(ret);
++        goto done;
++    }
++
++    if (res->count == 0) {
++        *_site = NULL;
++        ret = EOK;
++        goto done;
++    } else if (res->count != 1) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Got more than one reply for base search!\n");
++        ret = EIO;
++        goto done;
++    }
++
++    *_site = ldb_msg_find_attr_as_string(res->msgs[0], SYSDB_SITE, NULL);
++    talloc_steal(mem_ctx, *_site);
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++errno_t
++sysdb_set_site(struct sss_domain_info *dom,
++               const char *site)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct ldb_message *msg;
++    struct ldb_dn *dn;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    dn = ldb_dn_new_fmt(tmp_ctx, dom->sysdb->ldb, SYSDB_DOM_BASE, dom->name);
++    if (dn == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    msg = ldb_msg_new(tmp_ctx);
++    if (msg == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    msg->dn = dn;
++
++    ret = ldb_msg_add_empty(msg, SYSDB_SITE, LDB_FLAG_MOD_REPLACE, NULL);
++    if (ret != LDB_SUCCESS) {
++        ret = sysdb_error_to_errno(ret);
++        goto done;
++    }
++
++    if (site != NULL) {
++        ret = ldb_msg_add_string(msg, SYSDB_SITE, site);
++        if (ret != LDB_SUCCESS) {
++            ret = sysdb_error_to_errno(ret);
++            goto done;
++        }
++    }
++
++    ret = ldb_modify(dom->sysdb->ldb, msg);
++    if (ret != LDB_SUCCESS) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "ldb_modify()_failed: [%s][%d][%s]\n",
++              ldb_strerror(ret), ret, ldb_errstring(dom->sysdb->ldb));
++        ret = sysdb_error_to_errno(ret);
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
+diff --git a/src/tests/cmocka/test_sysdb_subdomains.c b/src/tests/cmocka/test_sysdb_subdomains.c
+index 84bcdc17b39dbc8822097c2006f157a09ea5e466..f8e3e1d915dba0f3a79adbf5af733980bf23a265 100644
+--- a/src/tests/cmocka/test_sysdb_subdomains.c
++++ b/src/tests/cmocka/test_sysdb_subdomains.c
+@@ -513,6 +513,31 @@ static void test_sysdb_link_ad_multidom(void **state)
+ 
+ }
+ 
++static void test_sysdb_set_and_get_site(void **state)
++{
++    TALLOC_CTX *tmp_ctx;
++    struct subdom_test_ctx *test_ctx =
++        talloc_get_type(*state, struct subdom_test_ctx);
++    const char *site;
++    errno_t ret;
++
++    tmp_ctx = talloc_new(NULL);
++    assert_non_null(test_ctx);
++
++    ret = sysdb_get_site(test_ctx, test_ctx->tctx->dom, &site);
++    assert_int_equal(ret, EOK);
++    assert_null(site);
++
++    ret = sysdb_set_site(test_ctx->tctx->dom, "TestSite");
++    assert_int_equal(ret, EOK);
++
++    ret = sysdb_get_site(tmp_ctx, test_ctx->tctx->dom, &site);
++    assert_int_equal(ret, EOK);
++    assert_string_equal(site, "TestSite");
++
++    talloc_free(tmp_ctx);
++}
++
+ int main(int argc, const char *argv[])
+ {
+     int rv;
+@@ -546,6 +571,9 @@ int main(int argc, const char *argv[])
+         cmocka_unit_test_setup_teardown(test_sysdb_link_ad_multidom,
+                                         test_sysdb_subdom_setup,
+                                         test_sysdb_subdom_teardown),
++        cmocka_unit_test_setup_teardown(test_sysdb_set_and_get_site,
++                                        test_sysdb_subdom_setup,
++                                        test_sysdb_subdom_teardown),
+     };
+ 
+     /* Set debug level to invalid value so we can deside if -d 0 was used. */
+-- 
+2.15.1
+

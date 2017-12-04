@@ -1,0 +1,58 @@
+From ddff278e709a2aa882f2d8d64c263cddc3a93a2c Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 28 Nov 2017 12:19:54 +0100
+Subject: [PATCH 67/79] responder: Fix talloc hierarchy in sized_output_name
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+sized_output_name was a called with NULL context in
+memcache_delete_entry but returned data from sized_output_name
+didn't have proper talloc hierarchy and we could not release all
+all returned data.
+
+==00:01:01:29.871 10088== 934,414 bytes in 8,731 blocks are definitely lost in loss record 121 of 121
+==00:01:01:29.871 10088==    at 0x4C29BE3: malloc (vg_replace_malloc.c:299)
+==00:01:01:29.871 10088==    by 0x8FF4EAB: talloc_strdup (in /usr/lib64/libtalloc.so.2.1.9)
+==00:01:01:29.871 10088==    by 0x52933B9: sss_output_name (usertools.c:808)
+==00:01:01:29.871 10088==    by 0x5293550: sss_output_fqname (usertools.c:863)
+==00:01:01:29.871 10088==    by 0x1211F9: sized_output_name (responder_common.c:1708)
+==00:01:01:29.871 10088==    by 0x1137E6: memcache_delete_entry (nss_get_object.c:112)
+==00:01:01:29.871 10088==    by 0x113BB6: nss_get_object_done (nss_get_object.c:245)
+==00:01:01:29.871 10088==    by 0x8DE5291: _tevent_req_error (in /usr/lib64/libtevent.so.0.9.31)
+==00:01:01:29.871 10088==    by 0x1276CE: cache_req_done (cache_req.c:1047)
+==00:01:01:29.871 10088==    by 0x8DE5291: _tevent_req_error (in /usr/lib64/libtevent.so.0.9.31)
+==00:01:01:29.871 10088==    by 0x126AF6: cache_req_search_domains_done (cache_req.c:607)
+==00:01:01:29.871 10088==    by 0x8DE4AB9: tevent_common_loop_immediate (in /usr/lib64/libtevent.so.0.9.31)
+==00:01:01:29.871 10088==    by 0x8DE9C9C: ??? (in /usr/lib64/libtevent.so.0.9.31)
+==00:01:01:29.871 10088==    by 0x8DE82A6: ??? (in /usr/lib64/libtevent.so.0.9.31)
+==00:01:01:29.871 10088==    by 0x8DE40CC: _tevent_loop_once (in /usr/lib64/libtevent.so.0.9.31)
+==00:01:01:29.871 10088==    by 0x8DE42FA: tevent_common_loop_wait (in /usr/lib64/libtevent.so.0.9.31)
+==00:01:01:29.871 10088==    by 0x8DE8246: ??? (in /usr/lib64/libtevent.so.0.9.31)
+==00:01:01:29.871 10088==    by 0x5291B32: server_loop (server.c:718)
+==00:01:01:29.871 10088==    by 0x11004C: main (nsssrv.c:560)
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3588
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/responder/common/responder_common.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/responder/common/responder_common.c b/src/responder/common/responder_common.c
+index 6b4d2d9e5936c79944b6f883e9fe46fd03ff32f6..e1100ce4b1eaae8bc561246699dc9bacc96133c8 100644
+--- a/src/responder/common/responder_common.c
++++ b/src/responder/common/responder_common.c
+@@ -1815,7 +1815,7 @@ int sized_output_name(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    ret = sss_output_fqname(mem_ctx, name_dom, orig_name,
++    ret = sss_output_fqname(name, name_dom, orig_name,
+                             rctx->override_space, &name_str);
+     if (ret != EOK) {
+         goto done;
+-- 
+2.15.1
+

@@ -1,0 +1,53 @@
+From 91d9cf1d38ffa4de06504c70b1f2af02da169b30 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Tue, 21 Nov 2017 16:12:24 +0100
+Subject: [PATCH 65/79] NSS: Fix covscan warning
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+ Error: NULL_RETURNS (CWE-476): [#def1]
+ sssd-1.16.1/src/responder/nss/nss_protocol.c:162: returned_null: "memchr" returns null (checked 7 out of 8 times).
+ sssd-1.16.1/src/responder/nss/nsssrv_mmap_cache.c:557: example_checked: Example 1: "memchr(t_key, 0, strs_offset + strs_len - name_ptr)" has its value checked in "memchr(t_key, 0, strs_offset + strs_len - name_ptr) == NULL".
+ sssd-1.16.1/src/sss_client/idmap/sss_nss_idmap.c:171: example_assign: Example 2: Assigning: "p" = return value from "memchr(p, 0, buf_len - (p - buf))".
+ sssd-1.16.1/src/sss_client/idmap/sss_nss_idmap.c:172: example_checked: Example 2 (cont.): "p" has its value checked in "p == NULL".
+ sssd-1.16.1/src/sss_client/nss_mc_group.c:157: example_checked: Example 3: "memchr(rec_name, 0, 16UL + data->strs_len - data->name)" has its value checked in "memchr(rec_name, 0, 16UL + data->strs_len - data->name) == NULL".
+ sssd-1.16.1/src/sss_client/nss_mc_initgr.c:139: example_checked: Example 4: "memchr(rec_name, 0, 24UL + data->data_len - data->name)" has its value checked in "memchr(rec_name, 0, 24UL + data->data_len - data->name) == NULL".
+ sssd-1.16.1/src/sss_client/nss_mc_passwd.c:150: example_checked: Example 5: "memchr(rec_name, 0, 16UL + data->strs_len - data->name)" has its value checked in "memchr(rec_name, 0, 16UL + data->strs_len - data->name) == NULL".
+ sssd-1.16.1/src/responder/nss/nss_protocol.c:162: var_assigned: Assigning: "p" = null return value from "memchr".
+ sssd-1.16.1/src/responder/nss/nss_protocol.c:176: dereference: Incrementing a pointer which might be null: "p".
+ #  174|       }
+ #  175|
+ #  176|->     p++;
+ #  177|       if ((p - body) + sizeof(uint32_t) != blen) {
+ #  178|           DEBUG(SSSDBG_CRIT_FAILURE, "Body has unexpected size!\n");
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+---
+ src/responder/nss/nss_protocol.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/responder/nss/nss_protocol.c b/src/responder/nss/nss_protocol.c
+index 2655386498754c46fbb363bdd1f976f9ded6a434..13f6d1541b79bf5494e1560841f027bf98bef72b 100644
+--- a/src/responder/nss/nss_protocol.c
++++ b/src/responder/nss/nss_protocol.c
+@@ -160,6 +160,13 @@ nss_protocol_parse_name_ex(struct cli_ctx *cli_ctx, const char **_rawname,
+     }
+ 
+     p = memchr(body, '\0', blen);
++    /* Although body for sure is null terminated, let's add this check here
++     * so static analyzers are happier. */
++    if (p == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "memchr() returned NULL, body is not null terminated!\n");
++        return EINVAL;
++    }
+ 
+     /* If the body isn't valid UTF-8, fail */
+     if (!sss_utf8_check(body, (p - body))) {
+-- 
+2.15.1
+

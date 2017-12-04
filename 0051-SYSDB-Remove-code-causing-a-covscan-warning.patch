@@ -1,0 +1,127 @@
+From 38bc29c3475421d9e9ce62810739b6b8b10ad7c6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 13 Nov 2017 08:29:53 +0100
+Subject: [PATCH 51/79] SYSDB: Remove code causing a covscan warning
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There's no reason to check for both ret != EOK and sanitized == NULL, as
+the second should never ever happen.
+
+This check is causing a clang warning in our code:
+
+ Defect type: CLANG_WARNING
+ 1. sssd-1.16.0/src/db/sysdb_ops.c:4223:9: warning: Dereference of undefined pointer value
+ #     if (res->count > 1) {
+ #         ^~~~~~~~~~
+ 4. sssd-1.16.0/src/db/sysdb_ops.c:4199:5: note: 'res' declared without an initial value
+ #     struct ldb_result *res;
+ #     ^~~~~~~~~~~~~~~~~~~~~~
+ 7. sssd-1.16.0/src/db/sysdb_ops.c:4202:9: note: Assuming 'sid_str' is non-null
+ #     if (!sid_str) return EINVAL;
+ #         ^~~~~~~~
+ 10. sssd-1.16.0/src/db/sysdb_ops.c:4202:5: note: Taking false branch
+ #     if (!sid_str) return EINVAL;
+ #     ^
+ 13. sssd-1.16.0/src/db/sysdb_ops.c:4205:9: note: Assuming 'tmp_ctx' is non-null
+ #     if (!tmp_ctx) {
+ #         ^~~~~~~~
+ 16. sssd-1.16.0/src/db/sysdb_ops.c:4205:5: note: Taking false branch
+ #     if (!tmp_ctx) {
+ #     ^
+ 19. sssd-1.16.0/src/db/sysdb_ops.c:4209:11: note: Calling 'sysdb_search_object_by_sid'
+ #     ret = sysdb_search_object_by_sid(tmp_ctx, domain, sid_str, NULL, &res);
+ #           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 22. sssd-1.16.0/src/db/sysdb_ops.c:4960:12: note: Calling 'sysdb_search_object_by_str_attr'
+ #     return sysdb_search_object_by_str_attr(mem_ctx, domain, SYSDB_SID_FILTER,
+ #            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 25. sssd-1.16.0/src/db/sysdb_ops.c:4872:5: note: Taking false branch
+ #     if (str == NULL) {
+ #     ^
+ 28. sssd-1.16.0/src/db/sysdb_ops.c:4877:9: note: Assuming 'ret' is equal to 0
+ #     if (ret != EOK || sanitized == NULL) {
+ #         ^~~~~~~~~~
+ 31. sssd-1.16.0/src/db/sysdb_ops.c:4877:9: note: Left side of '||' is false
+ 32. sssd-1.16.0/src/db/sysdb_ops.c:4877:23: note: Assuming 'sanitized' is equal to null
+ #     if (ret != EOK || sanitized == NULL) {
+ #                       ^~~~~~~~~~~~~~~~~
+ 35. sssd-1.16.0/src/db/sysdb_ops.c:4877:5: note: Taking true branch
+ #     if (ret != EOK || sanitized == NULL) {
+ #     ^
+ 38. sssd-1.16.0/src/db/sysdb_ops.c:4878:9: note: Left side of '||' is false
+ #         DEBUG(SSSDBG_OP_FAILURE, "sss_filter_sanitize failed.\n");
+ #         ^
+ 41. sssd-1.16.0/src/util/debug.h:123:9: note: expanded from macro 'DEBUG'
+ #     if (DEBUG_IS_SET(__debug_macro_level)) { \
+ #         ^
+ 44. sssd-1.16.0/src/util/debug.h:135:30: note: expanded from macro 'DEBUG_IS_SET'
+ # #define DEBUG_IS_SET(level) (debug_level & (level) || \
+ #                              ^
+ 47. sssd-1.16.0/src/db/sysdb_ops.c:4878:9: note: Assuming 'debug_level' is not equal to 0
+ #         DEBUG(SSSDBG_OP_FAILURE, "sss_filter_sanitize failed.\n");
+ #         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 50. sssd-1.16.0/src/util/debug.h:123:9: note: expanded from macro 'DEBUG'
+ #     if (DEBUG_IS_SET(__debug_macro_level)) { \
+ #         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 53. sssd-1.16.0/src/util/debug.h:136:30: note: expanded from macro 'DEBUG_IS_SET'
+ #                             (debug_level == SSSDBG_UNRESOLVED && \
+ #                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 56. sssd-1.16.0/src/db/sysdb_ops.c:4878:9: note: Left side of '&&' is false
+ 57. sssd-1.16.0/src/util/debug.h:123:9: note: expanded from macro 'DEBUG'
+ #     if (DEBUG_IS_SET(__debug_macro_level)) { \
+ #         ^
+ 60. sssd-1.16.0/src/util/debug.h:136:63: note: expanded from macro 'DEBUG_IS_SET'
+ #                             (debug_level == SSSDBG_UNRESOLVED && \
+ #                                                               ^
+ 63. sssd-1.16.0/src/db/sysdb_ops.c:4878:9: note: Loop condition is false. Exiting loop
+ 64. sssd-1.16.0/src/util/debug.h:121:35: note: expanded from macro 'DEBUG'
+ # #define DEBUG(level, format, ...) do { \
+ #                                   ^
+ 67. sssd-1.16.0/src/db/sysdb_ops.c:4879:9: note: Control jumps to line 4892
+ #         goto done;
+ #         ^
+ 70. sssd-1.16.0/src/db/sysdb_ops.c:4960:12: note: Returning from 'sysdb_search_object_by_str_attr'
+ #     return sysdb_search_object_by_str_attr(mem_ctx, domain, SYSDB_SID_FILTER,
+ #            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 73. sssd-1.16.0/src/db/sysdb_ops.c:4209:11: note: Returning from 'sysdb_search_object_by_sid'
+ #     ret = sysdb_search_object_by_sid(tmp_ctx, domain, sid_str, NULL, &res);
+ #           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 76. sssd-1.16.0/src/db/sysdb_ops.c:4211:5: note: Taking false branch
+ #     if (ret == ENOENT) {
+ #     ^
+ 79. sssd-1.16.0/src/db/sysdb_ops.c:4217:12: note: Taking false branch
+ #     } else if (ret != EOK) {
+ #            ^
+ 82. sssd-1.16.0/src/db/sysdb_ops.c:4223:9: note: Dereference of undefined pointer value
+ #     if (res->count > 1) {
+ #         ^~~~~~~~~~
+ #  4221|       }
+ #  4222|
+ #  4223|->     if (res->count > 1) {
+ #  4224|           DEBUG(SSSDBG_FATAL_FAILURE, "getbysid call returned more than one " \
+ #  4225|                                        "result !?!\n");
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/db/sysdb_ops.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/db/sysdb_ops.c b/src/db/sysdb_ops.c
+index 2f8e36c6c9a2c2cefe4af5fb78957763304d989a..635c7db51f516e2217c93016409499e49289004c 100644
+--- a/src/db/sysdb_ops.c
++++ b/src/db/sysdb_ops.c
+@@ -4874,7 +4874,7 @@ static errno_t sysdb_search_object_by_str_attr(TALLOC_CTX *mem_ctx,
+     }
+ 
+     ret = sss_filter_sanitize(NULL, str, &sanitized);
+-    if (ret != EOK || sanitized == NULL) {
++    if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "sss_filter_sanitize failed.\n");
+         goto done;
+     }
+-- 
+2.15.1
+

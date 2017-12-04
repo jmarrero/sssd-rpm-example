@@ -1,0 +1,55 @@
+From 6010476f08fb52bfcea9c2b10461b0d53ce0860c Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 3 Nov 2017 11:43:18 +0100
+Subject: [PATCH 24/79] KCM: Fix restart during/after upgrade
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Oct 02 12:26:57 host systemd[1]: Closed SSSD Kerberos Cache Manager responder socket.
+Oct 02 12:26:57 host systemd[1]: Stopping SSSD Kerberos Cache Manager responder socket.
+Oct 02 12:26:57 host systemd[1]: sssd-kcm.socket: Socket service sssd-kcm.service already active, refusing.
+Oct 02 12:26:57 host systemd[1]: Failed to listen on SSSD Kerberos Cache Manager responder socket.
+Oct 02 12:26:57 host systemd[1]: Stopping SSSD Kerberos Cache Manager...
+Oct 02 12:26:57 host sssd[kcm][21492]: Shutting down
+Oct 02 12:26:57 host systemd[1]: Stopped SSSD Kerberos Cache Manager.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3529
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/sysv/systemd/sssd-kcm.service.in     | 2 ++
+ src/sysv/systemd/sssd-secrets.service.in | 2 ++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/src/sysv/systemd/sssd-kcm.service.in b/src/sysv/systemd/sssd-kcm.service.in
+index 92306f97ec73a775739bfdb4454df14956e5e133..8d689bfd7e7ea720c97b5df2571289fd777e1547 100644
+--- a/src/sysv/systemd/sssd-kcm.service.in
++++ b/src/sysv/systemd/sssd-kcm.service.in
+@@ -1,6 +1,8 @@
+ [Unit]
+ Description=SSSD Kerberos Cache Manager
+ Documentation=man:sssd-kcm(5)
++Requires=sssd-kcm.socket
++After=sssd-kcm.socket
+ 
+ [Install]
+ Also=sssd-kcm.socket
+diff --git a/src/sysv/systemd/sssd-secrets.service.in b/src/sysv/systemd/sssd-secrets.service.in
+index a7b41e0b16a5fa882546b41047e616fd2140329f..a9756acf8a3c71e861b443259c0713380ac005f3 100644
+--- a/src/sysv/systemd/sssd-secrets.service.in
++++ b/src/sysv/systemd/sssd-secrets.service.in
+@@ -1,6 +1,8 @@
+ [Unit]
+ Description=SSSD Secrets Service responder
+ Documentation=man:sssd-secrets(5)
++Requires=sssd-secrets.socket
++After=sssd-secrets.socket
+ 
+ [Install]
+ Also=sssd-secrets.socket
+-- 
+2.15.1
+

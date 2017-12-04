@@ -1,0 +1,187 @@
+From 209caaad9d545aeb601f64854a2ffb978b77c4b1 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 27 Nov 2017 13:45:14 +0100
+Subject: [PATCH 66/79] krb5: show error message for krb5_init_context()
+ failures
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If there are typos in /etc/krb5.conf (or one of the included config
+snippets) krb5_init_context(), the initial call always needed to do any
+other operation with libkrb5, fails because /etc/krb5.conf cannot be
+parsed.
+
+Currently the related debug/syslog messages might be misleading, e.g.
+failed to read keytab. This is because SSSD does not use a global krb5
+context but creates a fresh one for every new request or operation (to
+always use the latest settings from /etc/krb5.conf) and typically there
+is an error message indicating that the related operation failed but not
+giving more details.
+
+Since krb5_init_context() is fundamental for Kerberos support this patch
+tries to add as much details as libkrb5 provides in the logs if the call
+fails.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3586
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+Reviewed-by: Robbie Harwood <rharwood@redhat.com>
+---
+ src/providers/krb5/krb5_ccache.c |  6 +++---
+ src/providers/krb5/krb5_common.c |  2 +-
+ src/providers/ldap/ldap_child.c  |  2 +-
+ src/providers/ldap/ldap_common.c |  2 +-
+ src/responder/kcm/kcm.c          |  3 ++-
+ src/util/sss_krb5.c              | 25 ++++++++++++++++++++++---
+ src/util/sss_krb5.h              |  2 ++
+ 7 files changed, 32 insertions(+), 10 deletions(-)
+
+diff --git a/src/providers/krb5/krb5_ccache.c b/src/providers/krb5/krb5_ccache.c
+index f9bb25efd4ca3257845c3b157667d21d24299f4a..2e28276b72b6d5961de33c0ceb61774074a92d11 100644
+--- a/src/providers/krb5/krb5_ccache.c
++++ b/src/providers/krb5/krb5_ccache.c
+@@ -299,7 +299,7 @@ static errno_t sss_open_ccache_as_user(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    kerr = krb5_init_context(&cc->context);
++    kerr = sss_krb5_init_context(&cc->context);
+     if (kerr) {
+         ret = EIO;
+         goto done;
+@@ -565,9 +565,9 @@ errno_t get_ccache_file_data(const char *ccache_file, const char *client_name,
+     const char *realm_name;
+     int realm_length;
+ 
+-    kerr = krb5_init_context(&ctx);
++    kerr = sss_krb5_init_context(&ctx);
+     if (kerr != 0) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "krb5_init_context failed.\n");
++        DEBUG(SSSDBG_CRIT_FAILURE, "sss_krb5_init_context failed.\n");
+         goto done;
+     }
+ 
+diff --git a/src/providers/krb5/krb5_common.c b/src/providers/krb5/krb5_common.c
+index 0b32da94dd8320d51708e2b7e827b94c472642a6..520e7591ce1b37b4a8dea357b6dd0ec7afd76f58 100644
+--- a/src/providers/krb5/krb5_common.c
++++ b/src/providers/krb5/krb5_common.c
+@@ -106,7 +106,7 @@ static errno_t sss_get_system_ccname_template(TALLOC_CTX *mem_ctx,
+ 
+     *ccname = NULL;
+ 
+-    ret = krb5_init_context(&ctx);
++    ret = sss_krb5_init_context(&ctx);
+     if (ret) return ret;
+ 
+     ret = krb5_get_profile(ctx, &p);
+diff --git a/src/providers/ldap/ldap_child.c b/src/providers/ldap/ldap_child.c
+index c0618d6d8828f102c32cf56731995e2b370590e7..4558fd7c42be03c4472dbf3092ce8044e8ae89d9 100644
+--- a/src/providers/ldap/ldap_child.c
++++ b/src/providers/ldap/ldap_child.c
+@@ -574,7 +574,7 @@ static krb5_error_code privileged_krb5_setup(struct input_buffer *ibuf)
+     krb5_error_code kerr;
+     char *keytab_name;
+ 
+-    kerr = krb5_init_context(&ibuf->context);
++    kerr = sss_krb5_init_context(&ibuf->context);
+     if (kerr != 0) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to init kerberos context\n");
+         return kerr;
+diff --git a/src/providers/ldap/ldap_common.c b/src/providers/ldap/ldap_common.c
+index 0597e91f7fade47aeb34565597c730ac406e0cfc..4ec36584ad5acc52cf442b015caec80a6a8936da 100644
+--- a/src/providers/ldap/ldap_common.c
++++ b/src/providers/ldap/ldap_common.c
+@@ -364,7 +364,7 @@ sdap_gssapi_get_default_realm(TALLOC_CTX *mem_ctx)
+     krb5_error_code krberr;
+     krb5_context context = NULL;
+ 
+-    krberr = krb5_init_context(&context);
++    krberr = sss_krb5_init_context(&context);
+     if (krberr) {
+         DEBUG(SSSDBG_OP_FAILURE, "Failed to init kerberos context\n");
+         goto done;
+diff --git a/src/responder/kcm/kcm.c b/src/responder/kcm/kcm.c
+index 358fcc18165dec7b41a7389a3ef22660ac04b4a8..0fc09376888544570ca1bcf8c1ff1ba1d72d5906 100644
+--- a/src/responder/kcm/kcm.c
++++ b/src/responder/kcm/kcm.c
+@@ -28,6 +28,7 @@
+ #include "responder/kcm/kcmsrv_pvt.h"
+ #include "responder/common/responder.h"
+ #include "util/util.h"
++#include "util/sss_krb5.h"
+ 
+ #define DEFAULT_KCM_FD_LIMIT 2048
+ 
+@@ -183,7 +184,7 @@ static struct kcm_resp_ctx *kcm_data_setup(TALLOC_CTX *mem_ctx,
+         return NULL;
+     }
+ 
+-    kret = krb5_init_context(&kcm_data->k5c);
++    kret = sss_krb5_init_context(&kcm_data->k5c);
+     if (kret != EOK) {
+         talloc_free(kcm_data);
+         return NULL;
+diff --git a/src/util/sss_krb5.c b/src/util/sss_krb5.c
+index a702a8b57c55bdb4215edf73731ddeaba156a84f..12660b0dd2e9170108afd54492e7ce30415741cb 100644
+--- a/src/util/sss_krb5.c
++++ b/src/util/sss_krb5.c
+@@ -113,7 +113,7 @@ errno_t select_principal_from_keytab(TALLOC_CTX *mem_ctx,
+         return ENOMEM;
+     }
+ 
+-    kerr = krb5_init_context(&krb_ctx);
++    kerr = sss_krb5_init_context(&krb_ctx);
+     if (kerr) {
+         DEBUG(SSSDBG_OP_FAILURE, "Failed to init kerberos context\n");
+         ret = EFAULT;
+@@ -1096,9 +1096,9 @@ bool sss_krb5_realm_has_proxy(const char *realm)
+         return false;
+     }
+ 
+-    kerr = krb5_init_context(&context);
++    kerr = sss_krb5_init_context(&context);
+     if (kerr != 0) {
+-        DEBUG(SSSDBG_OP_FAILURE, "krb5_init_context failed.\n");
++        DEBUG(SSSDBG_OP_FAILURE, "sss_krb5_init_context failed.\n");
+         return false;
+     }
+ 
+@@ -1330,3 +1330,22 @@ krb5_error_code sss_krb5_marshal_princ(krb5_principal princ,
+     }
+     return EOK;
+ }
++
++krb5_error_code sss_krb5_init_context(krb5_context *context)
++{
++    krb5_error_code kerr;
++    const char *msg;
++
++    kerr = krb5_init_context(context);
++    if (kerr != 0) {
++        /* It is safe to call (sss_)krb5_get_error_message() with NULL as first
++         * argument. */
++        msg = sss_krb5_get_error_message(NULL, kerr);
++        DEBUG(SSSDBG_FATAL_FAILURE,
++              "Failed to init kerberos context [%s]\n", msg);
++        sss_log(SSS_LOG_CRIT, "Failed to init kerberos context [%s]\n", msg);
++        sss_krb5_free_error_message(NULL, msg);
++    }
++
++    return kerr;
++}
+diff --git a/src/util/sss_krb5.h b/src/util/sss_krb5.h
+index 0d9043be98749b1a21a1b74c68f07298fa27f230..423951443c8c512211b1e894c41f1c8891be479f 100644
+--- a/src/util/sss_krb5.h
++++ b/src/util/sss_krb5.h
+@@ -195,4 +195,6 @@ krb5_error_code sss_krb5_unmarshal_princ(TALLOC_CTX *mem_ctx,
+                                          struct sss_iobuf *iobuf,
+                                          krb5_principal *_princ);
+ 
++krb5_error_code sss_krb5_init_context(krb5_context *context);
++
+ #endif /* __SSS_KRB5_H__ */
+-- 
+2.15.1
+

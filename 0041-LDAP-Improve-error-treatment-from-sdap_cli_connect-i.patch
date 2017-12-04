@@ -1,0 +1,57 @@
+From 1e50148c7eadeff96b96811ede747399628a06c6 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Tue, 7 Nov 2017 23:34:42 +0100
+Subject: [PATCH 41/79] LDAP: Improve error treatment from sdap_cli_connect()
+ in ldap_auth
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Because we weren't treating the errors coming from
+sdap_cli_connect_recv() properly we ended up introducing a regression in
+the commit add72860c7, related to offline authentication.
+
+From now on, let's properly treat errors coming from auth_connect_send(),
+which were treated before by going offline when be_resolve_server_recv()
+failed, and propagate ETIMEDOUT to the request, thus going offline and
+allowing offline authentication on those cases.
+
+Related:
+https://pagure.io/SSSD/sssd/issue/3451
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/providers/ldap/ldap_auth.c | 16 ++++++++++++++--
+ 1 file changed, 14 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ldap/ldap_auth.c b/src/providers/ldap/ldap_auth.c
+index a3b1480aae4272d2e10f105a1eaf3a5816c3487c..2e0e2cfd6f8af2bf0c9ad15bd956a55a34777a3c 100644
+--- a/src/providers/ldap/ldap_auth.c
++++ b/src/providers/ldap/ldap_auth.c
+@@ -716,8 +716,20 @@ static void auth_connect_done(struct tevent_req *subreq)
+     ret = sdap_cli_connect_recv(subreq, state, NULL, &state->sh, NULL);
+     talloc_zfree(subreq);
+     if (ret != EOK) {
+-        if (auth_connect_send(req) == NULL) {
+-            tevent_req_error(req, ENOMEM);
++        /* As sdap_cli_connect_recv() returns EIO in case all the servers are
++         * down and we have to go offline, let's treat it accordingly here and
++         * allow the PAM responder to with to offline authentication.
++         *
++         * Unfortunately, there's not much pattern within our code and the way
++         * to indicate we're going down in this part of the code is returning
++         * an ETIMEDOUT.
++         */
++        if (ret == EIO) {
++            tevent_req_error(req, ETIMEDOUT);
++        } else {
++            if (auth_connect_send(req) == NULL) {
++                tevent_req_error(req, ENOMEM);
++            }
+         }
+         return;
+     }
+-- 
+2.15.1
+

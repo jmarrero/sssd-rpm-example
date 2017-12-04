@@ -1,0 +1,49 @@
+From 7130dad936c55ce0d3d895e9f216c3bc9fbd371b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 2 Nov 2017 14:58:05 +0100
+Subject: [PATCH 57/79] dp: use void * to express empty output argument list
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Since we cannot use plain void type is function definition.
+
+Related:
+https://pagure.io/SSSD/sssd/issue/2840
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/providers/data_provider/dp_private.h       | 2 +-
+ src/providers/data_provider/dp_request_reply.c | 2 +-
+ 2 files changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/data_provider/dp_private.h b/src/providers/data_provider/dp_private.h
+index 2e71a373fdc8886fccb23bfb8283dc5bc341b1b0..028070f7f1866854c145a148e44c2cb108d2fc58 100644
+--- a/src/providers/data_provider/dp_private.h
++++ b/src/providers/data_provider/dp_private.h
+@@ -136,7 +136,7 @@ typedef void (*dp_req_reply_fn)(const char *req_name,
+ 
+ void dp_req_reply_default(const char *req_name,
+                           struct sbus_request *sbus_req,
+-                          void *data);
++                          void **data);
+ 
+ /* Data provider request table. */
+ 
+diff --git a/src/providers/data_provider/dp_request_reply.c b/src/providers/data_provider/dp_request_reply.c
+index 27d9654bad76a099b004846463f035bf2e6d1243..34440fda7f28f0026d63af1af9958dcea3c6aaec 100644
+--- a/src/providers/data_provider/dp_request_reply.c
++++ b/src/providers/data_provider/dp_request_reply.c
+@@ -31,7 +31,7 @@
+ 
+ void dp_req_reply_default(const char *req_name,
+                           struct sbus_request *sbus_req,
+-                          void *data)
++                          void **data)
+ {
+     DP_REQ_DEBUG(SSSDBG_TRACE_FUNC, req_name, "Replying with empty message");
+ 
+-- 
+2.15.1
+

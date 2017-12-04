@@ -1,0 +1,556 @@
+From aeb34cfcb9ded4cd7d272220a3d3802be89b7dd8 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Ren=C3=A9=20Genz?= <liebundartig@freenet.de>
+Date: Sun, 22 Oct 2017 22:24:27 +0200
+Subject: [PATCH 02/79] Fix minor spelling mistakes
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Merges: https://pagure.io/SSSD/sssd/pull-request/3556
+
+Reviewed-by: Lukáš Slebodník <lslebodn@redhat.com>
+---
+ contrib/sssd.spec.in                           |  6 +++---
+ src/db/sysdb_private.h                         |  2 +-
+ src/db/sysdb_views.c                           |  4 ++--
+ src/examples/sssd-example.conf                 |  2 +-
+ src/lib/idmap/sss_idmap.doxy.in                |  2 +-
+ src/man/sssd-secrets.5.xml                     |  2 +-
+ src/providers/ad/ad_gpo.c                      |  4 ++--
+ src/providers/be_dyndns.c                      |  2 +-
+ src/providers/data_provider/dp_request.c       |  2 +-
+ src/providers/krb5/krb5_child.c                |  2 +-
+ src/providers/ldap/sdap_async_sudo.c           |  2 +-
+ src/responder/kcm/kcmsrv_ccache_json.c         |  2 +-
+ src/responder/kcm/kcmsrv_op_queue.c            |  4 ++--
+ src/sbus/sssd_dbus_connection.c                |  4 ++--
+ src/shared/safealign.h                         |  4 ++--
+ src/sss_client/autofs/sss_autofs.c             |  4 ++--
+ src/sss_client/idmap/sss_nss_idmap.doxy.in     |  2 +-
+ src/sss_client/libwbclient/wbc_pwd_sssd.c      |  2 +-
+ src/sss_client/sudo/sss_sudo.h                 | 10 +++++-----
+ src/tests/cmocka/common_mock_resp_dp.c         |  2 +-
+ src/tests/cmocka/test_sbus_opath.c             |  2 +-
+ src/tools/common/sss_process.c                 |  2 +-
+ src/tools/common/sss_process.h                 |  2 +-
+ src/tools/sssctl/sssctl.c                      |  4 ++--
+ src/tools/sssctl/sssctl_data.c                 |  2 +-
+ src/util/crypto/libcrypto/crypto_sha512crypt.c |  2 +-
+ src/util/crypto/nss/nss_sha512crypt.c          |  2 +-
+ src/util/server.c                              |  6 +++---
+ src/util/sss_ini.h                             |  2 +-
+ src/util/tev_curl.c                            |  2 +-
+ src/util/util_lock.c                           |  2 +-
+ 31 files changed, 46 insertions(+), 46 deletions(-)
+
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index e76b51833d5dfa3207d28add4af1016c00f25e1f..d6ab73e60863316cbf239d34242959fdfe8d4b1b 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -241,7 +241,7 @@ the system and a pluggable backend system to connect to multiple different
+ account sources. It is also the basis to provide client auditing and policy
+ services for projects like FreeIPA.
+ 
+-The sssd subpackage is a meta-package that contains the deamon as well as all
++The sssd subpackage is a meta-package that contains the daemon as well as all
+ the existing back ends.
+ 
+ %package common
+@@ -496,7 +496,7 @@ Requires(post): /sbin/ldconfig
+ Requires(postun): /sbin/ldconfig
+ 
+ %description -n libsss_idmap
+-Utility library to convert SIDs to Unix uids and gids
++Utility library to convert SIDs to UNIX UIDs and GIDs
+ 
+ %package -n libsss_idmap-devel
+ Summary: FreeIPA Idmap library
+@@ -505,7 +505,7 @@ License: LGPLv3+
+ Requires: libsss_idmap = %{version}-%{release}
+ 
+ %description -n libsss_idmap-devel
+-Utility library to SIDs to Unix uids and gids
++Utility library to SIDs to UNIX UIDs and GIDs
+ 
+ %package -n libipa_hbac
+ Summary: FreeIPA HBAC Evaluator library
+diff --git a/src/db/sysdb_private.h b/src/db/sysdb_private.h
+index dbd75615bc212e73c4338a76dceaa68a5889ed1d..7c3347fec99f60160804a6eed178baedafb81d33 100644
+--- a/src/db/sysdb_private.h
++++ b/src/db/sysdb_private.h
+@@ -185,7 +185,7 @@ int sysdb_delete_ulong(struct ldb_message *msg,
+ 
+ /* The utility function to create a subdomain sss_domain_info object is handy
+  * for unit tests, so it should be available in a header, but not a public util
+- * one, because the only interface for the deamon itself should be adding
++ * one, because the only interface for the daemon itself should be adding
+  * the sysdb domain object and calling sysdb_update_subdomains()
+  */
+ struct sss_domain_info *new_subdomain(TALLOC_CTX *mem_ctx,
+diff --git a/src/db/sysdb_views.c b/src/db/sysdb_views.c
+index afc7852ecf402ef144beca9c1b94fbe3cc4bbb6a..f640c813acf4deafe98eb15708d3a94790502dcb 100644
+--- a/src/db/sysdb_views.c
++++ b/src/db/sysdb_views.c
+@@ -722,7 +722,7 @@ static errno_t safe_original_attributes(struct sss_domain_info *domain,
+         goto done;
+     }
+ 
+-    /* Safe orginal values in attributes prefixed by OriginalAD. */
++    /* Safe original values in attributes prefixed by OriginalAD. */
+     for (c = 0; allowed_attrs[c] != NULL; c++) {
+         el = ldb_msg_find_element(orig_obj->msgs[0], allowed_attrs[c]);
+         if (el != NULL) {
+@@ -753,7 +753,7 @@ static errno_t safe_original_attributes(struct sss_domain_info *domain,
+     el = ldb_msg_find_element(orig_obj->msgs[0], SYSDB_NAME_ALIAS);
+     if (el != NULL) {
+         for (c = 0; c < el->num_values; c++) {
+-            /* To avoid issue with ldb_modify if e.g. the orginal and the
++            /* To avoid issue with ldb_modify if e.g. the original and the
+              * override name are the same, we use the *_safe version here. */
+             ret = sysdb_attrs_add_val_safe(attrs, SYSDB_NAME_ALIAS,
+                                            &el->values[c]);
+diff --git a/src/examples/sssd-example.conf b/src/examples/sssd-example.conf
+index 59df41673586d5c7d2602cc5290c40ec5bd64986..34b2b22c5f619f49bb9aa1edf04849df5e40c787 100644
+--- a/src/examples/sssd-example.conf
++++ b/src/examples/sssd-example.conf
+@@ -32,7 +32,7 @@ services = nss, pam
+ # An example Active Directory domain. Please note that this configuration
+ # works for AD 2003R2 and AD 2008, because they use pretty much RFC2307bis
+ # compliant attribute names. To support UNIX clients with AD 2003 or older,
+-# you must install Microsoft Services For Unix and map LDAP attributes onto
++# you must install Microsoft Services For UNIX and map LDAP attributes onto
+ # msSFU30* attribute names.
+ ; [domain/AD]
+ ; id_provider = ldap
+diff --git a/src/lib/idmap/sss_idmap.doxy.in b/src/lib/idmap/sss_idmap.doxy.in
+index 991028f65c251e2bc0086487817271b527fa439b..833498b189a038a06414ff623179ef69d24affb7 100644
+--- a/src/lib/idmap/sss_idmap.doxy.in
++++ b/src/lib/idmap/sss_idmap.doxy.in
+@@ -719,7 +719,7 @@ RECURSIVE              = NO
+ EXCLUDE                =
+ 
+ # The EXCLUDE_SYMLINKS tag can be used to select whether or not files or
+-# directories that are symbolic links (a Unix file system feature) are excluded
++# directories that are symbolic links (a UNIX file system feature) are excluded
+ # from the input.
+ 
+ EXCLUDE_SYMLINKS       = NO
+diff --git a/src/man/sssd-secrets.5.xml b/src/man/sssd-secrets.5.xml
+index 08ab371c64eb49e4f153bb2183c07681b1050bb0..a738fbfffa1bdb7038e70a4a49651eb6a9286b1c 100644
+--- a/src/man/sssd-secrets.5.xml
++++ b/src/man/sssd-secrets.5.xml
+@@ -46,7 +46,7 @@
+              project was born to deal with this problem in cloud like
+              environments, but we found the idea compelling even at a
+              single system level. As a security service, SSSD is ideal to
+-             host this capability while offering the same API via a Unix
++             host this capability while offering the same API via a UNIX
+              Socket. This will make it possible to use local calls and have
+              them transparently routed to a local or a remote key management
+              store like IPA Vault for storage, escrow and recovery.
+diff --git a/src/providers/ad/ad_gpo.c b/src/providers/ad/ad_gpo.c
+index a5237f6fad7fc79fbcbafc8aac28cff15677009f..d9ea311417fc5d57850aa9a6c3736964844675bd 100644
+--- a/src/providers/ad/ad_gpo.c
++++ b/src/providers/ad/ad_gpo.c
+@@ -680,7 +680,7 @@ ad_gpo_ace_includes_client_sid(const char *user_sid,
+  * named "ApplyGroupPolicy" (AGP) is allowed, by comparing the specified
+  * user_sid and group_sids against the specified access control entry (ACE).
+  * This function returns ALLOWED, DENIED, or NEUTRAL depending on whether
+- * the ACE explictly allows, explicitly denies, or does neither.
++ * the ACE explicitly allows, explicitly denies, or does neither.
+  *
+  * Note that the 'M' abbreviation used in the evaluation algorithm stands for
+  * "access_mask", which represents the set of access rights associated with an
+@@ -3860,7 +3860,7 @@ ad_gpo_sd_process_attrs(struct tevent_req *req,
+     ret = sysdb_attrs_get_int32_t(result, AD_AT_FUNC_VERSION,
+                                   &gp_gpo->gpo_func_version);
+     if (ret == ENOENT) {
+-        /* If this attrbute is missing we can skip the GPO. It will
++        /* If this attribute is missing we can skip the GPO. It will
+          * be filtered out according to MS-GPOL:
+          * https://msdn.microsoft.com/en-us/library/cc232538.aspx */
+         DEBUG(SSSDBG_TRACE_ALL, "GPO with GUID %s is missing attribute "
+diff --git a/src/providers/be_dyndns.c b/src/providers/be_dyndns.c
+index ee264156824d7c5ab27c919ae0c56bbd6c0bc54f..b968e67b3e3e6a4f2937dce502c2c9b4ad136a4b 100644
+--- a/src/providers/be_dyndns.c
++++ b/src/providers/be_dyndns.c
+@@ -706,7 +706,7 @@ nsupdate_get_addrs_done(struct tevent_req *subreq)
+         return;
+     }
+ 
+-    /* The second address matched either immediatelly or after a retry.
++    /* The second address matched either immediately or after a retry.
+      * No need to retry again. */
+     ret = EOK;
+ 
+diff --git a/src/providers/data_provider/dp_request.c b/src/providers/data_provider/dp_request.c
+index a6bc020e0649760c46637d6f90569248792f7f04..295758a765bfdedd539d44f86a37efae0846763f 100644
+--- a/src/providers/data_provider/dp_request.c
++++ b/src/providers/data_provider/dp_request.c
+@@ -412,7 +412,7 @@ static void dp_terminate_request(struct dp_req *dp_req)
+ {
+     if (dp_req->handler_req == NULL) {
+         /* This may occur when the handler already finished but the caller
+-         * of dp request did not yet recieved data/free dp_req. We just
++         * of dp request did not yet received data/free dp_req. We just
+          * return here. */
+         return;
+     }
+diff --git a/src/providers/krb5/krb5_child.c b/src/providers/krb5/krb5_child.c
+index 888cc5d6f5c554901cc46d4315844d7bbbe582b8..b8ee497728b4b70fae89e528172e9d5bd42239c0 100644
+--- a/src/providers/krb5/krb5_child.c
++++ b/src/providers/krb5/krb5_child.c
+@@ -1612,7 +1612,7 @@ static krb5_error_code get_and_save_tgt(struct krb5_req *kr,
+         goto done;
+     }
+ 
+-    /* Successfull authentication! Check if ccache contains the
++    /* Successful authentication! Check if ccache contains the
+      * right principal...
+      */
+     kerr = sss_krb5_check_ccache_princ(kr->ctx, kr->ccname, kr->creds->client);
+diff --git a/src/providers/ldap/sdap_async_sudo.c b/src/providers/ldap/sdap_async_sudo.c
+index 3c69837fda313b2645c3a8497252670312f600ea..f33d5b5fa86dc1806695482d627bd71a2b040d6e 100644
+--- a/src/providers/ldap/sdap_async_sudo.c
++++ b/src/providers/ldap/sdap_async_sudo.c
+@@ -616,7 +616,7 @@ static void sdap_sudo_refresh_done(struct tevent_req *subreq)
+     }
+     in_transaction = false;
+ 
+-    DEBUG(SSSDBG_TRACE_FUNC, "Sudoers is successfuly stored in cache\n");
++    DEBUG(SSSDBG_TRACE_FUNC, "Sudoers is successfully stored in cache\n");
+ 
+     /* remember new usn */
+     ret = sysdb_get_highest_usn(state, rules, rules_count, &usn);
+diff --git a/src/responder/kcm/kcmsrv_ccache_json.c b/src/responder/kcm/kcmsrv_ccache_json.c
+index f1cca9880d128d05ad1edfc5c3b2f709d1a67d48..33cb51621f26a11051e2fac4c5d7c959b30d9f00 100644
+--- a/src/responder/kcm/kcmsrv_ccache_json.c
++++ b/src/responder/kcm/kcmsrv_ccache_json.c
+@@ -210,7 +210,7 @@ bool sec_key_match_uuid(const char *sec_key,
+ /*
+  * Creates an array of principal elements that will be used later
+  * in the form of:
+- *          "componenets": [ "elem1", "elem2", ...]
++ *          "components": [ "elem1", "elem2", ...]
+  */
+ static json_t *princ_data_to_json(TALLOC_CTX *mem_ctx,
+                                   krb5_principal princ)
+diff --git a/src/responder/kcm/kcmsrv_op_queue.c b/src/responder/kcm/kcmsrv_op_queue.c
+index 55c8b65d94f70979fe56fcc4d8747547a9cc9d33..ee1aa47ab629022bb726c4d5deb1eb1456124df1 100644
+--- a/src/responder/kcm/kcmsrv_op_queue.c
++++ b/src/responder/kcm/kcmsrv_op_queue.c
+@@ -179,7 +179,7 @@ static struct kcm_ops_queue *kcm_op_queue_get(struct kcm_ops_queue_ctx *qctx,
+     case HASH_ERROR_KEY_NOT_FOUND:
+         /* No request for this UID yet. Enqueue this request in case
+          * another one comes in and return EOK to run the current request
+-         * immediatelly
++         * immediately
+          */
+         DEBUG(SSSDBG_TRACE_LIBS, "No existing queue for this ID\n");
+ 
+@@ -220,7 +220,7 @@ static errno_t kcm_op_queue_add_req(struct kcm_ops_queue *kq,
+  * Enqueue a request.
+  *
+  * If the request queue /for the given ID/ is empty, that is, if this
+- * request is the first one in the queue, run the request immediatelly.
++ * request is the first one in the queue, run the request immediately.
+  *
+  * Otherwise just add it to the queue and wait until the previous request
+  * finishes and only at that point mark the current request as done, which
+diff --git a/src/sbus/sssd_dbus_connection.c b/src/sbus/sssd_dbus_connection.c
+index de134f2f21bfb9697fcc8a42622817bc50b54f2a..bdd4a247a670f1928573a1bd18dc8e585b997b7d 100644
+--- a/src/sbus/sssd_dbus_connection.c
++++ b/src/sbus/sssd_dbus_connection.c
+@@ -179,7 +179,7 @@ int sbus_init_connection(TALLOC_CTX *ctx,
+ 
+     conn->incoming_signals = sbus_incoming_signal_hash_init(conn);
+     if (conn->incoming_signals == NULL) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot create incoming singals "
++        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot create incoming signals "
+               "hash table\n");
+         talloc_free(conn);
+         return EIO;
+@@ -327,7 +327,7 @@ static int connection_destructor(void *ctx)
+ 
+ /*
+  * sbus_get_connection
+- * Utility function to retreive the DBusConnection object
++ * Utility function to retrieve the DBusConnection object
+  * from a sbus_connection
+  */
+ DBusConnection *sbus_get_connection(struct sbus_connection *conn)
+diff --git a/src/shared/safealign.h b/src/shared/safealign.h
+index 2316ed14245c4469171f9eb4a42e70fc6b3fd8a8..b00c37f5b98bd4bf7ff6cea8e1208d80c77f0228 100644
+--- a/src/shared/safealign.h
++++ b/src/shared/safealign.h
+@@ -98,8 +98,8 @@ safealign_memcpy(void *dest, const void *src, size_t n, size_t *counter)
+     SAFEALIGN_SETMEM_VALUE(dest, value, uint16_t, pctr)
+ 
+ /* These macros are the same as their equivalents without _CHECK suffix,
+- * but additionally make the caller return EINVAL immediatelly if *pctr
+- * would excceed len. */
++ * but additionally make the caller return EINVAL immediately if *pctr
++ * would exceed len. */
+ #define SAFEALIGN_COPY_UINT32_CHECK(dest, src, len, pctr) do { \
+     if ((*(pctr) + sizeof(uint32_t)) > (len) || \
+         SIZE_T_OVERFLOW(*(pctr), sizeof(uint32_t))) { return EINVAL; } \
+diff --git a/src/sss_client/autofs/sss_autofs.c b/src/sss_client/autofs/sss_autofs.c
+index 02f91ab2b3d29a189e949f6a8d645ea4ccd7f6e3..482ff2c400b10829ccb6d6a921c8c2e15c7fcdd2 100644
+--- a/src/sss_client/autofs/sss_autofs.c
++++ b/src/sss_client/autofs/sss_autofs.c
+@@ -30,7 +30,7 @@
+ #define MAX_AUTOMNTMAPNAME_LEN  NAME_MAX
+ #define MAX_AUTOMNTKEYNAME_LEN  PATH_MAX
+ 
+-/* How many entries shall _sss_getautomntent_r retreive at once */
++/* How many entries shall _sss_getautomntent_r retrieve at once */
+ #define GETAUTOMNTENT_MAX_ENTRIES   512
+ 
+ struct automtent {
+@@ -287,7 +287,7 @@ _sss_getautomntent_r(char **key, char **value, void *context)
+     data_len = sizeof(uint32_t) +            /* mapname len */
+                name_len + 1 +                /* mapname\0   */
+                sizeof(uint32_t) +            /* index into the map */
+-               sizeof(uint32_t);             /* num entries to retreive */
++               sizeof(uint32_t);             /* num entries to retrieve */
+ 
+     data = malloc(data_len);
+     if (!data) {
+diff --git a/src/sss_client/idmap/sss_nss_idmap.doxy.in b/src/sss_client/idmap/sss_nss_idmap.doxy.in
+index d75237622507d2a43ef382815544b8339054f474..f6c18ba1f0d368e989ce0d18a500b6523622b9c1 100644
+--- a/src/sss_client/idmap/sss_nss_idmap.doxy.in
++++ b/src/sss_client/idmap/sss_nss_idmap.doxy.in
+@@ -616,7 +616,7 @@ RECURSIVE              = NO
+ EXCLUDE                =
+ 
+ # The EXCLUDE_SYMLINKS tag can be used select whether or not files or
+-# directories that are symbolic links (a Unix filesystem feature) are excluded
++# directories that are symbolic links (a UNIX filesystem feature) are excluded
+ # from the input.
+ 
+ EXCLUDE_SYMLINKS       = NO
+diff --git a/src/sss_client/libwbclient/wbc_pwd_sssd.c b/src/sss_client/libwbclient/wbc_pwd_sssd.c
+index 08c3b86372c86f228aeeb584068f82bd97cfe0fe..cacad9d3230c341ae478a4e4e41864ecdc4209b3 100644
+--- a/src/sss_client/libwbclient/wbc_pwd_sssd.c
++++ b/src/sss_client/libwbclient/wbc_pwd_sssd.c
+@@ -606,7 +606,7 @@ wbcErr wbcGetgrlist(struct group **grp)
+     WBC_SSSD_NOT_IMPLEMENTED;
+ }
+ 
+-/* Return the unix group array belonging to the given user */
++/* Return the Unix group array belonging to the given user */
+ wbcErr wbcGetGroups(const char *account,
+             uint32_t *num_groups,
+             gid_t **_groups)
+diff --git a/src/sss_client/sudo/sss_sudo.h b/src/sss_client/sudo/sss_sudo.h
+index 1a275cfafbb0476b163599854cbbc1f91101f360..1dcd569a59cde2eec88476aef2bc3ab35a089c86 100644
+--- a/src/sss_client/sudo/sss_sudo.h
++++ b/src/sss_client/sudo/sss_sudo.h
+@@ -87,11 +87,11 @@ struct sss_sudo_result {
+ };
+ 
+ /**
+- * @brief Send a request to SSSD to retreive all SUDO rules for a given
++ * @brief Send a request to SSSD to retrieve all SUDO rules for a given
+  * user.
+  *
+- * @param[in] uid         The uid of the user to retreive the rules for.
+- * @param[in] username    The username to retreive the rules for
++ * @param[in] uid         The uid of the user to retrieve the rules for.
++ * @param[in] username    The username to retrieve the rules for
+  * @param[in] domainname  The domain name the user is a member of.
+  * @param[out] _error     The result of the search in SSSD's domains. If the
+  *                        user was present in the domain, the _error code is
+@@ -122,9 +122,9 @@ int sss_sudo_send_recv(uid_t uid,
+  * @brief Send a request to SSSD to retrieve the default options, commonly
+  * stored in the "cn=defaults" record,
+  *
+- * @param[in] uid          The uid of the user to retreive the rules for.
++ * @param[in] uid          The uid of the user to retrieve the rules for.
+  *
+- * @param[in] username     The username to retreive the rules for.
++ * @param[in] username     The username to retrieve the rules for.
+  *
+  * @param[out] _error      The result of the search in SSSD's domains. If the
+  *                         options were present in the domain, the _error code
+diff --git a/src/tests/cmocka/common_mock_resp_dp.c b/src/tests/cmocka/common_mock_resp_dp.c
+index 4b38a38e6f53499132f9fe14a0ec0af157cf85ca..ece887b12d472c3fb01477d213f4308a535f8fe7 100644
+--- a/src/tests/cmocka/common_mock_resp_dp.c
++++ b/src/tests/cmocka/common_mock_resp_dp.c
+@@ -24,7 +24,7 @@
+ #include "responder/common/responder.h"
+ #include "tests/cmocka/common_mock_resp.h"
+ 
+-/* Mock DP requests that finish immediatelly and return
++/* Mock DP requests that finish immediately and return
+  * mocked values as per previous set by mock_account_recv
+  */
+ struct tevent_req *
+diff --git a/src/tests/cmocka/test_sbus_opath.c b/src/tests/cmocka/test_sbus_opath.c
+index e38eaf1972b55f01d712584b67c731ac0031736d..b469fa8da90b6f54e15a590014be650e32221136 100644
+--- a/src/tests/cmocka/test_sbus_opath.c
++++ b/src/tests/cmocka/test_sbus_opath.c
+@@ -72,7 +72,7 @@ void test_sbus_opath_escape_unescape(void **state)
+ 
+     escaped = sbus_opath_escape_part(mem_ctx, "path_with_underscore");
+     assert_non_null(escaped);
+-    /* underscore is 0x5F in ascii */
++    /* underscore is 0x5F in ASCII */
+     assert_string_equal(escaped, "path_5fwith_5funderscore");
+     raw = sbus_opath_unescape_part(mem_ctx, escaped);
+     talloc_free(escaped);
+diff --git a/src/tools/common/sss_process.c b/src/tools/common/sss_process.c
+index 574ccab24d0ff20784f6223e743bf9561ea2281e..fc710a553dbf6a27e23693be79bb333dcbcd3a3e 100644
+--- a/src/tools/common/sss_process.c
++++ b/src/tools/common/sss_process.c
+@@ -97,7 +97,7 @@ done:
+     return ret;
+ }
+ 
+-bool sss_deamon_running(void)
++bool sss_daemon_running(void)
+ {
+     return sss_signal(0) == EOK;
+ }
+diff --git a/src/tools/common/sss_process.h b/src/tools/common/sss_process.h
+index 43408afc7fab3caed3febd1a159dbfc6acbbb3f9..6bbb0947570a5fc9e77b479c7386db1cead05aaf 100644
+--- a/src/tools/common/sss_process.h
++++ b/src/tools/common/sss_process.h
+@@ -23,7 +23,7 @@
+ 
+ #include "util/util.h"
+ 
+-bool sss_deamon_running(void);
++bool sss_daemon_running(void);
+ errno_t sss_signal(int signum);
+ 
+ #endif /* _SSS_PROCESS_H_ */
+diff --git a/src/tools/sssctl/sssctl.c b/src/tools/sssctl/sssctl.c
+index 1e061c00d2238bf34adff4183e560dc127dd62c7..d9bc897c1a32954bbdd2d4ae2b0a9fb6d2c34752 100644
+--- a/src/tools/sssctl/sssctl.c
++++ b/src/tools/sssctl/sssctl.c
+@@ -148,7 +148,7 @@ bool sssctl_start_sssd(bool force)
+     enum sssctl_prompt_result prompt;
+     errno_t ret;
+ 
+-    if (sss_deamon_running()) {
++    if (sss_daemon_running()) {
+         return true;
+     }
+ 
+@@ -187,7 +187,7 @@ bool sssctl_stop_sssd(bool force)
+     enum sssctl_prompt_result prompt;
+     errno_t ret;
+ 
+-    if (!sss_deamon_running()) {
++    if (!sss_daemon_running()) {
+         return true;
+     }
+ 
+diff --git a/src/tools/sssctl/sssctl_data.c b/src/tools/sssctl/sssctl_data.c
+index 4b7f1dfff666743f9c47bc34515bbe63ee85eff1..b16fede1e2f3f743f65f8f86b0a5bdcfdca71f0b 100644
+--- a/src/tools/sssctl/sssctl_data.c
++++ b/src/tools/sssctl/sssctl_data.c
+@@ -270,7 +270,7 @@ errno_t sssctl_cache_upgrade(struct sss_cmdline *cmdline,
+         return ret;
+     }
+ 
+-    if (sss_deamon_running()) {
++    if (sss_daemon_running()) {
+         return ERR_SSSD_RUNNING;
+     }
+ 
+diff --git a/src/util/crypto/libcrypto/crypto_sha512crypt.c b/src/util/crypto/libcrypto/crypto_sha512crypt.c
+index 1023566624f0e7b8fc08e30d4ea7ad031fbffff9..b074eee555fafac6e486bfdf9efb9ddf4964a990 100644
+--- a/src/util/crypto/libcrypto/crypto_sha512crypt.c
++++ b/src/util/crypto/libcrypto/crypto_sha512crypt.c
+@@ -7,7 +7,7 @@
+  *  Sumit Bose <sbose@redhat.com>
+  *  George McCollister <georgem@novatech-llc.com>
+  */
+-/* SHA512-based Unix crypt implementation.
++/* SHA512-based UNIX crypt implementation.
+    Released into the Public Domain by Ulrich Drepper <drepper@redhat.com>.  */
+ 
+ #include "config.h"
+diff --git a/src/util/crypto/nss/nss_sha512crypt.c b/src/util/crypto/nss/nss_sha512crypt.c
+index 9fedd5ec6c62855d9cc0c9c2869d8c9be7fb5ade..2f1624e6396c40f539a4e2034ab545cad8f05434 100644
+--- a/src/util/crypto/nss/nss_sha512crypt.c
++++ b/src/util/crypto/nss/nss_sha512crypt.c
+@@ -5,7 +5,7 @@
+  *
+  *  Sumit Bose <sbose@redhat.com>
+  */
+-/* SHA512-based Unix crypt implementation.
++/* SHA512-based UNIX crypt implementation.
+    Released into the Public Domain by Ulrich Drepper <drepper@redhat.com>.  */
+ 
+ #include "config.h"
+diff --git a/src/util/server.c b/src/util/server.c
+index 0046c9737bc0d9aea7be59b4fed5e0f8930ff66e..4e65cc66c01ba020b13a88df8e017765ac97f76e 100644
+--- a/src/util/server.c
++++ b/src/util/server.c
+@@ -69,7 +69,7 @@ static void close_low_fds(void)
+ #endif
+ }
+ 
+-static void deamon_parent_sigterm(int sig)
++static void daemon_parent_sigterm(int sig)
+ {
+     _exit(0);
+ }
+@@ -88,10 +88,10 @@ void become_daemon(bool Fork)
+         pid = fork();
+         if (pid != 0) {
+             /* Terminate parent process on demand so we can hold systemd
+-             * or initd from starting next service until sssd in initialized.
++             * or initd from starting next service until sssd is initialized.
+              * We use signals directly here because we don't have a tevent
+              * context yet. */
+-            CatchSignal(SIGTERM, deamon_parent_sigterm);
++            CatchSignal(SIGTERM, daemon_parent_sigterm);
+ 
+             /* or exit when sssd monitor is terminated */
+             do {
+diff --git a/src/util/sss_ini.h b/src/util/sss_ini.h
+index 77fbddc3ab073d930eecd68dacb00dae52847744..0b173831d4fd7c283fa939a2f3bfda2a3bb97515 100644
+--- a/src/util/sss_ini.h
++++ b/src/util/sss_ini.h
+@@ -94,7 +94,7 @@ int sss_ini_call_validators_strs(TALLOC_CTX *mem_ctx,
+ struct ref_array *
+ sss_ini_get_ra_error_list(struct sss_ini_initdata *init_data);
+ 
+-/* Get pointer to list of successfuly merged snippet files */
++/* Get pointer to list of successfully merged snippet files */
+ struct ref_array *
+ sss_ini_get_ra_success_list(struct sss_ini_initdata *init_data);
+ 
+diff --git a/src/util/tev_curl.c b/src/util/tev_curl.c
+index 52c86adde65c173a874534a7001d7859789581cd..4c2f1ec9ff0127ccfd72010460ed75dad43e9ce3 100644
+--- a/src/util/tev_curl.c
++++ b/src/util/tev_curl.c
+@@ -67,7 +67,7 @@ struct tcurl_ctx {
+ struct tcurl_sock {
+     struct tcurl_ctx *tctx;     /* Backchannel to the main context */
+ 
+-    curl_socket_t sockfd;       /* curl socket is an int typedef on Unix */
++    curl_socket_t sockfd;       /* curl socket is an int typedef on UNIX */
+     struct tevent_fd *fde;      /* tevent tracker of the fd events */
+ };
+ 
+diff --git a/src/util/util_lock.c b/src/util/util_lock.c
+index b8e41cc29fbdcf3b5b75bf1507a4d33f5ba07be0..58d3b1bdf60f411fb7116055a5de775355d1839e 100644
+--- a/src/util/util_lock.c
++++ b/src/util/util_lock.c
+@@ -74,7 +74,7 @@ errno_t sss_br_lock_file(int fd, size_t start, size_t len,
+                 return ret;
+             }
+         } else if (ret == 0) {
+-            /* File successfuly locked */
++            /* File successfully locked */
+             break;
+         }
+     }
+-- 
+2.15.1
+

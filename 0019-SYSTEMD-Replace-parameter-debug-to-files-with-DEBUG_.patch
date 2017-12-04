@@ -1,0 +1,258 @@
+From e2c0eecb49af621de77426cb46fff9bbb9a3f220 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 23 Oct 2017 18:03:46 +0200
+Subject: [PATCH 19/79] SYSTEMD: Replace parameter --debug-to-files with
+ ${DEBUG_LOGGER}
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Users can set variable DEBUG_LOGGER in environment files
+(/etc/sysconfig/sssd or /etc/default/sssd; depending on the distribution)
+to override default logging to files.
+
+e.g.
+DEBUG_LOGGER=--logger=stderr
+DEBUG_LOGGER=--logger=journald
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3433
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ Makefile.am                              | 12 +-----------
+ contrib/sssd.spec.in                     |  4 ----
+ src/sysv/systemd/journal.conf.in         |  7 -------
+ src/sysv/systemd/sssd-autofs.service.in  |  3 ++-
+ src/sysv/systemd/sssd-ifp.service.in     |  3 ++-
+ src/sysv/systemd/sssd-kcm.service.in     |  3 ++-
+ src/sysv/systemd/sssd-nss.service.in     |  3 ++-
+ src/sysv/systemd/sssd-pac.service.in     |  3 ++-
+ src/sysv/systemd/sssd-pam.service.in     |  3 ++-
+ src/sysv/systemd/sssd-secrets.service.in |  3 ++-
+ src/sysv/systemd/sssd-ssh.service.in     |  3 ++-
+ src/sysv/systemd/sssd-sudo.service.in    |  3 ++-
+ src/sysv/systemd/sssd.service.in         |  3 ++-
+ 13 files changed, 21 insertions(+), 32 deletions(-)
+ delete mode 100644 src/sysv/systemd/journal.conf.in
+
+diff --git a/Makefile.am b/Makefile.am
+index 41a8f32f4e76fdcbd09ad833161f0bdada19e389..5483375167d99568e8313c9a0488900419be6ec3 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -91,7 +91,7 @@ sssdkcmdatadir = $(datadir)/sssd-kcm
+ deskprofilepath = $(sss_statedir)/deskprofile
+ 
+ if HAVE_SYSTEMD_UNIT
+-ifp_exec_cmd = $(sssdlibexecdir)/sssd_ifp --uid 0 --gid 0 --debug-to-files --dbus-activated
++ifp_exec_cmd = $(sssdlibexecdir)/sssd_ifp --uid 0 --gid 0 --dbus-activated
+ ifp_systemdservice = SystemdService=sssd-ifp.service
+ ifp_restart = Restart=on-failure
+ else
+@@ -4483,10 +4483,6 @@ if BUILD_KCM
+         src/sysv/systemd/sssd-kcm.service \
+         $(NULL)
+ endif
+-if WITH_JOURNALD
+-    systemdconf_DATA += \
+-        src/sysv/systemd/journal.conf
+-endif
+ else
+ if HAVE_SUSE
+     init_SCRIPTS += \
+@@ -4535,7 +4531,6 @@ replace_script = \
+ 
+ EXTRA_DIST += \
+     src/sysv/systemd/sssd.service.in \
+-    src/sysv/systemd/journal.conf.in \
+     src/sysv/systemd/sssd-nss.socket.in \
+     src/sysv/systemd/sssd-nss.service.in \
+     src/sysv/systemd/sssd-pam.socket.in \
+@@ -4585,10 +4580,6 @@ src/sysv/systemd/sssd.service: src/sysv/systemd/sssd.service.in Makefile
+ 	@$(MKDIR_P) src/sysv/systemd/
+ 	$(replace_script)
+ 
+-src/sysv/systemd/journal.conf: src/sysv/systemd/journal.conf.in Makefile
+-	@$(MKDIR_P) src/sysv/systemd/
+-	$(replace_script)
+-
+ src/sysv/systemd/sssd-nss.socket: src/sysv/systemd/sssd-nss.socket.in Makefile
+ 	@$(MKDIR_P) src/sysv/systemd/
+ 	$(replace_script)
+@@ -4924,7 +4915,6 @@ endif
+ 	rm -f $(builddir)/src/sysv/systemd/sssd-secrets.service
+ 	rm -f $(builddir)/src/sysv/systemd/sssd-kcm.socket
+ 	rm -f $(builddir)/src/sysv/systemd/sssd-kcm.service
+-	rm -f $(builddir)/src/sysv/systemd/journal.conf
+ 	rm -f $(builddir)/src/tools/wrappers/sss_debuglevel
+ 
+ CLEANFILES += *.X */*.X */*/*.X
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index d6ab73e60863316cbf239d34242959fdfe8d4b1b..4aafd1832b67161ff1c25a4e9ad689586a227a25 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -971,10 +971,6 @@ done
+ %attr(711,sssd,sssd) %dir %{_sysconfdir}/sssd
+ %attr(711,sssd,sssd) %dir %{_sysconfdir}/sssd/conf.d
+ %ghost %attr(0600,sssd,sssd) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
+-%if (0%{?use_systemd} == 1)
+-%attr(755,root,root) %dir %{_sysconfdir}/systemd/system/sssd.service.d
+-%config(noreplace) %{_sysconfdir}/systemd/system/sssd.service.d/journal.conf
+-%endif
+ %dir %{_sysconfdir}/logrotate.d
+ %config(noreplace) %{_sysconfdir}/logrotate.d/sssd
+ %dir %{_sysconfdir}/rwtab.d
+diff --git a/src/sysv/systemd/journal.conf.in b/src/sysv/systemd/journal.conf.in
+deleted file mode 100644
+index 9ce170b4893629792516aab41573adea1fb741f0..0000000000000000000000000000000000000000
+--- a/src/sysv/systemd/journal.conf.in
++++ /dev/null
+@@ -1,7 +0,0 @@
+-[Service]
+-# Uncomment *both* of the following lines to enable debug logging
+-# to go to journald instead of /var/log/sssd. You will need to
+-# run 'systemctl daemon-reload' and then restart the SSSD service
+-# for this to take effect
+-#ExecStart=
+-#ExecStart=@sbindir@/sssd -i
+diff --git a/src/sysv/systemd/sssd-autofs.service.in b/src/sysv/systemd/sssd-autofs.service.in
+index 32ea6e19ca7f9aa65599c0cf296a8c5e73362271..c2dc254c8f3f56cb6ae4dc481781688aa702b102 100644
+--- a/src/sysv/systemd/sssd-autofs.service.in
++++ b/src/sysv/systemd/sssd-autofs.service.in
+@@ -9,8 +9,9 @@ RefuseManualStart=true
+ Also=sssd-autofs.socket
+ 
+ [Service]
++Environment=DEBUG_LOGGER=--logger=files
+ ExecStartPre=-/bin/chown @SSSD_USER@:@SSSD_USER@ @logpath@/sssd_autofs.log
+-ExecStart=@libexecdir@/sssd/sssd_autofs --debug-to-files --socket-activated
++ExecStart=@libexecdir@/sssd/sssd_autofs ${DEBUG_LOGGER} --socket-activated
+ Restart=on-failure
+ User=@SSSD_USER@
+ Group=@SSSD_USER@
+diff --git a/src/sysv/systemd/sssd-ifp.service.in b/src/sysv/systemd/sssd-ifp.service.in
+index 8e7abdb0e8c5ec83f9423c688daf845a16c57e7e..05a9a602b2d27c54a4faa79c58e0ecba90267100 100644
+--- a/src/sysv/systemd/sssd-ifp.service.in
++++ b/src/sysv/systemd/sssd-ifp.service.in
+@@ -5,7 +5,8 @@ After=sssd.service
+ BindsTo=sssd.service
+ 
+ [Service]
++Environment=DEBUG_LOGGER=--logger=files
+ Type=dbus
+ BusName=org.freedesktop.sssd.infopipe
+-ExecStart=@ifp_exec_cmd@
++ExecStart=@ifp_exec_cmd@ ${DEBUG_LOGGER}
+ @ifp_restart@
+diff --git a/src/sysv/systemd/sssd-kcm.service.in b/src/sysv/systemd/sssd-kcm.service.in
+index 1e2bee12dc3bedd17d41b86f91c9b2b52d985c40..92306f97ec73a775739bfdb4454df14956e5e133 100644
+--- a/src/sysv/systemd/sssd-kcm.service.in
++++ b/src/sysv/systemd/sssd-kcm.service.in
+@@ -6,4 +6,5 @@ Documentation=man:sssd-kcm(5)
+ Also=sssd-kcm.socket
+ 
+ [Service]
+-ExecStart=@libexecdir@/sssd/sssd_kcm --uid 0 --gid 0 --debug-to-files
++Environment=DEBUG_LOGGER=--logger=files
++ExecStart=@libexecdir@/sssd/sssd_kcm --uid 0 --gid 0 ${DEBUG_LOGGER}
+diff --git a/src/sysv/systemd/sssd-nss.service.in b/src/sysv/systemd/sssd-nss.service.in
+index 6a29078d5a36dff229e47bf7ce953e46443ce023..fe771ad0fa99968bb1d42037abf2f960271589b1 100644
+--- a/src/sysv/systemd/sssd-nss.service.in
++++ b/src/sysv/systemd/sssd-nss.service.in
+@@ -9,5 +9,6 @@ RefuseManualStart=true
+ Also=sssd-nss.socket
+ 
+ [Service]
+-ExecStart=@libexecdir@/sssd/sssd_nss --debug-to-files --socket-activated
++Environment=DEBUG_LOGGER=--logger=files
++ExecStart=@libexecdir@/sssd/sssd_nss ${DEBUG_LOGGER} --socket-activated
+ Restart=on-failure
+diff --git a/src/sysv/systemd/sssd-pac.service.in b/src/sysv/systemd/sssd-pac.service.in
+index ffbfdec030ba6d5cf75c989854c27bc46b6983a5..dbd25abc476f579c9d8cce171fdeafa06e567610 100644
+--- a/src/sysv/systemd/sssd-pac.service.in
++++ b/src/sysv/systemd/sssd-pac.service.in
+@@ -9,8 +9,9 @@ RefuseManualStart=true
+ Also=sssd-pac.socket
+ 
+ [Service]
++Environment=DEBUG_LOGGER=--logger=files
+ ExecStartPre=-/bin/chown @SSSD_USER@:@SSSD_USER@ @logpath@/sssd_pac.log
+-ExecStart=@libexecdir@/sssd/sssd_pac --debug-to-files --socket-activated
++ExecStart=@libexecdir@/sssd/sssd_pac ${DEBUG_LOGGER} --socket-activated
+ Restart=on-failure
+ User=@SSSD_USER@
+ Group=@SSSD_USER@
+diff --git a/src/sysv/systemd/sssd-pam.service.in b/src/sysv/systemd/sssd-pam.service.in
+index 6dec46f0c5d384c500268dafcd00af894088e0b6..df722d1f3014bf62cc60114c30331424d14f411b 100644
+--- a/src/sysv/systemd/sssd-pam.service.in
++++ b/src/sysv/systemd/sssd-pam.service.in
+@@ -9,8 +9,9 @@ RefuseManualStart=true
+ Also=sssd-pam.socket sssd-pam-priv.socket
+ 
+ [Service]
++Environment=DEBUG_LOGGER=--logger=files
+ ExecStartPre=-/bin/chown @SSSD_USER@:@SSSD_USER@ @logpath@/sssd_pam.log
+-ExecStart=@libexecdir@/sssd/sssd_pam --debug-to-files --socket-activated
++ExecStart=@libexecdir@/sssd/sssd_pam ${DEBUG_LOGGER} --socket-activated
+ Restart=on-failure
+ User=@SSSD_USER@
+ Group=@SSSD_USER@
+diff --git a/src/sysv/systemd/sssd-secrets.service.in b/src/sysv/systemd/sssd-secrets.service.in
+index f45d647677a62900c01c7eb103597f2b1387498c..a7b41e0b16a5fa882546b41047e616fd2140329f 100644
+--- a/src/sysv/systemd/sssd-secrets.service.in
++++ b/src/sysv/systemd/sssd-secrets.service.in
+@@ -6,4 +6,5 @@ Documentation=man:sssd-secrets(5)
+ Also=sssd-secrets.socket
+ 
+ [Service]
+-ExecStart=@libexecdir@/sssd/sssd_secrets --uid 0 --gid 0 --debug-to-files
++Environment=DEBUG_LOGGER=--logger=files
++ExecStart=@libexecdir@/sssd/sssd_secrets --uid 0 --gid 0 ${DEBUG_LOGGER}
+diff --git a/src/sysv/systemd/sssd-ssh.service.in b/src/sysv/systemd/sssd-ssh.service.in
+index 6f233b4854018d79cc0ad9d67d53ebd67a49f7b7..f41249ea0fe19e5044d5d06ba195ab604d8e6a29 100644
+--- a/src/sysv/systemd/sssd-ssh.service.in
++++ b/src/sysv/systemd/sssd-ssh.service.in
+@@ -9,8 +9,9 @@ RefuseManualStart=true
+ Also=sssd-ssh.socket
+ 
+ [Service]
++Environment=DEBUG_LOGGER=--logger=files
+ ExecStartPre=-/bin/chown @SSSD_USER@:@SSSD_USER@ @logpath@/sssd_ssh.log
+-ExecStart=@libexecdir@/sssd/sssd_ssh --debug-to-files --socket-activated
++ExecStart=@libexecdir@/sssd/sssd_ssh ${DEBUG_LOGGER} --socket-activated
+ Restart=on-failure
+ User=@SSSD_USER@
+ Group=@SSSD_USER@
+diff --git a/src/sysv/systemd/sssd-sudo.service.in b/src/sysv/systemd/sssd-sudo.service.in
+index b59bcbcd817c3986d7ee245b1083f90ff5a3775a..da022f768af91e360182fad0ff885fad43ecfdc0 100644
+--- a/src/sysv/systemd/sssd-sudo.service.in
++++ b/src/sysv/systemd/sssd-sudo.service.in
+@@ -9,8 +9,9 @@ RefuseManualStart=true
+ Also=sssd-sudo.socket
+ 
+ [Service]
++Environment=DEBUG_LOGGER=--logger=files
+ ExecStartPre=-/bin/chown @SSSD_USER@:@SSSD_USER@ @logpath@/sssd_sudo.log
+-ExecStart=@libexecdir@/sssd/sssd_sudo --debug-to-files --socket-activated
++ExecStart=@libexecdir@/sssd/sssd_sudo --socket-activated
+ Restart=on-failure
+ User=@SSSD_USER@
+ Group=@SSSD_USER@
+diff --git a/src/sysv/systemd/sssd.service.in b/src/sysv/systemd/sssd.service.in
+index 05cfd3705084dbff8b46fb07e736612612c58b70..cea848fac80303d6fae12dd84316a91dbc60072d 100644
+--- a/src/sysv/systemd/sssd.service.in
++++ b/src/sysv/systemd/sssd.service.in
+@@ -5,8 +5,9 @@ Before=systemd-user-sessions.service nss-user-lookup.target
+ Wants=nss-user-lookup.target
+ 
+ [Service]
++Environment=DEBUG_LOGGER=--logger=files
+ EnvironmentFile=-@environment_file@
+-ExecStart=@sbindir@/sssd -i -f
++ExecStart=@sbindir@/sssd -i ${DEBUG_LOGGER}
+ Type=notify
+ NotifyAccess=main
+ 
+-- 
+2.15.1
+

@@ -1,0 +1,108 @@
+From ceb9cc228793551eb0fc42234ee3f9b3c9d6cb9b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 18 Oct 2017 15:20:34 +0200
+Subject: [PATCH 14/79] AD: Remember last site discovered
+
+To discover Active Directory site for a client we must first contact any
+directory controller for an LDAP ping. This is done by searching
+domain-wide DNS tree which may however contain servers that are not
+reachable from current site and than we face long timeouts or failure.
+
+This patch makes sssd remember the last successfuly discovered site
+and use this for DNS search to lookup a site and forest again similar
+to what we do when ad_site option is set.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3265
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ad/ad_srv.c | 44 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 43 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ad/ad_srv.c b/src/providers/ad/ad_srv.c
+index ff01ee95c4d2c6875a989394489f1a0495cc3003..be1ba0f237add894566ae713ce5e29fd202d414c 100644
+--- a/src/providers/ad/ad_srv.c
++++ b/src/providers/ad/ad_srv.c
+@@ -481,6 +481,7 @@ struct ad_srv_plugin_ctx {
+     const char *hostname;
+     const char *ad_domain;
+     const char *ad_site_override;
++    const char *current_site;
+ };
+ 
+ struct ad_srv_plugin_ctx *
+@@ -518,6 +519,11 @@ ad_srv_plugin_ctx_init(TALLOC_CTX *mem_ctx,
+         if (ctx->ad_site_override == NULL) {
+             goto fail;
+         }
++
++        ctx->current_site = talloc_strdup(ctx, ad_site_override);
++        if (ctx->current_site == NULL) {
++            goto fail;
++        }
+     }
+ 
+     return ctx;
+@@ -527,6 +533,32 @@ fail:
+     return NULL;
+ }
+ 
++static errno_t
++ad_srv_plugin_ctx_switch_site(struct ad_srv_plugin_ctx *ctx,
++                              const char *new_site)
++{
++    const char *site;
++    errno_t ret;
++
++    if (new_site == NULL) {
++        return EOK;
++    }
++
++    if (ctx->current_site != NULL && strcmp(ctx->current_site, new_site) == 0) {
++        return EOK;
++    }
++
++    site = talloc_strdup(ctx, new_site);
++    if (site == NULL) {
++        return ENOMEM;
++    }
++
++    talloc_zfree(ctx->current_site);
++    ctx->current_site = site;
++
++    return EOK;
++}
++
+ struct ad_srv_plugin_state {
+     struct tevent_context *ev;
+     struct ad_srv_plugin_ctx *ctx;
+@@ -613,7 +645,7 @@ struct tevent_req *ad_srv_plugin_send(TALLOC_CTX *mem_ctx,
+ 
+     subreq = ad_get_dc_servers_send(state, ev, ctx->be_res->resolv,
+                                     state->discovery_domain,
+-                                    state->ctx->ad_site_override);
++                                    state->ctx->current_site);
+     if (subreq == NULL) {
+         ret = ENOMEM;
+         goto immediately;
+@@ -709,6 +741,16 @@ static void ad_srv_plugin_site_done(struct tevent_req *subreq)
+     backup_domain = NULL;
+ 
+     if (ret == EOK) {
++        /* Remember current site so it can be used during next lookup so
++         * we can contact directory controllers within a known reachable
++         * site first. */
++        ret = ad_srv_plugin_ctx_switch_site(state->ctx, state->site);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to set site [%d]: %s\n",
++                  ret, sss_strerror(ret));
++            goto done;
++        }
++
+         if (strcmp(state->service, "gc") == 0) {
+             if (state->forest != NULL) {
+                 if (state->site != NULL) {
+-- 
+2.15.1
+

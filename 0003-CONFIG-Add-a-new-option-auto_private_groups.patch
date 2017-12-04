@@ -1,0 +1,158 @@
+From 04fc0d758ae1e5c4ab71ab3bf8b8f50b99a6c63a Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 3 Oct 2017 12:34:33 +0200
+Subject: [PATCH 03/79] CONFIG: Add a new option auto_private_groups
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The auto_private_groups option is used to configure the domain->mpg flag
+which was already set automatically for subdomains, but for some time was
+not settable by the admin via the configuration file.
+
+The new option name, instead of the old magic_private_groups, was chosen
+purely because this name would hopefully be better understood by admins.
+
+The option doesn't do anything yet, it is just added to all the places a
+new option should be added to.
+
+Related:
+    https://pagure.io/SSSD/sssd/issue/1872
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/confdb/confdb.c                  |  8 ++++++++
+ src/confdb/confdb.h                  |  1 +
+ src/config/SSSDConfig/__init__.py.in |  1 +
+ src/config/SSSDConfigTest.py         |  6 ++++--
+ src/config/cfg_rules.ini             |  1 +
+ src/config/etc/sssd.api.conf         |  1 +
+ src/man/sssd.conf.5.xml              | 20 ++++++++++++++++++++
+ 7 files changed, 36 insertions(+), 2 deletions(-)
+
+diff --git a/src/confdb/confdb.c b/src/confdb/confdb.c
+index fefecc03d554f6eca12efe07990bfae17033bd02..a028224817f12ace2a0c4165d7b9cb0bb80ce5a1 100644
+--- a/src/confdb/confdb.c
++++ b/src/confdb/confdb.c
+@@ -936,6 +936,14 @@ static int confdb_get_domain_internal(struct confdb_ctx *cdb,
+         goto done;
+     }
+ 
++    ret = get_entry_as_bool(res->msgs[0], &domain->mpg,
++                            CONFDB_DOMAIN_AUTO_UPG, 0);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_FATAL_FAILURE,
++              "Invalid value for %s\n", CONFDB_DOMAIN_AUTO_UPG);
++        goto done;
++    }
++
+     if (strcasecmp(domain->provider, "local") == 0) {
+         /* If this is the local provider, we need to ensure that
+          * no other provider was specified for other types, since
+diff --git a/src/confdb/confdb.h b/src/confdb/confdb.h
+index bcea99ae49a3fa5f0393ce6b2c215b5b2d4bc3fc..2539b906993edbceb38aac9265e04deed69cf2e4 100644
+--- a/src/confdb/confdb.h
++++ b/src/confdb/confdb.h
+@@ -198,6 +198,7 @@
+ #define CONFDB_DEFAULT_CACHE_CREDS_MIN_FF_LENGTH 8
+ #define CONFDB_DOMAIN_LEGACY_PASS "store_legacy_passwords"
+ #define CONFDB_DOMAIN_MPG "magic_private_groups"
++#define CONFDB_DOMAIN_AUTO_UPG "auto_private_groups"
+ #define CONFDB_DOMAIN_FQ "use_fully_qualified_names"
+ #define CONFDB_DOMAIN_ENTRY_CACHE_TIMEOUT "entry_cache_timeout"
+ #define CONFDB_DOMAIN_ACCOUNT_CACHE_EXPIRATION "account_cache_expiration"
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index d99b718e09283d113f73639e0f94e7f1cec55f68..d2bb709d69c8790558b5c06a7e405463b508c189 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -195,6 +195,7 @@ option_strings = {
+     'cached_auth_timeout' : _('How long can cached credentials be used for cached authentication'),
+     'full_name_format' : _('Printf-compatible format for displaying fully-qualified names'),
+     're_expression' : _('Regex to parse username and domain'),
++    'auto_private_groups' : _('Whether to automatically create private groups for users'),
+ 
+     # [provider/ipa]
+     'ipa_domain' : _('IPA domain'),
+diff --git a/src/config/SSSDConfigTest.py b/src/config/SSSDConfigTest.py
+index 4a583bdd3124dc05a116d2e6bd48afb92aa0b54d..87d1f6e6410dfeafc77d578cf0b950dc71a1f0a2 100755
+--- a/src/config/SSSDConfigTest.py
++++ b/src/config/SSSDConfigTest.py
+@@ -624,7 +624,8 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+             'subdomain_homedir',
+             'full_name_format',
+             're_expression',
+-            'cached_auth_timeout']
++            'cached_auth_timeout',
++            'auto_private_groups']
+ 
+         self.assertTrue(type(options) == dict,
+                         "Options should be a dictionary")
+@@ -994,7 +995,8 @@ class SSSDConfigTestSSSDDomain(unittest.TestCase):
+             'subdomain_homedir',
+             'full_name_format',
+             're_expression',
+-            'cached_auth_timeout']
++            'cached_auth_timeout',
++            'auto_private_groups']
+ 
+         self.assertTrue(type(options) == dict,
+                         "Options should be a dictionary")
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index e49e8d43f4aead14d833866110784fd62382cc2b..4e70bf7b6f0fa7421a0c35bd4279830265bf3470 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -382,6 +382,7 @@ option = cached_auth_timeout
+ option = wildcard_limit
+ option = full_name_format
+ option = re_expression
++option = auto_private_groups
+ 
+ #Entry cache timeouts
+ option = entry_cache_user_timeout
+diff --git a/src/config/etc/sssd.api.conf b/src/config/etc/sssd.api.conf
+index 7f2b8977b7e67fcfc20df49056cda8ebe6da0be8..2be2e3e685ba3abd9a4a419f93332a89ff774262 100644
+--- a/src/config/etc/sssd.api.conf
++++ b/src/config/etc/sssd.api.conf
+@@ -185,6 +185,7 @@ subdomain_homedir = str, None, false
+ cached_auth_timeout = int, None, false
+ full_name_format = str, None, false
+ re_expression = str, None, false
++auto_private_groups = str, None, false
+ 
+ #Entry cache timeouts
+ entry_cache_user_timeout = int, None, false
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index 7752e450835b5beba50ddc4c635ff985d38ca421..1e8d9537517c85c3021b9c2c4185ea272c5bfffa 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -2816,6 +2816,26 @@ subdomain_inherit = ldap_purge_cache_timeout
+                         </para>
+                     </listitem>
+                 </varlistentry>
++                <varlistentry>
++                    <term>auto_private_groups (string)</term>
++                    <listitem>
++                        <para>
++                            If this option is enabled, SSSD will automatically
++                            create user private groups based on user's
++                            UID number. The GID number is ignored in this case.
++                        </para>
++                        <para>
++                            NOTE: Because the GID number and the user private group
++                            are inferred frm the UID number, it is not supported
++                            to have multiple entries with the same UID or GID number
++                            with this option. In other words, enabling this option
++                            enforces uniqueness across the ID space.
++                        </para>
++                        <para>
++                            Default: False
++                        </para>
++                    </listitem>
++                </varlistentry>
+             </variablelist>
+         </para>
+ 
+-- 
+2.15.1
+

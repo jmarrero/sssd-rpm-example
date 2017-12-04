@@ -1,0 +1,81 @@
+From 8b98ab849993ddd2bddbe475f443fbee24081c1a Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 20 Nov 2017 12:08:30 +0100
+Subject: [PATCH 69/79] UTIL: add find_domain_by_object_name_ex()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The _ex version of find_domain_by_object_name() has a additional option
+'strict'. If set to 'true' NULL is return instead to domain from the
+first argument. This way the caller can see if the provider object name
+really contains a known domain.
+
+Related to https://pagure.io/SSSD/sssd/issue/3579
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/util/domain_info_utils.c | 17 ++++++++++++++---
+ src/util/util.h              |  4 ++++
+ 2 files changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/src/util/domain_info_utils.c b/src/util/domain_info_utils.c
+index 3a3f5130a32e2c5fe4b81819bf2de697a4474111..66077092a40111967a98b0937506d9e4472f50d5 100644
+--- a/src/util/domain_info_utils.c
++++ b/src/util/domain_info_utils.c
+@@ -174,8 +174,8 @@ sss_get_domain_by_sid_ldap_fallback(struct sss_domain_info *domain,
+ }
+ 
+ struct sss_domain_info *
+-find_domain_by_object_name(struct sss_domain_info *domain,
+-                           const char *object_name)
++find_domain_by_object_name_ex(struct sss_domain_info *domain,
++                              const char *object_name, bool strict)
+ {
+     TALLOC_CTX *tmp_ctx;
+     struct sss_domain_info *dom = NULL;
+@@ -197,7 +197,11 @@ find_domain_by_object_name(struct sss_domain_info *domain,
+     }
+ 
+     if (domainname == NULL) {
+-        dom = domain;
++        if (strict) {
++            dom = NULL;
++        } else {
++            dom = domain;
++        }
+     } else {
+         dom = find_domain_by_name(domain, domainname, true);
+     }
+@@ -207,6 +211,13 @@ done:
+     return dom;
+ }
+ 
++struct sss_domain_info *
++find_domain_by_object_name(struct sss_domain_info *domain,
++                           const char *object_name)
++{
++    return find_domain_by_object_name_ex(domain, object_name, false);
++}
++
+ errno_t sssd_domain_init(TALLOC_CTX *mem_ctx,
+                          struct confdb_ctx *cdb,
+                          const char *domain_name,
+diff --git a/src/util/util.h b/src/util/util.h
+index 37383011763a9a2a3c2c066215e3ed94aca77308..2521b1789b0b8701b1fbcce33890eedb7fe18d5e 100644
+--- a/src/util/util.h
++++ b/src/util/util.h
+@@ -551,6 +551,10 @@ struct sss_domain_info *
+ find_domain_by_object_name(struct sss_domain_info *domain,
+                            const char *object_name);
+ 
++struct sss_domain_info *
++find_domain_by_object_name_ex(struct sss_domain_info *domain,
++                              const char *object_name, bool strict);
++
+ bool subdomain_enumerates(struct sss_domain_info *parent,
+                           const char *sd_name);
+ 
+-- 
+2.15.1
+

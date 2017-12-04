@@ -1,0 +1,63 @@
+From 25bc436bccacb7f995314465b2923c6e08f654d4 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 19 Oct 2017 10:39:21 +0200
+Subject: [PATCH 13/79] sudo: always use srv_opts from id context
+
+Prior this patch, we remember id_ctx->srv_opts in sudo request to switch
+the latest usn values. This works fine most of the time but it may cause
+a crash.
+
+If we have two concurrent sudo refresh and one of these fails, it causes
+failover to try the next server and possibly replacing the old srv_opts
+with new one and it causes an access after free in the other refresh.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3562
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/ldap/sdap_async_sudo.c | 7 +------
+ 1 file changed, 1 insertion(+), 6 deletions(-)
+
+diff --git a/src/providers/ldap/sdap_async_sudo.c b/src/providers/ldap/sdap_async_sudo.c
+index f33d5b5fa86dc1806695482d627bd71a2b040d6e..5dc58012845b7109f0fa138e2e291b8ec3267799 100644
+--- a/src/providers/ldap/sdap_async_sudo.c
++++ b/src/providers/ldap/sdap_async_sudo.c
+@@ -279,7 +279,6 @@ done:
+ struct sdap_sudo_refresh_state {
+     struct sdap_sudo_ctx *sudo_ctx;
+     struct tevent_context *ev;
+-    struct sdap_server_opts *srv_opts;
+     struct sdap_options *opts;
+     struct sdap_id_op *sdap_op;
+     struct sysdb_ctx *sysdb;
+@@ -405,9 +404,6 @@ static void sdap_sudo_refresh_connect_done(struct tevent_req *subreq)
+ 
+     DEBUG(SSSDBG_TRACE_FUNC, "SUDO LDAP connection successful\n");
+ 
+-    /* Obtain srv_opts here in case of first connection. */
+-    state->srv_opts = state->sudo_ctx->id_ctx->srv_opts;
+-
+     /* Renew host information if needed. */
+     if (state->sudo_ctx->run_hostinfo) {
+         subreq = sdap_sudo_get_hostinfo_send(state, state->opts,
+@@ -586,7 +582,6 @@ static void sdap_sudo_refresh_done(struct tevent_req *subreq)
+         goto done;
+     }
+ 
+-
+     /* start transaction */
+     ret = sysdb_transaction_start(state->sysdb);
+     if (ret != EOK) {
+@@ -621,7 +616,7 @@ static void sdap_sudo_refresh_done(struct tevent_req *subreq)
+     /* remember new usn */
+     ret = sysdb_get_highest_usn(state, rules, rules_count, &usn);
+     if (ret == EOK) {
+-        sdap_sudo_set_usn(state->srv_opts, usn);
++        sdap_sudo_set_usn(state->sudo_ctx->id_ctx->srv_opts, usn);
+     } else {
+         DEBUG(SSSDBG_MINOR_FAILURE, "Unable to get highest USN [%d]: %s\n",
+               ret, sss_strerror(ret));
+-- 
+2.15.1
+

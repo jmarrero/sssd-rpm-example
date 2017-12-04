@@ -1,0 +1,829 @@
+From 0256b7734738302da9752db5297a3d41fccd40ac Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Mon, 23 Oct 2017 15:18:47 +0200
+Subject: [PATCH 18/79] Add parameter --logger to daemons
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Different binary handled information about logging differently
+ e,g, --debug-to-files --debug-to-stderr
+And logging to journald was a special case of previous options
+(!debug_file && !debug_to_stderr). It was also tied to the monitor option
+"--daemon" and therefore loggind to stderr was used in interactive mode
++ systemd Type=notify.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3433
+
+Reviewed-by: Justin Stephenson <jstephen@redhat.com>
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/man/sssd.8.xml                | 31 +++++++++++++++++++++++++
+ src/monitor/monitor.c             | 48 ++++++++++++---------------------------
+ src/p11_child/p11_child_nss.c     |  3 +++
+ src/providers/ad/ad_gpo_child.c   |  4 ++++
+ src/providers/data_provider_be.c  |  4 ++++
+ src/providers/ipa/selinux_child.c |  4 ++++
+ src/providers/krb5/krb5_child.c   |  4 ++++
+ src/providers/ldap/ldap_child.c   |  4 ++++
+ src/providers/proxy/proxy_auth.c  |  4 ++--
+ src/providers/proxy/proxy_child.c |  4 ++++
+ src/responder/autofs/autofssrv.c  |  4 ++++
+ src/responder/ifp/ifpsrv.c        |  4 ++++
+ src/responder/kcm/kcm.c           |  4 ++++
+ src/responder/nss/nsssrv.c        |  4 ++++
+ src/responder/pac/pacsrv.c        |  4 ++++
+ src/responder/pam/pamsrv.c        |  4 ++++
+ src/responder/secrets/secsrv.c    |  4 ++++
+ src/responder/ssh/sshsrv.c        |  4 ++++
+ src/responder/sudo/sudosrv.c      |  4 ++++
+ src/tests/cmocka/dummy_child.c    |  4 ++++
+ src/tests/debug-tests.c           | 10 ++++++++
+ src/util/child_common.c           |  2 +-
+ src/util/debug.c                  |  4 ++--
+ src/util/server.c                 | 12 ++++++----
+ 24 files changed, 135 insertions(+), 43 deletions(-)
+
+diff --git a/src/man/sssd.8.xml b/src/man/sssd.8.xml
+index 923da6824907f0d2d140d9ca83f87338e7664f83..0b725628ff93f48f832140dd5dc15b040a8b179f 100644
+--- a/src/man/sssd.8.xml
++++ b/src/man/sssd.8.xml
+@@ -92,6 +92,37 @@
+                     </para>
+                 </listitem>
+             </varlistentry>
++            <varlistentry>
++                <term>
++                    <option>--logger=</option><replaceable>value</replaceable>
++                </term>
++                <listitem>
++                    <para>
++                        Location where SSSD will send log messages. This option
++                        overrides the value of the deprecated option
++                        <option>--debug-to-files</option>. The deprecated
++                        option will still work if the <option>--logger</option>
++                        is not used.
++                    </para>
++                    <para>
++                        <emphasis>stderr</emphasis>: Redirect debug messages to
++                        standard error output.
++                    </para>
++                    <para>
++                        <emphasis>files</emphasis>: Redirect debug messages to
++                        the log files. By default, the log files are stored in
++                        <filename>/var/log/sssd</filename> and there are
++                        separate log files for every SSSD service and domain.
++                    </para>
++                    <para>
++                        <emphasis>journald</emphasis>: Redirect debug messages
++                        to systemd-journald
++                    </para>
++                    <para>
++                        Default: not set
++                    </para>
++                </listitem>
++            </varlistentry>
+             <varlistentry>
+                 <term>
+                     <option>-D</option>,<option>--daemon</option>
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index 7726548bbb666bb189667efc1de2295f8a001105..3c0b7ab2dac10fe15a8a5b807cb68ea4b7ab8461 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -1211,22 +1211,11 @@ static int get_service_config(struct mt_ctx *ctx, const char *name,
+             }
+         }
+ 
+-        if (debug_to_file) {
+-            svc->command = talloc_strdup_append(
+-                svc->command, " --debug-to-files"
+-            );
+-            if (!svc->command) {
+-                talloc_free(svc);
+-                return ENOMEM;
+-            }
+-        } else if (ctx->is_daemon == false) {
+-            svc->command = talloc_strdup_append(
+-                svc->command, " --debug-to-stderr"
+-            );
+-            if (!svc->command) {
+-                talloc_free(svc);
+-                return ENOMEM;
+-            }
++        svc->command = talloc_asprintf_append(
++            svc->command, " --logger=%s", sss_logger_str[sss_logger]);
++        if (!svc->command) {
++            talloc_free(svc);
++            return ENOMEM;
+         }
+     }
+ 
+@@ -1374,22 +1363,11 @@ static int get_provider_config(struct mt_ctx *ctx, const char *name,
+             }
+         }
+ 
+-        if (debug_to_file) {
+-            svc->command = talloc_strdup_append(
+-                svc->command, " --debug-to-files"
+-            );
+-            if (!svc->command) {
+-                talloc_free(svc);
+-                return ENOMEM;
+-            }
+-        } else if (ctx->is_daemon == false) {
+-            svc->command = talloc_strdup_append(
+-                svc->command, " --debug-to-stderr"
+-            );
+-            if (!svc->command) {
+-                talloc_free(svc);
+-                return ENOMEM;
+-            }
++        svc->command = talloc_asprintf_append(
++            svc->command, " --logger=%s", sss_logger_str[sss_logger]);
++        if (!svc->command) {
++            talloc_free(svc);
++            return ENOMEM;
+         }
+     }
+ 
+@@ -2454,6 +2432,7 @@ int main(int argc, const char *argv[])
+     int opt_version = 0;
+     int opt_netlinkoff = 0;
+     char *opt_config_file = NULL;
++    char *opt_logger = NULL;
+     char *config_file = NULL;
+     int flags = 0;
+     struct main_context *main_ctx;
+@@ -2465,6 +2444,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         {"daemon", 'D', POPT_ARG_NONE, &opt_daemon, 0, \
+          _("Become a daemon (default)"), NULL }, \
+         {"interactive", 'i', POPT_ARG_NONE, &opt_interactive, 0, \
+@@ -2551,6 +2531,8 @@ int main(int argc, const char *argv[])
+         debug_to_stderr = 1;
+     }
+ 
++    sss_set_logger(opt_logger);
++
+     if (opt_config_file) {
+         config_file = talloc_strdup(tmp_ctx, opt_config_file);
+     } else {
+@@ -2575,7 +2557,7 @@ int main(int argc, const char *argv[])
+ 
+     /* Open before server_setup() does to have logging
+      * during configuration checking */
+-    if (debug_to_file) {
++    if (sss_logger == FILES_LOGGER) {
+         ret = open_debug_file();
+         if (ret) {
+             return 7;
+diff --git a/src/p11_child/p11_child_nss.c b/src/p11_child/p11_child_nss.c
+index f165b58e63d2b8a6f26acf8bd89e7b41713e7359..e7dbcb689220d1cd2585fbde5f26e84f8fa15cc2 100644
+--- a/src/p11_child/p11_child_nss.c
++++ b/src/p11_child/p11_child_nss.c
+@@ -537,6 +537,7 @@ int main(int argc, const char *argv[])
+     int opt;
+     poptContext pc;
+     int debug_fd = -1;
++    char *opt_logger = NULL;
+     errno_t ret;
+     TALLOC_CTX *main_ctx = NULL;
+     char *cert;
+@@ -564,6 +565,7 @@ int main(int argc, const char *argv[])
+         {"debug-to-stderr", 0, POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN,
+          &debug_to_stderr, 0,
+          _("Send the debug output to stderr directly."), NULL },
++        SSSD_LOGGER_OPTS
+         {"auth", 0, POPT_ARG_NONE, NULL, 'a', _("Run in auth mode"), NULL},
+         {"pre", 0, POPT_ARG_NONE, NULL, 'p', _("Run in pre-auth mode"), NULL},
+         {"pin", 0, POPT_ARG_NONE, NULL, 'i', _("Expect PIN on stdin"), NULL},
+@@ -672,6 +674,7 @@ int main(int argc, const char *argv[])
+             DEBUG(SSSDBG_CRIT_FAILURE, "set_debug_file_from_fd failed.\n");
+         }
+     }
++    sss_set_logger(opt_logger);
+ 
+     DEBUG(SSSDBG_TRACE_FUNC, "p11_child started.\n");
+ 
+diff --git a/src/providers/ad/ad_gpo_child.c b/src/providers/ad/ad_gpo_child.c
+index 8e5e062547721567cb450f9d0f72f1ec8cb99f96..5375cc691e8649c289672b74c4bfe5266c8222c9 100644
+--- a/src/providers/ad/ad_gpo_child.c
++++ b/src/providers/ad/ad_gpo_child.c
+@@ -687,6 +687,7 @@ main(int argc, const char *argv[])
+     int opt;
+     poptContext pc;
+     int debug_fd = -1;
++    char *opt_logger = NULL;
+     errno_t ret;
+     int sysvol_gpt_version;
+     int result;
+@@ -710,6 +711,7 @@ main(int argc, const char *argv[])
+         {"debug-to-stderr", 0, POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN,
+          &debug_to_stderr, 0,
+          _("Send the debug output to stderr directly."), NULL },
++        SSSD_LOGGER_OPTS
+         POPT_TABLEEND
+     };
+ 
+@@ -744,6 +746,8 @@ main(int argc, const char *argv[])
+         }
+     }
+ 
++    sss_set_logger(opt_logger);
++
+     DEBUG(SSSDBG_TRACE_FUNC, "gpo_child started.\n");
+ 
+     main_ctx = talloc_new(NULL);
+diff --git a/src/providers/data_provider_be.c b/src/providers/data_provider_be.c
+index 2e55dc4e3fe9ba1aa8c1c51c426efee00b9ae91d..56ddac112a209b6937313d3d3c94a73d2067331f 100644
+--- a/src/providers/data_provider_be.c
++++ b/src/providers/data_provider_be.c
+@@ -537,6 +537,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     char *be_domain = NULL;
+     char *srv_name = NULL;
+     struct main_context *main_ctx;
+@@ -548,6 +549,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         {"domain", 0, POPT_ARG_STRING, &be_domain, 0,
+          _("Domain of the information provider (mandatory)"), NULL },
+@@ -582,6 +584,8 @@ int main(int argc, const char *argv[])
+     debug_log_file = talloc_asprintf(NULL, "sssd_%s", be_domain);
+     if (!debug_log_file) return 2;
+ 
++    sss_set_logger(opt_logger);
++
+     srv_name = talloc_asprintf(NULL, "sssd[be[%s]]", be_domain);
+     if (!srv_name) return 2;
+ 
+diff --git a/src/providers/ipa/selinux_child.c b/src/providers/ipa/selinux_child.c
+index 073475094ee491bd5453898c6ba65214fa14fe59..120492686963241b7e419413f489cc38953e32f2 100644
+--- a/src/providers/ipa/selinux_child.c
++++ b/src/providers/ipa/selinux_child.c
+@@ -206,6 +206,7 @@ int main(int argc, const char *argv[])
+     struct response *resp = NULL;
+     ssize_t written;
+     bool needs_update;
++    char *opt_logger = NULL;
+ 
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+@@ -220,6 +221,7 @@ int main(int argc, const char *argv[])
+         {"debug-to-stderr", 0, POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN,
+          &debug_to_stderr, 0,
+          _("Send the debug output to stderr directly."), NULL },
++        SSSD_LOGGER_OPTS
+         POPT_TABLEEND
+     };
+ 
+@@ -254,6 +256,8 @@ int main(int argc, const char *argv[])
+         }
+     }
+ 
++    sss_set_logger(opt_logger);
++
+     DEBUG(SSSDBG_TRACE_FUNC, "selinux_child started.\n");
+     DEBUG(SSSDBG_TRACE_INTERNAL,
+           "Running with effective IDs: [%"SPRIuid"][%"SPRIgid"].\n",
+diff --git a/src/providers/krb5/krb5_child.c b/src/providers/krb5/krb5_child.c
+index b8ee497728b4b70fae89e528172e9d5bd42239c0..b44f3a20f1c0725304a37620d36f8872cf9ca5d7 100644
+--- a/src/providers/krb5/krb5_child.c
++++ b/src/providers/krb5/krb5_child.c
+@@ -3020,6 +3020,7 @@ int main(int argc, const char *argv[])
+     int opt;
+     poptContext pc;
+     int debug_fd = -1;
++    char *opt_logger = NULL;
+     errno_t ret;
+     krb5_error_code kerr;
+     uid_t fast_uid;
+@@ -3039,6 +3040,7 @@ int main(int argc, const char *argv[])
+         {"debug-to-stderr", 0, POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN,
+          &debug_to_stderr, 0,
+          _("Send the debug output to stderr directly."), NULL },
++        SSSD_LOGGER_OPTS
+         {CHILD_OPT_FAST_CCACHE_UID, 0, POPT_ARG_INT, &fast_uid, 0,
+           _("The user to create FAST ccache as"), NULL},
+         {CHILD_OPT_FAST_CCACHE_GID, 0, POPT_ARG_INT, &fast_gid, 0,
+@@ -3097,6 +3099,8 @@ int main(int argc, const char *argv[])
+         }
+     }
+ 
++    sss_set_logger(opt_logger);
++
+     DEBUG(SSSDBG_TRACE_FUNC, "krb5_child started.\n");
+ 
+     kr = talloc_zero(NULL, struct krb5_req);
+diff --git a/src/providers/ldap/ldap_child.c b/src/providers/ldap/ldap_child.c
+index b796e5cae01517c85c2fc1605b1e5877454691dc..baeed239db5dc7ffa482edcbc155f25f718c8249 100644
+--- a/src/providers/ldap/ldap_child.c
++++ b/src/providers/ldap/ldap_child.c
+@@ -599,6 +599,7 @@ int main(int argc, const char *argv[])
+     int kerr;
+     int opt;
+     int debug_fd = -1;
++    char *opt_logger = NULL;
+     poptContext pc;
+     TALLOC_CTX *main_ctx = NULL;
+     uint8_t *buf = NULL;
+@@ -622,6 +623,7 @@ int main(int argc, const char *argv[])
+          _("An open file descriptor for the debug logs"), NULL},
+         {"debug-to-stderr", 0, POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN, &debug_to_stderr, 0, \
+          _("Send the debug output to stderr directly."), NULL }, \
++        SSSD_LOGGER_OPTS
+         POPT_TABLEEND
+     };
+ 
+@@ -657,6 +659,8 @@ int main(int argc, const char *argv[])
+         }
+     }
+ 
++    sss_set_logger(opt_logger);
++
+     BlockSignals(false, SIGTERM);
+     CatchSignal(SIGTERM, sig_term_handler);
+ 
+diff --git a/src/providers/proxy/proxy_auth.c b/src/providers/proxy/proxy_auth.c
+index a05586e60b6ef894b0fcf1b8b3f30fdbf51a808d..665a29cf779290b8d35973245a36a1b5224bca78 100644
+--- a/src/providers/proxy/proxy_auth.c
++++ b/src/providers/proxy/proxy_auth.c
+@@ -178,9 +178,9 @@ static struct tevent_req *proxy_child_init_send(TALLOC_CTX *mem_ctx,
+ 
+     state->command = talloc_asprintf(req,
+             "%s/proxy_child -d %#.4x --debug-timestamps=%d "
+-            "--debug-microseconds=%d%s --domain %s --id %d",
++            "--debug-microseconds=%d --logger=%s --domain %s --id %d",
+             SSSD_LIBEXEC_PATH, debug_level, debug_timestamps,
+-            debug_microseconds, (debug_to_file ? " --debug-to-files" : ""),
++            debug_microseconds, sss_logger_str[sss_logger],
+             auth_ctx->be->domain->name,
+             child_ctx->id);
+     if (state->command == NULL) {
+diff --git a/src/providers/proxy/proxy_child.c b/src/providers/proxy/proxy_child.c
+index be58622eb8b26231eeb6699976d51f57dc44de98..ae4855adeb5cc68f1a19003355a5d94f5b1bb378 100644
+--- a/src/providers/proxy/proxy_child.c
++++ b/src/providers/proxy/proxy_child.c
+@@ -504,6 +504,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     char *domain = NULL;
+     char *srv_name = NULL;
+     char *conf_entry = NULL;
+@@ -517,6 +518,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         {"domain", 0, POPT_ARG_STRING, &domain, 0,
+          _("Domain of the information provider (mandatory)"), NULL },
+@@ -561,6 +563,8 @@ int main(int argc, const char *argv[])
+     debug_log_file = talloc_asprintf(NULL, "proxy_child_%s", domain);
+     if (!debug_log_file) return 2;
+ 
++    sss_set_logger(opt_logger);
++
+     srv_name = talloc_asprintf(NULL, "sssd[proxy_child[%s]]", domain);
+     if (!srv_name) return 2;
+ 
+diff --git a/src/responder/autofs/autofssrv.c b/src/responder/autofs/autofssrv.c
+index cfb2233fdfc346bf27b128ee8c4261f4c73e3470..b0762a2b685a7c5ab3abfa281f0906ad8bfe1c88 100644
+--- a/src/responder/autofs/autofssrv.c
++++ b/src/responder/autofs/autofssrv.c
+@@ -185,6 +185,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     struct main_context *main_ctx;
+     int ret;
+     uid_t uid;
+@@ -193,6 +194,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         SSSD_RESPONDER_OPTS
+         POPT_TABLEEND
+@@ -221,6 +223,8 @@ int main(int argc, const char *argv[])
+     /* set up things like debug, signals, daemonization, etc... */
+     debug_log_file = "sssd_autofs";
+ 
++    sss_set_logger(opt_logger);
++
+     ret = server_setup("sssd[autofs]", 0, uid, gid,
+                        CONFDB_AUTOFS_CONF_ENTRY, &main_ctx);
+     if (ret != EOK) {
+diff --git a/src/responder/ifp/ifpsrv.c b/src/responder/ifp/ifpsrv.c
+index 0dc61a42200cc79fc6f12515a8f581ad0201a043..85dfbacc217e2870dd7517e36a1d39e7f2054a8b 100644
+--- a/src/responder/ifp/ifpsrv.c
++++ b/src/responder/ifp/ifpsrv.c
+@@ -355,6 +355,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     struct main_context *main_ctx;
+     int ret;
+     uid_t uid;
+@@ -363,6 +364,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         SSSD_RESPONDER_OPTS
+         POPT_TABLEEND
+@@ -391,6 +393,8 @@ int main(int argc, const char *argv[])
+     /* set up things like debug, signals, daemonization, etc... */
+     debug_log_file = "sssd_ifp";
+ 
++    sss_set_logger(opt_logger);
++
+     ret = server_setup("sssd[ifp]", 0, 0, 0,
+                        CONFDB_IFP_CONF_ENTRY, &main_ctx);
+     if (ret != EOK) return 2;
+diff --git a/src/responder/kcm/kcm.c b/src/responder/kcm/kcm.c
+index 2202f96381a2622a2c5433e281172287b325f960..358fcc18165dec7b41a7389a3ef22660ac04b4a8 100644
+--- a/src/responder/kcm/kcm.c
++++ b/src/responder/kcm/kcm.c
+@@ -258,6 +258,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     struct main_context *main_ctx;
+     int ret;
+     uid_t uid;
+@@ -266,6 +267,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         POPT_TABLEEND
+     };
+@@ -293,6 +295,8 @@ int main(int argc, const char *argv[])
+     /* set up things like debug, signals, daemonization, etc... */
+     debug_log_file = "sssd_kcm";
+ 
++    sss_set_logger(opt_logger);
++
+     ret = server_setup("sssd[kcm]", 0, uid, gid, CONFDB_KCM_CONF_ENTRY,
+                        &main_ctx);
+     if (ret != EOK) return 2;
+diff --git a/src/responder/nss/nsssrv.c b/src/responder/nss/nsssrv.c
+index d67b9fac8d770d113560e41b259e2d5edd219343..1559c314e5353d41c61c83ecc712311ac18a7202 100644
+--- a/src/responder/nss/nsssrv.c
++++ b/src/responder/nss/nsssrv.c
+@@ -405,6 +405,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     struct main_context *main_ctx;
+     int ret;
+     uid_t uid;
+@@ -413,6 +414,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         SSSD_RESPONDER_OPTS
+         POPT_TABLEEND
+@@ -441,6 +443,8 @@ int main(int argc, const char *argv[])
+     /* set up things like debug, signals, daemonization, etc... */
+     debug_log_file = "sssd_nss";
+ 
++    sss_set_logger(opt_logger);
++
+     ret = server_setup("sssd[nss]", 0, uid, gid, CONFDB_NSS_CONF_ENTRY,
+                        &main_ctx);
+     if (ret != EOK) return 2;
+diff --git a/src/responder/pac/pacsrv.c b/src/responder/pac/pacsrv.c
+index 1f820c07f5c55fe8df75cce05b403c41075d9f94..b72e5c8d2a42bc85f0974dcb81a1290d3f740986 100644
+--- a/src/responder/pac/pacsrv.c
++++ b/src/responder/pac/pacsrv.c
+@@ -209,6 +209,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     struct main_context *main_ctx;
+     int ret;
+     uid_t uid;
+@@ -217,6 +218,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         SSSD_RESPONDER_OPTS
+         POPT_TABLEEND
+@@ -245,6 +247,8 @@ int main(int argc, const char *argv[])
+     /* set up things like debug, signals, daemonization, etc... */
+     debug_log_file = "sssd_pac";
+ 
++    sss_set_logger(opt_logger);
++
+     ret = server_setup("sssd[pac]", 0, uid, gid,
+                        CONFDB_PAC_CONF_ENTRY, &main_ctx);
+     if (ret != EOK) return 2;
+diff --git a/src/responder/pam/pamsrv.c b/src/responder/pam/pamsrv.c
+index 79470823d18138da6ef9235e6336a3220ead1797..cc0e4bddcdbecfadabea78a6d2815d0ac6d651b6 100644
+--- a/src/responder/pam/pamsrv.c
++++ b/src/responder/pam/pamsrv.c
+@@ -355,6 +355,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     struct main_context *main_ctx;
+     int ret;
+     uid_t uid;
+@@ -365,6 +366,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         SSSD_RESPONDER_OPTS
+         POPT_TABLEEND
+@@ -393,6 +395,8 @@ int main(int argc, const char *argv[])
+     /* set up things like debug, signals, daemonization, etc... */
+     debug_log_file = "sssd_pam";
+ 
++    sss_set_logger(opt_logger);
++
+     if (!is_socket_activated()) {
+         /* Crate pipe file descriptors here before privileges are dropped
+          * in server_setup() */
+diff --git a/src/responder/secrets/secsrv.c b/src/responder/secrets/secsrv.c
+index 2b661b165ef0c174557f53012b2dbaa236a6e359..59c0f3a56040a6fc0c092247fbd124a069f97153 100644
+--- a/src/responder/secrets/secsrv.c
++++ b/src/responder/secrets/secsrv.c
+@@ -324,6 +324,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     struct main_context *main_ctx;
+     int ret;
+     uid_t uid;
+@@ -332,6 +333,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         POPT_TABLEEND
+     };
+@@ -359,6 +361,8 @@ int main(int argc, const char *argv[])
+     /* set up things like debug, signals, daemonization, etc... */
+     debug_log_file = "sssd_secrets";
+ 
++    sss_set_logger(opt_logger);
++
+     ret = server_setup("sssd[secrets]", 0, uid, gid, CONFDB_SEC_CONF_ENTRY,
+                        &main_ctx);
+     if (ret != EOK) return 2;
+diff --git a/src/responder/ssh/sshsrv.c b/src/responder/ssh/sshsrv.c
+index 440f0e2b9dc06e3dc52ff96d7207b8a3727865c0..8b0e7cc2d71044d7ab3bd2439041f678ddedb4cd 100644
+--- a/src/responder/ssh/sshsrv.c
++++ b/src/responder/ssh/sshsrv.c
+@@ -177,6 +177,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     struct main_context *main_ctx;
+     int ret;
+     uid_t uid;
+@@ -185,6 +186,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         SSSD_RESPONDER_OPTS
+         POPT_TABLEEND
+@@ -213,6 +215,8 @@ int main(int argc, const char *argv[])
+     /* set up things like debug, signals, daemonization, etc... */
+     debug_log_file = "sssd_ssh";
+ 
++    sss_set_logger(opt_logger);
++
+     ret = server_setup("sssd[ssh]", 0, uid, gid,
+                        CONFDB_SSH_CONF_ENTRY, &main_ctx);
+     if (ret != EOK) {
+diff --git a/src/responder/sudo/sudosrv.c b/src/responder/sudo/sudosrv.c
+index dca70ea4afc0e6df6d1b1864338c7b1091a98fee..19058321a25022d7704556ec0ef79729db3ac1f2 100644
+--- a/src/responder/sudo/sudosrv.c
++++ b/src/responder/sudo/sudosrv.c
+@@ -178,6 +178,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     poptContext pc;
++    char *opt_logger = NULL;
+     struct main_context *main_ctx;
+     int ret;
+     uid_t uid;
+@@ -186,6 +187,7 @@ int main(int argc, const char *argv[])
+     struct poptOption long_options[] = {
+         POPT_AUTOHELP
+         SSSD_MAIN_OPTS
++        SSSD_LOGGER_OPTS
+         SSSD_SERVER_OPTS(uid, gid)
+         SSSD_RESPONDER_OPTS
+         POPT_TABLEEND
+@@ -214,6 +216,8 @@ int main(int argc, const char *argv[])
+     /* set up things like debug, signals, daemonization, etc... */
+     debug_log_file = "sssd_sudo";
+ 
++    sss_set_logger(opt_logger);
++
+     ret = server_setup("sssd[sudo]", 0, uid, gid, CONFDB_SUDO_CONF_ENTRY,
+                        &main_ctx);
+     if (ret != EOK) {
+diff --git a/src/tests/cmocka/dummy_child.c b/src/tests/cmocka/dummy_child.c
+index bcaa9455037a0604422750bf7cc719a25cef4a99..811cb40490c89c4250401e0d8d3e9d1c277f57af 100644
+--- a/src/tests/cmocka/dummy_child.c
++++ b/src/tests/cmocka/dummy_child.c
+@@ -34,6 +34,7 @@ int main(int argc, const char *argv[])
+ {
+     int opt;
+     int debug_fd = -1;
++    char *opt_logger = NULL;
+     poptContext pc;
+     ssize_t len;
+     ssize_t written;
+@@ -55,6 +56,7 @@ int main(int argc, const char *argv[])
+          _("An open file descriptor for the debug logs"), NULL},
+         {"debug-to-stderr", 0, POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN, &debug_to_stderr, 0, \
+          _("Send the debug output to stderr directly."), NULL },
++        SSSD_LOGGER_OPTS
+         {"guitar", 0, POPT_ARG_STRING, &guitar, 0, _("Who plays guitar"), NULL },
+         {"drums", 0, POPT_ARG_STRING, &drums, 0, _("Who plays drums"), NULL },
+         POPT_TABLEEND
+@@ -76,6 +78,8 @@ int main(int argc, const char *argv[])
+     }
+     poptFreeContext(pc);
+ 
++    sss_set_logger(opt_logger);
++
+     action = getenv("TEST_CHILD_ACTION");
+     if (action) {
+         if (strcasecmp(action, "check_extra_args") == 0) {
+diff --git a/src/tests/debug-tests.c b/src/tests/debug-tests.c
+index d904d7eb8b5418608023faca0d62067f3106d23b..1446ec0474ab4bf72e66b58831fef59defd7be76 100644
+--- a/src/tests/debug-tests.c
++++ b/src/tests/debug-tests.c
+@@ -343,6 +343,7 @@ START_TEST(test_debug_is_set_single_no_timestamp)
+     debug_microseconds = 0;
+     debug_to_file = 1;
+     debug_prg_name = "sssd";
++    sss_set_logger(sss_logger_str[FILES_LOGGER]);
+ 
+     for (i = 0; i <= 9; i++) {
+         debug_level = levels[i];
+@@ -385,6 +386,8 @@ START_TEST(test_debug_is_set_single_timestamp)
+     debug_microseconds = 0;
+     debug_to_file = 1;
+     debug_prg_name = "sssd";
++    sss_set_logger(sss_logger_str[FILES_LOGGER]);
++
+ 
+     for (i = 0; i <= 9; i++) {
+         debug_level = levels[i];
+@@ -432,6 +435,8 @@ START_TEST(test_debug_is_set_single_timestamp_microseconds)
+     debug_microseconds = 1;
+     debug_to_file = 1;
+     debug_prg_name = "sssd";
++    sss_set_logger(sss_logger_str[FILES_LOGGER]);
++
+ 
+     for (i = 0; i <= 9; i++) {
+         debug_level = levels[i];
+@@ -480,6 +485,8 @@ START_TEST(test_debug_is_notset_no_timestamp)
+     debug_microseconds = 0;
+     debug_to_file = 1;
+     debug_prg_name = "sssd";
++    sss_set_logger(sss_logger_str[FILES_LOGGER]);
++
+ 
+     for (i = 0; i <= 9; i++) {
+         debug_level = all_set & ~levels[i];
+@@ -525,6 +532,8 @@ START_TEST(test_debug_is_notset_timestamp)
+     debug_microseconds = 0;
+     debug_to_file = 1;
+     debug_prg_name = "sssd";
++    sss_set_logger(sss_logger_str[FILES_LOGGER]);
++
+ 
+     for (i = 0; i <= 9; i++) {
+         debug_level = all_set & ~levels[i];
+@@ -570,6 +579,7 @@ START_TEST(test_debug_is_notset_timestamp_microseconds)
+     debug_microseconds = 1;
+     debug_to_file = 1;
+     debug_prg_name = "sssd";
++    sss_set_logger(sss_logger_str[FILES_LOGGER]);
+ 
+     for (i = 0; i <= 9; i++) {
+         debug_level = all_set & ~levels[i];
+diff --git a/src/util/child_common.c b/src/util/child_common.c
+index b300d84bf432608db96de36e04637b5fb115212e..dc070f26446305e07cbb34edd1e4d72db72aedc5 100644
+--- a/src/util/child_common.c
++++ b/src/util/child_common.c
+@@ -676,7 +676,7 @@ static errno_t prepare_child_argv(TALLOC_CTX *mem_ctx,
+         }
+ 
+         if (child_debug_stderr) {
+-            argv[--argc] = talloc_strdup(argv, "--debug-to-stderr");
++            argv[--argc] = talloc_strdup(argv, "--logger=stderr");
+             if (argv[argc] == NULL) {
+                 ret = ENOMEM;
+                 goto fail;
+diff --git a/src/util/debug.c b/src/util/debug.c
+index 4e469447e5ab8aa89cd57bcd6d00269875a12bc6..30801fce7c27b115d1cafd4ed826a57c7d444a72 100644
+--- a/src/util/debug.c
++++ b/src/util/debug.c
+@@ -277,7 +277,7 @@ void sss_vdebug_fn(const char *file,
+     errno_t ret;
+     va_list ap_fallback;
+ 
+-    if (!debug_file && !debug_to_stderr) {
++    if (sss_logger == JOURNALD_LOGGER) {
+         /* If we are not outputting logs to files, we should be sending them
+          * to journald.
+          * NOTE: on modern systems, this is where stdout/stderr will end up
+@@ -470,7 +470,7 @@ int rotate_debug_files(void)
+     int ret;
+     errno_t error;
+ 
+-    if (!debug_to_file) return EOK;
++    if (sss_logger != FILES_LOGGER) return EOK;
+ 
+     do {
+         error = 0;
+diff --git a/src/util/server.c b/src/util/server.c
+index 4e65cc66c01ba020b13a88df8e017765ac97f76e..f76cb6a0838324d4fc3ed376eb425fee2412a817 100644
+--- a/src/util/server.c
++++ b/src/util/server.c
+@@ -455,7 +455,7 @@ int server_setup(const char *name, int flags,
+     char *conf_db;
+     int ret = EOK;
+     bool dt;
+-    bool dl;
++    bool dl = false;
+     bool dm;
+     struct tevent_signal *tes;
+     struct logrotate_ctx *lctx;
+@@ -637,16 +637,18 @@ int server_setup(const char *name, int flags,
+     }
+ 
+     /* same for debug to file */
+-    dl = (debug_to_file != 0);
+     ret = confdb_get_bool(ctx->confdb_ctx, conf_entry,
+                           CONFDB_SERVICE_DEBUG_TO_FILES,
+-                          dl, &dl);
++                          false, &dl);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_FATAL_FAILURE, "Error reading from confdb (%d) [%s]\n",
+                                      ret, strerror(ret));
+         return ret;
+     }
+-    if (dl) debug_to_file = 1;
++    if (dl) {
++        debug_to_file = 1;
++        sss_set_logger(sss_logger_str[FILES_LOGGER]);
++    }
+ 
+     /* before opening the log file set up log rotation */
+     lctx = talloc_zero(ctx, struct logrotate_ctx);
+@@ -662,7 +664,7 @@ int server_setup(const char *name, int flags,
+     }
+ 
+     /* open log file if told so */
+-    if (debug_to_file) {
++    if (sss_logger == FILES_LOGGER) {
+         ret = open_debug_file();
+         if (ret != EOK) {
+             DEBUG(SSSDBG_FATAL_FAILURE, "Error setting up logging (%d) "
+-- 
+2.15.1
+

@@ -1,0 +1,46 @@
+From d344095ece6000e7641a9c867c8e00335b8d1ab0 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Tue, 24 Oct 2017 12:07:46 +0200
+Subject: [PATCH 21/79] UTIL: Hide and deprecate parameter --debug-to-files
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Justin Stephenson <jstephen@redhat.com>
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/man/sssd.8.xml | 4 ++++
+ src/util/debug.h   | 2 +-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/man/sssd.8.xml b/src/man/sssd.8.xml
+index 0b725628ff93f48f832140dd5dc15b040a8b179f..f2cbe015b844579af98aebd864770bc651dcf4b1 100644
+--- a/src/man/sssd.8.xml
++++ b/src/man/sssd.8.xml
+@@ -90,6 +90,10 @@
+                         log files are stored in <filename>/var/log/sssd</filename> and
+                         there are separate log files for every SSSD service and domain.
+                     </para>
++                    <para>
++                        This option is deprecated. It is replaced by
++                        <option>--logger=files</option>.
++                    </para>
+                 </listitem>
+             </varlistentry>
+             <varlistentry>
+diff --git a/src/util/debug.h b/src/util/debug.h
+index 4adafb7cfc03f7381c4d03071eb44edad04bee00..09f50cc9f3122f02d8ba2092dfb7ee633332de9b 100644
+--- a/src/util/debug.h
++++ b/src/util/debug.h
+@@ -101,7 +101,7 @@ int get_fd_from_debug_file(void);
+ #define SSSD_DEBUG_OPTS \
+         {"debug-level", 'd', POPT_ARG_INT, &debug_level, 0, \
+          _("Debug level"), NULL}, \
+-        {"debug-to-files", 'f', POPT_ARG_NONE, &debug_to_file, 0, \
++        {"debug-to-files", 'f', POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN, &debug_to_file, 0, \
+          _("Send the debug output to files instead of stderr"), NULL }, \
+         {"debug-to-stderr", 0, POPT_ARG_NONE | POPT_ARGFLAG_DOC_HIDDEN, &debug_to_stderr, 0, \
+          _("Send the debug output to stderr directly."), NULL }, \
+-- 
+2.15.1
+

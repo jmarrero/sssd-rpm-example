@@ -1,4 +1,4 @@
-From 5381ad1bd7693a6681f00bef093241f13e3a2c4f Mon Sep 17 00:00:00 2001
+From 565ef3ffcaaef69a768b6a341777c339217bbbab Mon Sep 17 00:00:00 2001
 From: Lukas Slebodnik <lslebodn@fedoraproject.org>
 Date: Mon, 12 Dec 2016 21:56:16 +0100
 Subject: [PATCH] SYSTEMD: Use capabilities
@@ -9,17 +9,17 @@ copied from selinux policy
  1 file changed, 1 insertion(+)
 
 diff --git a/src/sysv/systemd/sssd.service.in b/src/sysv/systemd/sssd.service.in
-index 05cfd3705084dbff8b46fb07e736612612c58b70..e7bbbdb5093f52e4b71e3c85a9082192013385e8 100644
+index 0c515d34caaa3ea397c4c7e95eef0188df170840..252889dbb2b7b1e651966258e7b76eab38357e76 100644
 --- a/src/sysv/systemd/sssd.service.in
 +++ b/src/sysv/systemd/sssd.service.in
-@@ -9,6 +9,7 @@ EnvironmentFile=-@environment_file@
- ExecStart=@sbindir@/sssd -i -f
+@@ -11,6 +11,7 @@ ExecStart=@sbindir@/sssd -i ${DEBUG_LOGGER}
  Type=notify
  NotifyAccess=main
+ PIDFile=@localstatedir@/run/sssd.pid
 +CapabilityBoundingSet=CAP_IPC_LOCK CAP_CHOWN CAP_DAC_READ_SEARCH CAP_KILL CAP_NET_ADMIN CAP_SYS_NICE CAP_FOWNER CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_BLOCK_SUSPEND
  
  [Install]
  WantedBy=multi-user.target
 -- 
-2.11.0
+2.15.1
 
