@@ -1,0 +1,91 @@
+From 5c6fc565cb26a6ed705c59d8a7143eab995a0c32 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 10 Jan 2018 13:51:24 +0100
+Subject: [PATCH] libnfsidmap: Use public plugin header file if available
+
+libnfsidmap was merged with nfs-utils in 2.1.2-rc7.
+
+We used private internal interface but required internal functions
+were dropped in nfs-utils-2.3.1. We need to use newly available public
+interface.
+---
+ src/external/libnfsidmap.m4            |  9 +++++++++
+ src/sss_client/nfs/nfsidmap_internal.h |  2 +-
+ src/sss_client/nfs/sss_nfs_client.c    | 14 ++++++++++----
+ 3 files changed, 20 insertions(+), 5 deletions(-)
+
+diff --git a/src/external/libnfsidmap.m4 b/src/external/libnfsidmap.m4
+index 56c7b55bce6db62208f26749aa089e6decaddb39..676e2f95a0c689acb460dd256e044c4e0803a4e5 100644
+--- a/src/external/libnfsidmap.m4
++++ b/src/external/libnfsidmap.m4
+@@ -17,4 +17,13 @@ AS_IF([test x"$with_nfsv4_idmap" = xyes], [
+             [AC_MSG_ERROR([libnfsidmap header files are not installed]
+ If you want to build sssd without nfs idmap pluging then specify
+ --without-nfsv4-idmapd-plugin when running configure.)])])
++
++    AC_CHECK_HEADERS([nfsidmap_plugin.h], [], [],
++        [#ifdef HAVE_STDLIB_H
++# include <stdlib.h>
++#endif
++#ifdef HAVE_STDINT_H
++# include <stdint.h>
++#endif
++#include <nfsidmap.h>])
+ ])
+diff --git a/src/sss_client/nfs/nfsidmap_internal.h b/src/sss_client/nfs/nfsidmap_internal.h
+index b75bc8335def3977750bb75fd407849b3e15660d..07547f8400e789a84fafc0ddf97133d46ebff252 100644
+--- a/src/sss_client/nfs/nfsidmap_internal.h
++++ b/src/sss_client/nfs/nfsidmap_internal.h
+@@ -75,4 +75,4 @@ extern nfs4_idmap_log_function_t idmap_log_func;
+  * Copyright (c) 1998, 1999, 2001 Niklas Hallqvist.  All rights reserved.
+  * Copyright (c) 2000, 2003 H�kan Olsson.  All rights reserved.
+  */
+-extern char    *conf_get_str(char *, char *);
++extern const char    *conf_get_str(const char *, const char *);
+diff --git a/src/sss_client/nfs/sss_nfs_client.c b/src/sss_client/nfs/sss_nfs_client.c
+index 8fd993005606a52217dc306f1816c3f88a283aa0..eff0d92962b33fb11131ff286ea42be655a052d6 100644
+--- a/src/sss_client/nfs/sss_nfs_client.c
++++ b/src/sss_client/nfs/sss_nfs_client.c
+@@ -20,7 +20,7 @@
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+ 
+-#define _GNU_SOURCE
++#include "config.h"
+ 
+ #include <stddef.h>
+ #include <stdlib.h>
+@@ -29,7 +29,13 @@
+ #include <string.h>
+ 
+ #include <nfsidmap.h>
++
++#ifdef HAVE_NFSIDMAP_PLUGIN_H
++#include <nfsidmap_plugin.h>
++#else /* fallback to internal header file with older version of libnfsidmap */
+ #include "nfsidmap_internal.h"
++#define nfsidmap_config_get conf_get_str
++#endif
+ 
+ #include "sss_client/sss_cli.h"
+ #include "sss_client/nss_mc.h"
+@@ -382,13 +388,13 @@ static bool str_equal(const char *s1, const char *s2)
+     return res;
+ }
+ 
+-static int nfs_conf_get_bool(char *sect, char *attr, int def)
++static int nfs_conf_get_bool(const char *sect, const char *attr, int def)
+ {
+     int res;
+-    char *val;
++    const char *val;
+ 
+     res = def;
+-    val = conf_get_str(sect, attr);
++    val = nfsidmap_config_get(sect, attr);
+     if (val) {
+         res = (str_equal("1", val) ||
+                str_equal("yes", val) ||
+-- 
+2.15.1
+

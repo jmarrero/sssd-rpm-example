@@ -31,7 +31,7 @@
 
 Name: sssd
 Version: 1.16.0
-Release: 6%{?dist}
+Release: 7%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -122,6 +122,7 @@ Patch0079: 0079-test_files_provider-Regression-test-for-implicit_fil.patch
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
 Patch0504: 0504-KCM-temporary-increase-hardcoded-buffers.patch
+Patch0505: 0505-libnfsidmap-Use-public-plugin-header-file-if-availab.patch
 
 ### Dependencies ###
 
@@ -1319,6 +1320,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Jan 11 2018 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-7
+- Fix building of sssd-nfs-idmap with libnfsidmap.so.1
+
 * Thu Jan 11 2018 Björn Esser <besser82@fedoraproject.org> - 1.16.0-6
 - Rebuilt for libnfsidmap.so.1
 
