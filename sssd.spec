@@ -31,7 +31,7 @@
 
 Name: sssd
 Version: 1.16.0
-Release: 5%{?dist}
+Release: 6%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1319,6 +1319,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Jan 11 2018 Björn Esser <besser82@fedoraproject.org> - 1.16.0-6
+- Rebuilt for libnfsidmap.so.1
+
 * Mon Dec 04 2017 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-5
 - Resolves: upstream#3523 - ABRT crash - /usr/libexec/sssd/sssd_nss in
                             setnetgrent_result_timeout
