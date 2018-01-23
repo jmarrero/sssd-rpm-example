@@ -123,6 +123,7 @@ Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
 Patch0504: 0504-KCM-temporary-increase-hardcoded-buffers.patch
 Patch0505: 0505-libnfsidmap-Use-public-plugin-header-file-if-availab.patch
+Patch0506: 0506-dyndns_tests-Fix-unit-test-with-missing-features-in-.patch
 
 ### Dependencies ###
 
