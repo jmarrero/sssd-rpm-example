@@ -684,8 +684,6 @@ done
 %build
 autoreconf -ivf
 
-export LDFLAGS="$(echo %{__global_ldflags} | sed -e 's/-Wl,-z,defs//')"
-
 %configure \
     --with-test-dir=/dev/shm \
     --with-db-path=%{dbpath} \
