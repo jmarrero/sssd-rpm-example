@@ -31,7 +31,7 @@
 
 Name: sssd
 Version: 1.16.0
-Release: 7%{?dist}
+Release: 8%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1323,6 +1323,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Jan 25 2018 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-8
+- Fix building on rawhide. Remove -Wl,-z,defs from LDFLAGS
+
 * Thu Jan 11 2018 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-7
 - Fix building of sssd-nfs-idmap with libnfsidmap.so.1
 
