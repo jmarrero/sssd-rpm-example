@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.0
-Release: 8%{?dist}
+Release: 9%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -231,10 +231,7 @@ Recommends: libsss_sudo = %{version}-%{release}
 Recommends: libsss_autofs%{?_isa} = %{version}-%{release}
 Recommends: sssd-nfs-idmap = %{version}-%{release}
 Requires: libsss_idmap = %{version}-%{release}
-Requires(post): systemd-units chkconfig
-Requires(preun): systemd-units chkconfig
-Requires(postun): systemd-units chkconfig
-
+%{?systemd_requires}
 
 ### Provides ###
 Provides: libsss_sudo-devel = %{version}-%{release}
@@ -564,6 +561,7 @@ Summary: The D-Bus responder of the SSSD
 Group: Applications/System
 License: GPLv3+
 Requires: sssd-common = %{version}-%{release}
+%{?systemd_requires}
 
 %description dbus
 Provides the D-Bus responder of the SSSD, called the InfoPipe, that allows
@@ -656,6 +654,7 @@ Summary: An implementation of a Kerberos KCM server
 Group:  Applications/System
 License: GPLv3+
 Requires: sssd-common = %{version}-%{release}
+%{?systemd_requires}
 
 %description kcm
 An implementation of a Kerberos KCM server. Use this package if you want to
@@ -1324,6 +1323,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Jan 25 2018 Igor Gnatenko <ignatenkobrain@fedoraproject.org> - 1.16.0-9
+- Fix systemd executions/requirements
+
 * Thu Jan 25 2018 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-8
 - Fix building on rawhide. Remove -Wl,-z,defs from LDFLAGS
 
