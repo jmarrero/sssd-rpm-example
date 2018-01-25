@@ -3,6 +3,9 @@
 # we don't want to provide private python extension libs
 %define __provides_exclude_from %{python2_sitearch}/.*\.so$|%{python3_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
 
+# SSSD fails to build with -Wl,-z,defs
+%undefine _strict_symbol_defs_build
+
 %define _hardened_build 1
 
     %global enable_polkit_rules_option --disable-polkit-rules-path
