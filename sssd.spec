@@ -194,6 +194,7 @@ BuildRequires: uid_wrapper
 BuildRequires: nss_wrapper
 BuildRequires: libnl3-devel
 BuildRequires: systemd-devel
+BuildRequires: systemd
 BuildRequires: cifs-utils-devel
 BuildRequires: libnfsidmap-devel
 BuildRequires: samba4-devel
