@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.0
-Release: 10%{?dist}
+Release: 11%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -122,6 +122,7 @@ Patch0077: 0077-confdb-Fix-starting-of-implicit-files-domain.patch
 Patch0078: 0078-confdb-Do-not-start-implicit_files-with-proxy-domain.patch
 Patch0079: 0079-test_files_provider-Regression-test-for-implicit_fil.patch
 Patch0080: 0080-BUILD-Add-missing-libs-found-by-Wl-z-defs.patch
+Patch0081: 0081-SELINUX-Check-if-SELinux-is-managed-in-selinux_child.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1324,6 +1325,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 07 2018 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-11
+- Resolves: upstream#3618 - selinux_child segfaults in a docker container
+
 * Tue Feb 06 2018 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-10
 - Resolves: rhbz#1431153 - sssd: libsss_proxy.so needs to be linked with -ldl
 
