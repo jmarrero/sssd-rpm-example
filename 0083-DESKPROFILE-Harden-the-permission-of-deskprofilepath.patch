@@ -1,0 +1,38 @@
+From 0fce902c563c3b54f2e67235668273ff7ff40752 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Tue, 13 Feb 2018 22:02:45 +0100
+Subject: [PATCH 83/88] DESKPROFILE: Harden the permission of deskprofilepath
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+After discussing the permissions with Simo, we have agreed on
+having the deskprofile dir with the minimal set of permissions
+needed
+
+Related:
+https://pagure.io/SSSD/sssd/issue/3621
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Simo Sorce <simo@redhat.com>
+---
+ contrib/sssd.spec.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index f4430b424..37efcbff5 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -968,7 +968,7 @@ done
+ %if (0%{?with_secrets} == 1)
+ %attr(700,root,root) %dir %{secdbpath}
+ %endif
+-%attr(755,sssd,sssd) %dir %{deskprofilepath}
++%attr(751,sssd,sssd) %dir %{deskprofilepath}
+ %ghost %attr(0644,sssd,sssd) %verify(not md5 size mtime) %{mcpath}/passwd
+ %ghost %attr(0644,sssd,sssd) %verify(not md5 size mtime) %{mcpath}/group
+ %ghost %attr(0644,sssd,sssd) %verify(not md5 size mtime) %{mcpath}/initgroups
+-- 
+2.14.3
+

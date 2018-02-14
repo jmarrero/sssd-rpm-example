@@ -123,6 +123,12 @@ Patch0079: 0079-test_files_provider-Regression-test-for-implicit_fil.patch
 Patch0080: 0080-BUILD-Add-missing-libs-found-by-Wl-z-defs.patch
 Patch0081: 0081-SELINUX-Check-if-SELinux-is-managed-in-selinux_child.patch
 Patch0082: 0082-DESKPROFILE-Add-checks-for-user-and-host-category.patch
+Patch0083: 0083-DESKPROFILE-Harden-the-permission-of-deskprofilepath.patch
+Patch0084: 0084-DESKPROFILE-Soften-umask-for-the-domain-s-dir.patch
+Patch0085: 0085-DESKPROFILE-Fix-the-permissions-and-soften-the-umask.patch
+Patch0086: 0086-DESKPROFILE-Use-seteuid-setegid-to-create-the-profil.patch
+Patch0087: 0087-DESKPROFILE-Use-seteuid-setegid-to-delete-the-profil.patch
+Patch0088: 0088-DESKPROFILE-Set-the-profile-permissions-to-read-only.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -914,7 +920,7 @@ done
 %attr(700,root,root) %dir %{dbpath}
 %attr(755,root,root) %dir %{mcpath}
 %attr(700,root,root) %dir %{secdbpath}
-%attr(755,root,root) %dir %{deskprofilepath}
+%attr(751,root,root) %dir %{deskprofilepath}
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/passwd
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/group
 %ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/initgroups
@@ -1328,6 +1334,8 @@ fi
 * Wed Feb 14 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.0-12
 - Resolves: rhbz#1538643 - SSSD crashes when retrieving a Desktop Profile
                            with no specific host/hostgroup set
+- Resolves: upstream#3621 - FleetCommander integration must not require
+                            capability DAC_OVERRIDE
 
 * Wed Feb 07 2018 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-11
 - Resolves: upstream#3618 - selinux_child segfaults in a docker container

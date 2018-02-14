@@ -1,0 +1,207 @@
+From 1a011c4f20e80f2bcb4d10a4d690b3a88c2fd70d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Wed, 31 Jan 2018 16:50:38 +0100
+Subject: [PATCH 87/88] DESKPROFILE: Use seteuid()/setegid() to delete the
+ profile/user's dir
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Let's use seteuid()/setegid() in order to properly delete the desktop
+profiles related files.
+
+Some malabarism has been introduced in order to proper delete those
+dirs/files as:
+/var/lib/sss/deskprofile/ipa.example/admin/profile
+------------------------ ----------- ----- -------
+         |                   |        |       |
+         v                   |        |       |
+ Created by sssd package,    |        |       |
+ not touching at all         |        |       |
+                             v        |       |
+                This one is owned by  |       |
+                root:root and has 751 |       |
+                as permissions        |       |
+                                      v       |
+                        This one is owned by  |
+                        admin:admins and has  |
+                        0700 as permissions   |
+                                              v
+                                This one is owned by admin:admins
+                                and has 0600 as permissions
+
+So, when deleting we do:
+- as admin:
+  - sss_remove_subtree("/var/lib/sss/deskprofile/ipa.example/admin/");
+    We can't remove the "admin" dir itself as it would require different
+    permissions in the domain's folder and that's something we don't
+    want to change
+
+- as root:
+  - sss_remove_tree("/var/lib/sss/deskprofile/ipa.example/admin/");
+    Now we just removed the "admin" dir. The main reason behind not
+    being able to just delete it as root is because the permissions of
+    the file and dirs do not allow root to access then when not relying
+    in the CAP_DAC_OVERRIDE
+
+This issue was exposed due to the CAP_DAC_OVERRIDE being removed from
+Fedora package.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3621
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Simo Sorce <simo@redhat.com>
+---
+ src/providers/ipa/ipa_deskprofile_rules_util.c | 91 ++++++++++++++++++++++++--
+ src/providers/ipa/ipa_deskprofile_rules_util.h |  4 +-
+ src/providers/ipa/ipa_session.c                |  4 +-
+ 3 files changed, 93 insertions(+), 6 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_deskprofile_rules_util.c b/src/providers/ipa/ipa_deskprofile_rules_util.c
+index eb04a69f8..2102713d6 100644
+--- a/src/providers/ipa/ipa_deskprofile_rules_util.c
++++ b/src/providers/ipa/ipa_deskprofile_rules_util.c
+@@ -977,21 +977,104 @@ done:
+ }
+ 
+ errno_t
+-ipa_deskprofile_rules_remove_user_dir(const char *user_dir)
++ipa_deskprofile_rules_remove_user_dir(const char *user_dir,
++                                      uid_t uid,
++                                      gid_t gid)
+ {
++    gid_t orig_gid;
++    uid_t orig_uid;
+     errno_t ret;
+ 
++    orig_gid = getegid();
++    orig_uid = geteuid();
++
++    ret = setegid(gid);
++    if (ret == -1) {
++        ret = errno;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Unable to set effective group id (%"PRIu32") of the domain's "
++              "process [%d]: %s\n",
++              gid, ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = seteuid(uid);
++    if (ret == -1) {
++        ret = errno;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Unable to set effective user id (%"PRIu32") of the domain's "
++              "process [%d]: %s\n",
++              uid, ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = sss_remove_subtree(user_dir);
++    if (ret != EOK && ret != ENOENT) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Cannot remove \"%s\" directory [%d]: %s\n",
++              user_dir, ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = seteuid(orig_uid);
++    if (ret == -1) {
++        ret = errno;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Failed to set the effect user id (%"PRIu32") of the domain's "
++              "process [%d]: %s\n",
++              orig_uid, ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = setegid(orig_gid);
++    if (ret == -1) {
++        ret = errno;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Failed to set the effect group id (%"PRIu32") of the domain's "
++              "process [%d]: %s\n",
++              orig_gid, ret, sss_strerror(ret));
++        goto done;
++    }
++
+     ret = sss_remove_tree(user_dir);
+     if (ret == ENOENT) {
+-        return EOK;
++        ret = EOK;
+     } else if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "Cannot remove \"%s\" directory [%d]: %s\n",
+               user_dir, ret, sss_strerror(ret));
+-        return ret;
++        goto done;
+     }
+ 
+-    return EOK;
++    ret = EOK;
++
++done:
++    if (geteuid() != orig_uid) {
++        ret = seteuid(orig_uid);
++        if (ret == -1) {
++            ret = errno;
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "unable to set effective user id (%"PRIu32") of the "
++                  "domain's process [%d]: %s\n",
++                  orig_uid, ret, sss_strerror(ret));
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "Sending SIGUSR2 to the process: %d\n", getpid());
++            kill(getpid(), SIGUSR2);
++        }
++    }
++    if (getegid() != orig_gid) {
++        ret = setegid(orig_gid);
++        if (ret == -1) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "Unable to set effective user id (%"PRIu32") of the "
++                  "domain's process [%d]: %s\n",
++                  orig_uid, ret, sss_strerror(ret));
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "Sending SIGUSR2 to the process: %d\n", getpid());
++            kill(getpid(), SIGUSR2);
++        }
++    }
++    return ret;
+ }
+ 
+ errno_t
+diff --git a/src/providers/ipa/ipa_deskprofile_rules_util.h b/src/providers/ipa/ipa_deskprofile_rules_util.h
+index 61f404df8..4016dbccf 100644
+--- a/src/providers/ipa/ipa_deskprofile_rules_util.h
++++ b/src/providers/ipa/ipa_deskprofile_rules_util.h
+@@ -45,7 +45,9 @@ ipa_deskprofile_rules_save_rule_to_disk(
+                                     uid_t uid,
+                                     gid_t gid);
+ errno_t
+-ipa_deskprofile_rules_remove_user_dir(const char *user_dir);
++ipa_deskprofile_rules_remove_user_dir(const char *user_dir,
++                                      uid_t uid,
++                                      gid_t gid);
+ 
+ errno_t
+ deskprofile_get_cached_priority(struct sss_domain_info *domain,
+diff --git a/src/providers/ipa/ipa_session.c b/src/providers/ipa/ipa_session.c
+index 3c7dd33c3..25ad5ce51 100644
+--- a/src/providers/ipa/ipa_session.c
++++ b/src/providers/ipa/ipa_session.c
+@@ -524,7 +524,9 @@ ipa_pam_session_handler_send(TALLOC_CTX *mem_ctx,
+     /* As no proper merging mechanism has been implemented yet ...
+      * let's just remove the user directory stored in the disk as it's
+      * going to be created again in case there's any rule fetched. */
+-    ret = ipa_deskprofile_rules_remove_user_dir(state->user_dir);
++    ret = ipa_deskprofile_rules_remove_user_dir(state->user_dir,
++                                                state->uid,
++                                                state->gid);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "ipa_deskprofile_rules_remove_user_dir() failed.\n");
+-- 
+2.14.3
+
