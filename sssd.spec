@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.0
-Release: 11%{?dist}
+Release: 12%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -122,6 +122,7 @@ Patch0078: 0078-confdb-Do-not-start-implicit_files-with-proxy-domain.patch
 Patch0079: 0079-test_files_provider-Regression-test-for-implicit_fil.patch
 Patch0080: 0080-BUILD-Add-missing-libs-found-by-Wl-z-defs.patch
 Patch0081: 0081-SELINUX-Check-if-SELinux-is-managed-in-selinux_child.patch
+Patch0082: 0082-DESKPROFILE-Add-checks-for-user-and-host-category.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1324,6 +1325,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 14 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.0-12
+- Resolves: rhbz#1538643 - SSSD crashes when retrieving a Desktop Profile
+                           with no specific host/hostgroup set
+
 * Wed Feb 07 2018 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-11
 - Resolves: upstream#3618 - selinux_child segfaults in a docker container
 
