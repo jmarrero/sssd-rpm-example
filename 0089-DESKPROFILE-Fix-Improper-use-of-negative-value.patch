@@ -1,0 +1,35 @@
+From 0633e97cfd6a696c19e19219e3de1cda7c7ee7b4 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 19 Feb 2018 17:56:32 +0100
+Subject: [PATCH] DESKPROFILE: Fix 'Improper use of negative value'
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This issue was found by Coverity. Similar as in code block before ret
+must be set to errno to allow proper log messages since initial ret will
+always be -1.
+
+Related to:
+https://pagure.io/SSSD/sssd/issue/3621
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/providers/ipa/ipa_deskprofile_rules_util.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/providers/ipa/ipa_deskprofile_rules_util.c b/src/providers/ipa/ipa_deskprofile_rules_util.c
+index e52587378c3420eca1059fe123a6c878700fe69a..8f4d4c90cf0cf9ee2b05eca67e44b4cd7dfdb6ed 100644
+--- a/src/providers/ipa/ipa_deskprofile_rules_util.c
++++ b/src/providers/ipa/ipa_deskprofile_rules_util.c
+@@ -1065,6 +1065,7 @@ done:
+     if (getegid() != orig_gid) {
+         ret = setegid(orig_gid);
+         if (ret == -1) {
++            ret = errno;
+             DEBUG(SSSDBG_CRIT_FAILURE,
+                   "Unable to set effective user id (%"PRIu32") of the "
+                   "domain's process [%d]: %s\n",
+-- 
+2.16.1
+

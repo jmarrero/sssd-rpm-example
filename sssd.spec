@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.0
-Release: 12%{?dist}
+Release: 13%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -129,6 +129,7 @@ Patch0085: 0085-DESKPROFILE-Fix-the-permissions-and-soften-the-umask.patch
 Patch0086: 0086-DESKPROFILE-Use-seteuid-setegid-to-create-the-profil.patch
 Patch0087: 0087-DESKPROFILE-Use-seteuid-setegid-to-delete-the-profil.patch
 Patch0088: 0088-DESKPROFILE-Set-the-profile-permissions-to-read-only.patch
+Patch0089: 0089-DESKPROFILE-Fix-Improper-use-of-negative-value.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1331,6 +1332,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Feb 20 2018 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-13
+- Resolves: upstream#3621 - backport bug found by static analyzers
+
 * Wed Feb 14 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.0-12
 - Resolves: rhbz#1538643 - SSSD crashes when retrieving a Desktop Profile
                            with no specific host/hostgroup set
