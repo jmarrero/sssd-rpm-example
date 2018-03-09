@@ -33,8 +33,8 @@
 %endif
 
 Name: sssd
-Version: 1.16.0
-Release: 13%{?dist}
+Version: 1.16.1
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -42,99 +42,10 @@ URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
-Patch0001: 0001-KCM-Fix-typo-in-comments.patch
-Patch0002: 0002-Fix-minor-spelling-mistakes.patch
-Patch0003: 0003-CONFIG-Add-a-new-option-auto_private_groups.patch
-Patch0004: 0004-CONFDB-Remove-the-obsolete-option-magic_private_grou.patch
-Patch0005: 0005-SDAP-Allow-the-mpg-flag-for-the-main-domain.patch
-Patch0006: 0006-LDAP-Turn-group-request-into-user-request-for-MPG-do.patch
-Patch0007: 0007-SYSDB-Prevent-users-and-groups-ID-collision-in-MPG-d.patch
-Patch0008: 0008-TESTS-Add-integration-tests-for-the-auto_private_gro.patch
-Patch0009: 0009-CACHE_REQ-Copy-the-cr_domain-list-for-each-request.patch
-Patch0010: 0010-sudo-document-background-activity.patch
-Patch0011: 0011-MAN-GPO-Security-Filtering-limitation.patch
-Patch0012: 0012-CI-Ignore-source-file-generated-by-systemtap.patch
-Patch0013: 0013-sudo-always-use-srv_opts-from-id-context.patch
-Patch0014: 0014-AD-Remember-last-site-discovered.patch
-Patch0015: 0015-sysdb-add-functions-to-get-set-client-site.patch
-Patch0016: 0016-AD-Remember-last-site-discovered-in-sysdb.patch
-Patch0017: 0017-UTIL-Add-wrapper-function-to-configure-logger.patch
-Patch0018: 0018-Add-parameter-logger-to-daemons.patch
-Patch0019: 0019-SYSTEMD-Replace-parameter-debug-to-files-with-DEBUG_.patch
-Patch0020: 0020-SYSTEMD-Add-environment-file-to-responder-service-fi.patch
-Patch0021: 0021-UTIL-Hide-and-deprecate-parameter-debug-to-files.patch
-Patch0023: 0023-LDAP-Bind-to-the-LDAP-server-also-in-the-auth.patch
-Patch0024: 0024-KCM-Fix-restart-during-after-upgrade.patch
-Patch0025: 0025-sss_client-create-nss_common.h.patch
-Patch0026: 0026-nss-idmap-add-nss-like-calls-with-timeout-and-flags.patch
-Patch0027: 0027-NSS-add-_EX-version-of-some-requests.patch
-Patch0028: 0028-NSS-add-support-for-SSS_NSS_EX_FLAG_NO_CACHE.patch
-Patch0029: 0029-CACHE_REQ-Add-cache_req_data_set_bypass_dp.patch
-Patch0030: 0030-nss-make-memcache_delete_entry-public.patch
-Patch0031: 0031-NSS-add-support-for-SSS_NSS_EX_FLAG_INVALIDATE_CACHE.patch
-Patch0032: 0032-NSS-TESTS-add-unit-tests-for-_EX-requests.patch
-Patch0033: 0033-nss-idmap-add-timeout-version-of-old-sss_nss_-calls.patch
-Patch0034: 0034-nss-idmap-allow-empty-buffer-with-SSS_NSS_EX_FLAG_IN.patch
-Patch0035: 0035-RESP-Add-some-missing-NULL-checks.patch
-Patch0036: 0036-BUILD-Properly-expand-variables-in-sssd-ifp.service.patch
-Patch0037: 0037-SYSTEMD-Clean-pid-file-in-corner-cases.patch
-Patch0038: 0038-CHILD-Pass-information-about-logger-to-children.patch
-Patch0039: 0039-TOOLS-Double-quote-array-expansions-in-sss_debugleve.patch
-Patch0040: 0040-TOOLS-Call-exec-for-sss_debuglevel.patch
-Patch0041: 0041-LDAP-Improve-error-treatment-from-sdap_cli_connect-i.patch
-Patch0042: 0042-p11_child-return-multiple-certs.patch
-Patch0043: 0043-PAM-handled-multiple-certs-in-the-responder.patch
-Patch0044: 0044-pam_sss-refactoring-use-struct-cert_auth_info.patch
-Patch0045: 0045-p11_child-use-options-to-select-certificate-for-auth.patch
-Patch0046: 0046-pam-add-prompt-string-for-certificate-authentication.patch
-Patch0047: 0047-PAM-allow-missing-logon_name-during-certificate-auth.patch
-Patch0048: 0048-p11_child-add-descriptions-for-error-codes-to-debug-.patch
-Patch0049: 0049-pam-filter-certificates-in-the-responder-not-in-the-.patch
-Patch0050: 0050-PAM-add-certificate-s-label-to-the-selection-prompt.patch
-Patch0051: 0051-SYSDB-Remove-code-causing-a-covscan-warning.patch
-Patch0052: 0052-SYSDB-Better-debugging-for-email-conflicts.patch
-Patch0053: 0053-NSS-Use-enum_ctx-as-memory_context-in-_setnetgrent_s.patch
-Patch0054: 0054-cache_req-Correction-of-cache_req-debug-string-ID-fo.patch
-Patch0055: 0055-TESTS-Order-list-of-entries-in-some-lists.patch
-Patch0056: 0056-TOOLS-Add-a-new-sssctl-command-access-report.patch
-Patch0057: 0057-dp-use-void-to-express-empty-output-argument-list.patch
-Patch0058: 0058-dp-add-method-to-refresh-access-control-rules.patch
-Patch0059: 0059-ipa-implement-method-to-refresh-HBAC-rules.patch
-Patch0060: 0060-ifp-add-method-to-refresh-access-control-rules-in-do.patch
-Patch0061: 0061-sssctl-call-dbus-instead-of-pam-to-refresh-HBAC-rule.patch
-Patch0062: 0062-SPEC-Reduce-build-time-dependencies.patch
-Patch0063: 0063-WATCHDOG-Restart-providers-with-SIGUSR2-after-time-d.patch
-Patch0064: 0064-mmap_cache-make-checks-independent-of-input-size.patch
-Patch0065: 0065-NSS-Fix-covscan-warning.patch
-Patch0066: 0066-krb5-show-error-message-for-krb5_init_context-failur.patch
-Patch0067: 0067-responder-Fix-talloc-hierarchy-in-sized_output_name.patch
-Patch0068: 0068-test_responder-Check-memory-leak-in-sized_output_nam.patch
-Patch0069: 0069-UTIL-add-find_domain_by_object_name_ex.patch
-Patch0070: 0070-ipa-handle-users-from-different-domains-in-ipa_resol.patch
-Patch0071: 0071-overrides-fixes-for-sysdb_invalidate_overrides.patch
-Patch0072: 0072-ipa-check-for-SYSDB_OVERRIDE_DN-in-process_members-a.patch
-Patch0073: 0073-IPA-use-cache-searches-in-get_groups_dns.patch
-Patch0074: 0074-ipa-compare-DNs-instead-of-group-names-in-ipa_s2n_sa.patch
-Patch0075: 0075-nss-Fix-invalid-enum-nss_status-return-values.patch
-Patch0076: 0076-confdb-Move-detection-files-to-separate-function.patch
-Patch0077: 0077-confdb-Fix-starting-of-implicit-files-domain.patch
-Patch0078: 0078-confdb-Do-not-start-implicit_files-with-proxy-domain.patch
-Patch0079: 0079-test_files_provider-Regression-test-for-implicit_fil.patch
-Patch0080: 0080-BUILD-Add-missing-libs-found-by-Wl-z-defs.patch
-Patch0081: 0081-SELINUX-Check-if-SELinux-is-managed-in-selinux_child.patch
-Patch0082: 0082-DESKPROFILE-Add-checks-for-user-and-host-category.patch
-Patch0083: 0083-DESKPROFILE-Harden-the-permission-of-deskprofilepath.patch
-Patch0084: 0084-DESKPROFILE-Soften-umask-for-the-domain-s-dir.patch
-Patch0085: 0085-DESKPROFILE-Fix-the-permissions-and-soften-the-umask.patch
-Patch0086: 0086-DESKPROFILE-Use-seteuid-setegid-to-create-the-profil.patch
-Patch0087: 0087-DESKPROFILE-Use-seteuid-setegid-to-delete-the-profil.patch
-Patch0088: 0088-DESKPROFILE-Set-the-profile-permissions-to-read-only.patch
-Patch0089: 0089-DESKPROFILE-Fix-Improper-use-of-negative-value.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
 Patch0504: 0504-KCM-temporary-increase-hardcoded-buffers.patch
-Patch0505: 0505-libnfsidmap-Use-public-plugin-header-file-if-availab.patch
 
 ### Dependencies ###
 
@@ -1332,6 +1243,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Mar  9 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-1
+- New upstream release 1.16.1
+- https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_16_1.html
+
 * Tue Feb 20 2018 Lukas Slebodnik <lslebodn@fedoraproject.org> - 1.16.0-13
 - Resolves: upstream#3621 - backport bug found by static analyzers
 
