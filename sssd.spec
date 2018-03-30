@@ -49,6 +49,7 @@ Patch0004: 0004-TOOLS-Take-into-consideration-app-domains.patch
 Patch0005: 0005-TESTS-Move-get_call_output-to-util.py.patch
 Patch0006: 0006-TESTS-Make-get_call_output-more-flexible-about-the-s.patch
 Patch0007: 0007-TESTS-Add-a-basic-test-of-sssctl-domain-list.patch
+Patch0008: 0008-KCM-Use-json_loadb-when-dealing-with-sss_iobuf-data.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1254,6 +1255,8 @@ fi
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain
 - Resolves: upstream#3660 - confdb_expand_app_domains() always fails
 - Resolves: upstream#3658 - Application domain is not interpreted correctly
+- Resolves: upstream#3687 - KCM: Don't pass a non null terminated string to
+                            json_loads()
 
 * Fri Mar  9 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-1
 - New upstream release 1.16.1

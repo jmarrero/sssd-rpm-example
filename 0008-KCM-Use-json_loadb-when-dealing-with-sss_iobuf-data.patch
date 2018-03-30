@@ -1,0 +1,67 @@
+From 8a89fce38a2ad76eb4eebd74a0821c80154ac892 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Wed, 21 Mar 2018 16:38:22 +0100
+Subject: [PATCH 08/15] KCM: Use json_loadb() when dealing with sss_iobuf data
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+As sss_iobuf data is *non* NULL terminated, we have to use json_loadb()
+passing the data's length instead of just using json_loads().
+
+Due to this issue, when running sssd-kcm under valgrind and performing a
+`kinit foo` a bunch of erros like the following one could be seen:
+==2638== Conditional jump or move depends on uninitialised value(s)
+==2638==    at 0x57DB678: stream_get.part.3 (load.c:172)
+==2638==    by 0x57DB9CA: stream_get (load.c:643)
+==2638==    by 0x57DB9CA: lex_get (load.c:246)
+==2638==    by 0x57DB9CA: lex_scan (load.c:601)
+==2638==    by 0x57DC56A: parse_json.constprop.7 (load.c:904)
+==2638==    by 0x57DC6AB: json_loads (load.c:959)
+==2638==    by 0x11ABEA: ??? (in /usr/libexec/sssd/sssd_kcm)
+==2638==    by 0x11AEF0: ??? (in /usr/libexec/sssd/sssd_kcm)
+==2638==    by 0x125D4A: ??? (in /usr/libexec/sssd/sssd_kcm)
+==2638==    by 0x12623B: ??? (in /usr/libexec/sssd/sssd_kcm)
+==2638==    by 0x9BCD71F: epoll_event_loop (tevent_epoll.c:728)
+==2638==    by 0x9BCD71F: epoll_event_loop_once (tevent_epoll.c:930)
+==2638==    by 0x9BCBBA6: std_event_loop_once (tevent_standard.c:114)
+==2638==    by 0x9BC7FEC: _tevent_loop_once (tevent.c:725)
+==2638==    by 0x9BC820A: tevent_common_loop_wait (tevent.c:848)
+
+Related to:
+https://pagure.io/SSSD/sssd/issue/3687
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/kcm/kcmsrv_ccache_secrets.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ccache_secrets.c b/src/responder/kcm/kcmsrv_ccache_secrets.c
+index 8be7daea5..04dad9596 100644
+--- a/src/responder/kcm/kcmsrv_ccache_secrets.c
++++ b/src/responder/kcm/kcmsrv_ccache_secrets.c
+@@ -231,6 +231,7 @@ static errno_t sec_list_parse(struct sss_iobuf *outbuf,
+ {
+     json_t *root;
+     uint8_t *sec_http_list;
++    size_t sec_http_list_len;
+     json_error_t error;
+     json_t *element;
+     errno_t ret;
+@@ -244,8 +245,10 @@ static errno_t sec_list_parse(struct sss_iobuf *outbuf,
+         DEBUG(SSSDBG_CRIT_FAILURE, "No data in output buffer?\n");
+         return EINVAL;
+     }
++    sec_http_list_len = sss_iobuf_get_len(outbuf);
+ 
+-    root = json_loads((const char *) sec_http_list, 0, &error);
++    root = json_loadb((const char *) sec_http_list,
++                      sec_http_list_len, 0, &error);
+     if (root == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+                 "Failed to parse JSON payload on line %d: %s\n",
+-- 
+2.14.3
+
