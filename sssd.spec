@@ -54,6 +54,7 @@ Patch0009: 0009-KCM-Remove-mem_ctx-from-kcm_new_req.patch
 Patch0010: 0010-KCM-Introduce-kcm_input_get_payload_len.patch
 Patch0011: 0011-KCM-Do-not-use-2048-as-fixed-size-for-the-payload.patch
 Patch0012: 0012-KCM-Adjust-REPLY_MAX-to-the-one-used-in-krb5.patch
+Patch0013: 0013-intg-convert-results-returned-as-bytes-to-strings.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1261,6 +1262,7 @@ fi
 - Resolves: upstream#3687 - KCM: Don't pass a non null terminated string to
                             json_loads()
 - Resolves: upstream#3386 - KCM: Payload buffer is too small
+- Resolves: upstream#3666 - Fix usage of str.decode() in our tests
 
 * Fri Mar  9 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-1
 - New upstream release 1.16.1

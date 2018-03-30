@@ -1,0 +1,48 @@
+From 414ce6438a5450e5f1c1b03994f59d37f0ff8a36 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Fri, 16 Mar 2018 13:43:17 +0100
+Subject: [PATCH 13/15] intg: convert results returned as bytes to strings
+
+With python3 comparisons between byte literals and strings will fail. To
+make sure assertions will pass the search results must be converted to
+(utf-8) strings first.
+
+Resolves https://pagure.io/SSSD/sssd/issue/3666
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/tests/intg/test_ts_cache.py | 17 +++++++++++------
+ 1 file changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/src/tests/intg/test_ts_cache.py b/src/tests/intg/test_ts_cache.py
+index 703e3b255..c3819e21a 100644
+--- a/src/tests/intg/test_ts_cache.py
++++ b/src/tests/intg/test_ts_cache.py
+@@ -212,12 +212,17 @@ def get_attrs(ldb_conn, type, name, domain, attr_list):
+     ts_attrs = dict()
+ 
+     for attr in attr_list:
+-        sysdb_attrs[attr] = ldb_conn.get_entry_attr(
+-                                     sssd_ldb.CacheType.sysdb,
+-                                     type, name, domain, attr)
+-        ts_attrs[attr] = ldb_conn.get_entry_attr(
+-                                     sssd_ldb.CacheType.timestamps,
+-                                     type, name, domain, attr)
++        val = ldb_conn.get_entry_attr(sssd_ldb.CacheType.sysdb,
++                                      type, name, domain, attr)
++        if val:
++            val = val.decode('utf-8')
++        sysdb_attrs[attr] = val
++
++        val = ldb_conn.get_entry_attr(sssd_ldb.CacheType.timestamps,
++                                      type, name, domain, attr)
++        if val:
++            val = val.decode('utf-8')
++        ts_attrs[attr] = val
+     return (sysdb_attrs, ts_attrs)
+ 
+ 
+-- 
+2.14.3
+
