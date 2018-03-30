@@ -1,0 +1,87 @@
+From f9b7073e5cd057cf961b34f99ea1dff0c86b5b6a Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 17 Nov 2017 20:15:34 +0100
+Subject: [PATCH 01/15] IPA: Handle empty nisDomainName
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3573
+
+If nisdomain=, i.e. a blank NIS domain name, sssd was not processing the
+netgroup at all. This is not in agreement with man innetgr which says "Any of
+the elements in a triple can be empty, which means that anything matches. The
+functions described here allow access to the netgroup databases".
+
+This patch instead returns an empty domain as well, which eventually
+produces the same output as if the netgroup was requested from the
+compat tree.
+
+To reproduce the bug:
+$ ipa netgroup-add
+Netgroup name: emptydom
+-------------------------
+Added netgroup "emptydom"
+-------------------------
+  Netgroup name: emptydom
+  NIS domain name: ipa.test
+  IPA unique ID: 164bc15a-f4b3-11e7-acdb-525400ca6df3
+$ ipa netgroup-add-member
+Netgroup name: emptydom
+[member user]: admin
+[member group]:
+[member host]:
+[member host group]:
+[member netgroup]:
+  Netgroup name: emptydom
+  NIS domain name: ipa.test
+  Member User: admin
+-------------------------
+Number of members added 1
+-------------------------
+$ ipa netgroup-mod --nisdomain="" emptydom
+----------------------------
+Modified netgroup "emptydom"
+----------------------------
+  Netgroup name: emptydom
+  Member User: admin
+
+Then run:
+    getent negroup emptydom
+without the patch, the netgroup won't be resolvable. It will resolve to
+a netgroup triple that looks like this after the patch:
+    emptydom              (-,admin,)
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+---
+ src/providers/ipa/ipa_netgroups.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/src/providers/ipa/ipa_netgroups.c b/src/providers/ipa/ipa_netgroups.c
+index 5c929a485..05ebac758 100644
+--- a/src/providers/ipa/ipa_netgroups.c
++++ b/src/providers/ipa/ipa_netgroups.c
+@@ -953,7 +953,9 @@ static int ipa_netgr_process_all(struct ipa_get_netgroups_state *state)
+ 
+         ret = sysdb_attrs_get_string(state->netgroups[i], SYSDB_NETGROUP_DOMAIN,
+                                      &domain);
+-        if (ret != EOK) {
++        if (ret == ENOENT) {
++            domain = NULL;
++        } else if (ret != EOK) {
+             goto done;
+         }
+ 
+@@ -974,7 +976,7 @@ static int ipa_netgr_process_all(struct ipa_get_netgroups_state *state)
+                 for (k = 0; k < hosts_count; k++) {
+                     triple = talloc_asprintf(state, "(%s,%s,%s)",
+                                              hosts[k], uids[j],
+-                                             domain);
++                                             domain ? domain : "");
+                     if (triple == NULL) {
+                         ret = ENOMEM;
+                         goto done;
+-- 
+2.14.3
+

@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -42,6 +42,8 @@ URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
+Patch0001: 0001-IPA-Handle-empty-nisDomainName.patch
+Patch0002: 0002-intg-enhance-netgroups-test.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1243,6 +1245,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
+- Resolves: upstream#3573 - sssd won't show netgroups with blank domain
+
 * Fri Mar  9 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-1
 - New upstream release 1.16.1
 - https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_16_1.html
