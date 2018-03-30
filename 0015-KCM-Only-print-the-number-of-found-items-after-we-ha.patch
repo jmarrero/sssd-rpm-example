@@ -1,0 +1,45 @@
+From 94897e5c82967528dae2a79e42cd1eb3c3be68f3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Tue, 27 Mar 2018 15:02:09 +0200
+Subject: [PATCH 15/15] KCM: Only print the number of found items after we have
+ it
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+With the current code we've been always printing "Found 0 items" as
+state->sec_key_list_len is only set by sec_list_parse().
+
+In order to solve this, let's just print it *after* we have
+state->sec_key_list_len set.
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/kcm/kcmsrv_ccache_secrets.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ccache_secrets.c b/src/responder/kcm/kcmsrv_ccache_secrets.c
+index 8a7a577d8..f2b46460e 100644
+--- a/src/responder/kcm/kcmsrv_ccache_secrets.c
++++ b/src/responder/kcm/kcmsrv_ccache_secrets.c
+@@ -207,7 +207,6 @@ static void sec_list_done(struct tevent_req *subreq)
+             return;
+         }
+     } else if (http_code == 200) {
+-        DEBUG(SSSDBG_TRACE_INTERNAL, "Found %zu items\n", state->sec_key_list_len);
+         ret = sec_list_parse(outbuf, state,
+                              &state->sec_key_list,
+                              &state->sec_key_list_len);
+@@ -215,6 +214,7 @@ static void sec_list_done(struct tevent_req *subreq)
+             tevent_req_error(req, ret);
+             return;
+         }
++        DEBUG(SSSDBG_TRACE_INTERNAL, "Found %zu items\n", state->sec_key_list_len);
+     } else {
+         tevent_req_error(req, http2errno(http_code));
+         return;
+-- 
+2.14.3
+
