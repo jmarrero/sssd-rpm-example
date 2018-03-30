@@ -1,0 +1,44 @@
+From 692780f793f96815aaee0007515838fce30b6097 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Wed, 14 Mar 2018 23:01:39 +0100
+Subject: [PATCH 04/15] TOOLS: Take into consideration app domains
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In order to properly show an app domain when listing domains using
+sssctl domain-list we have to expand the confdb, as already done in the
+monitor code.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3658
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/tools/common/sss_tools.c | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/src/tools/common/sss_tools.c b/src/tools/common/sss_tools.c
+index e491a1286..4832db5a0 100644
+--- a/src/tools/common/sss_tools.c
++++ b/src/tools/common/sss_tools.c
+@@ -117,6 +117,14 @@ static errno_t sss_tool_domains_init(TALLOC_CTX *mem_ctx,
+     struct sss_domain_info *dom;
+     errno_t ret;
+ 
++    ret = confdb_expand_app_domains(confdb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Unable to expand application domains [%d]: %s\n",
++              ret, sss_strerror(ret));
++        return ret;
++    }
++
+     ret = confdb_get_domains(confdb, &domains);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to setup domains [%d]: %s\n",
+-- 
+2.14.3
+
