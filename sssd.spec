@@ -44,6 +44,7 @@ Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 ### Patches ###
 Patch0001: 0001-IPA-Handle-empty-nisDomainName.patch
 Patch0002: 0002-intg-enhance-netgroups-test.patch
+Patch0003: 0003-CONFDB-Start-a-ldb-transaction-from-sss_ldb_modify_p.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1247,6 +1248,7 @@ fi
 %changelog
 * Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain
+- Resolves: upstream#3660 - confdb_expand_app_domains() always fails
 
 * Fri Mar  9 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-1
 - New upstream release 1.16.1
