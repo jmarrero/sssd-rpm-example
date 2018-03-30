@@ -1,0 +1,55 @@
+From d910ef0667a902b4ac0551f3e8d11121bb02214c Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Wed, 14 Mar 2018 09:21:45 +0100
+Subject: [PATCH 12/15] KCM: Adjust REPLY_MAX to the one used in krb5
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+krb5 has its MAX_REPLY_SIZE set as 10*1024*1024, as seen in:
+https://github.com/krb5/krb5/blob/master/src/lib/krb5/ccache/cc_kcm.c#L53
+
+Related:
+https://pagure.io/SSSD/sssd/issue/3386
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/kcm/kcmsrv_ops.c | 5 ++++-
+ src/util/tev_curl.c            | 3 ++-
+ 2 files changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ops.c b/src/responder/kcm/kcmsrv_ops.c
+index 7a78e9d6b..1e229adc4 100644
+--- a/src/responder/kcm/kcmsrv_ops.c
++++ b/src/responder/kcm/kcmsrv_ops.c
+@@ -31,7 +31,10 @@
+ #include "responder/kcm/kcmsrv_ops.h"
+ #include "responder/kcm/kcmsrv_ccache.h"
+ 
+-#define KCM_REPLY_MAX 16384
++/* This limit comes from:
++ * https://github.com/krb5/krb5/blob/master/src/lib/krb5/ccache/cc_kcm.c#L53
++ */
++#define KCM_REPLY_MAX 10*1024*1024
+ 
+ struct kcm_op_ctx {
+     struct kcm_resp_ctx *kcm_data;
+diff --git a/src/util/tev_curl.c b/src/util/tev_curl.c
+index 4c2f1ec9f..f8bede6c5 100644
+--- a/src/util/tev_curl.c
++++ b/src/util/tev_curl.c
+@@ -35,7 +35,8 @@
+ #include "util/tev_curl.h"
+ 
+ #define TCURL_IOBUF_CHUNK   1024
+-#define TCURL_IOBUF_MAX    16384
++/* This limit in the same one as KCM_REPLY_MAX */
++#define TCURL_IOBUF_MAX     10*1024*1024
+ 
+ static bool global_is_curl_initialized;
+ 
+-- 
+2.14.3
+
