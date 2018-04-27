@@ -1,0 +1,165 @@
+From a40215878688cf10e35e6ba27893201c686395b3 Mon Sep 17 00:00:00 2001
+From: Justin Stephenson <jstephen@redhat.com>
+Date: Fri, 14 Jul 2017 16:08:37 -0400
+Subject: [PATCH] CONFDB: Add passwd_files and group_files options
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Add new options to the files provider allowing an administrator to
+configure the files provider to read and monitor multiple or
+non-standard passwd and group file sources. These options default to
+/etc/passwd and /etc/group when unset.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit c1208b485924964a7a4fcf19562964acb47fc214)
+---
+ Makefile.am                               |  3 ++-
+ src/confdb/confdb.h                       |  4 ++++
+ src/config/SSSDConfig/__init__.py.in      |  6 +++++-
+ src/config/cfg_rules.ini                  |  4 ++++
+ src/config/etc/sssd.api.d/sssd-files.conf |  3 +++
+ src/man/sssd-files.5.xml                  | 36 +++++++++++++++++++++++++++++--
+ src/providers/files/files_init.c          |  1 +
+ 7 files changed, 53 insertions(+), 4 deletions(-)
+ create mode 100644 src/config/etc/sssd.api.d/sssd-files.conf
+
+diff --git a/Makefile.am b/Makefile.am
+index 25e996d2d..d52fe0670 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -4577,7 +4577,8 @@ dist_sssdapiplugin_DATA = \
+     src/config/etc/sssd.api.d/sssd-ldap.conf \
+     src/config/etc/sssd.api.d/sssd-local.conf \
+     src/config/etc/sssd.api.d/sssd-proxy.conf \
+-    src/config/etc/sssd.api.d/sssd-simple.conf
++    src/config/etc/sssd.api.d/sssd-simple.conf \
++    src/config/etc/sssd.api.d/sssd-files.conf
+ 
+ edit_cmd = $(SED) \
+         -e 's|@sbindir[@]|$(sbindir)|g' \
+diff --git a/src/confdb/confdb.h b/src/confdb/confdb.h
+index c97a9b804..1d322aaac 100644
+--- a/src/confdb/confdb.h
++++ b/src/confdb/confdb.h
+@@ -242,6 +242,10 @@
+ #define CONFDB_PROXY_FAST_ALIAS "proxy_fast_alias"
+ #define CONFDB_PROXY_MAX_CHILDREN "proxy_max_children"
+ 
++/* Files Provider */
++#define CONFDB_FILES_PASSWD "passwd_files"
++#define CONFDB_FILES_GROUP "group_files"
++
+ /* Secrets Service */
+ #define CONFDB_SEC_CONF_ENTRY "config/secrets"
+ #define CONFDB_SEC_CONTAINERS_NEST_LEVEL "containers_nest_level"
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index 857d56cb5..32b74e4c7 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -473,7 +473,11 @@ option_strings = {
+     'proxy_fast_alias' : _('Whether to look up canonical group name from cache if possible'),
+ 
+     # [provider/proxy/auth]
+-    'proxy_pam_target' : _('PAM stack to use')
++    'proxy_pam_target' : _('PAM stack to use'),
++
++    # [provider/files]
++    'passwd_files' : _('Path of passwd file sources.'),
++    'group_files' : _('Path of group file sources.')
+ }
+ 
+ def striplist(l):
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index 4e70bf7b6..551322780 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -404,6 +404,10 @@ option = dyndns_force_tcp
+ option = dyndns_auth
+ option = dyndns_server
+ 
++# files provider specific options
++option = passwd_files
++option = group_files
++
+ # local provider specific options
+ option = create_homedir
+ option = remove_homedir
+diff --git a/src/config/etc/sssd.api.d/sssd-files.conf b/src/config/etc/sssd.api.d/sssd-files.conf
+new file mode 100644
+index 000000000..2444d4924
+--- /dev/null
++++ b/src/config/etc/sssd.api.d/sssd-files.conf
+@@ -0,0 +1,3 @@
++[provider/files]
++passwd_files = str, None, false
++group_files = str, None, false
+diff --git a/src/man/sssd-files.5.xml b/src/man/sssd-files.5.xml
+index d44fffc03..59e1b6523 100644
+--- a/src/man/sssd-files.5.xml
++++ b/src/man/sssd-files.5.xml
+@@ -56,14 +56,46 @@
+     <refsect1 id='configuration-options'>
+         <title>CONFIGURATION OPTIONS</title>
+         <para>
+-            The files provider has no specific options of its own, however,
+-            generic SSSD domain options can be set where applicable.
++            In addition to the options listed below, generic SSSD domain options
++            can be set where applicable.
+             Refer to the section <quote>DOMAIN SECTIONS</quote> of the
+             <citerefentry>
+                 <refentrytitle>sssd.conf</refentrytitle>
+                 <manvolnum>5</manvolnum>
+             </citerefentry> manual page for details on the configuration
+             of an SSSD domain.
++            <variablelist>
++                <varlistentry>
++                    <term>passwd_files (string)</term>
++                    <listitem>
++                        <para>
++                            Comma-separated list of one or multiple password
++                            filenames to be read and enumerated by the files
++                            provider, inotify monitor watches will be set on
++                            each file to detect changes dynamically.
++                        </para>
++                        <para>
++                            Default: /etc/passwd
++                        </para>
++                    </listitem>
++                </varlistentry>
++
++                <varlistentry>
++                    <term>group_files (string)</term>
++                    <listitem>
++                        <para>
++                            Comma-separated list of one or multiple group
++                            filenames to be read and enumerated by the files
++                            provider, inotify monitor watches will be set on
++                            each file to detect changes dynamically.
++                        </para>
++                        <para>
++                            Default: /etc/group
++                        </para>
++                    </listitem>
++                </varlistentry>
++
++            </variablelist>
+         </para>
+     </refsect1>
+ 
+diff --git a/src/providers/files/files_init.c b/src/providers/files/files_init.c
+index 8e5cd4cf9..b8a051c34 100644
+--- a/src/providers/files/files_init.c
++++ b/src/providers/files/files_init.c
+@@ -21,6 +21,7 @@
+ 
+ #include "providers/data_provider/dp.h"
+ #include "providers/files/files_private.h"
++#include "util/util.h"
+ 
+ int sssm_files_init(TALLOC_CTX *mem_ctx,
+                     struct be_ctx *be_ctx,
+-- 
+2.14.3
+
