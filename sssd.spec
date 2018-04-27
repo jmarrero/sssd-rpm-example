@@ -126,6 +126,7 @@ BuildRequires: autoconf
 BuildRequires: automake
 BuildRequires: libtool
 BuildRequires: m4
+BuildRequires: gcc
 BuildRequires: popt-devel
 BuildRequires: libtalloc-devel
 BuildRequires: libtevent-devel
@@ -1322,6 +1323,7 @@ fi
 - Resolves: rhbz#1540703 - FreeIPA/SSSD implicit_file sssd_nss error: The Data
                            Provider returned an error
                            [org.freedesktop.sssd.Error.DataProvider.Fatal]
+- Add gcc to build dependencies
 
 * Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain
