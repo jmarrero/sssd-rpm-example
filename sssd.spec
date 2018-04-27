@@ -58,6 +58,8 @@ Patch0013: 0013-intg-convert-results-returned-as-bytes-to-strings.patch
 Patch0014: 0014-KCM-Fix-typo-in-ccdb_sec_delete_list_done.patch
 Patch0015: 0015-KCM-Only-print-the-number-of-found-items-after-we-ha.patch
 Patch0016: 0016-SYSDB-When-marking-an-entry-as-expired-also-set-the-.patch
+Patch0017: 0017-sudo-ldap-do-not-store-rules-without-sudoHost-attrib.patch
+Patch0018: 0018-sysdb-custom-completely-replace-old-object-instead-o.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1262,6 +1264,7 @@ fi
 - Resolves: upstream#3684 - A group is not updated if its member is removed
                             with the cleanup task, but the group does not
                             change
+- Resolves: upstream#3558 - sudo: report error when two rules share cn
 
 * Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain

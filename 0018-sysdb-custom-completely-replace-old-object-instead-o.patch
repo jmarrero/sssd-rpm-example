@@ -1,0 +1,100 @@
+From 547aebfde6fda8088682c9d12a3b5bcfa87c52a2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 31 Oct 2017 15:16:35 +0100
+Subject: [PATCH] sysdb custom: completely replace old object instead of
+ merging it
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This patch is written primary for sudo use case, but it makes sure the we do
+not merge two record in other parts of the code that uses sysdb_store_custom.
+
+1) If there are two rules with the same cn (possible with multiple search bases
+or organizational units) we would end up merging those two rules instead of
+choosing one of them.
+
+2) Also smart refresh would merge the diff insteand of removing the attributes
+that are no longer present in ldap.
+
+Since 1) is a rare use case and it is a misconfiguration we completely replace
+the old rule with new one. It is simpler to implement and it solves both issues.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3558
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit cd4590de2a84b8143a6c75b5198f5e1b3c0a6d63)
+---
+ src/db/sysdb_ops.c | 33 +++++----------------------------
+ 1 file changed, 5 insertions(+), 28 deletions(-)
+
+diff --git a/src/db/sysdb_ops.c b/src/db/sysdb_ops.c
+index 09aa04a29..5d3cf643d 100644
+--- a/src/db/sysdb_ops.c
++++ b/src/db/sysdb_ops.c
+@@ -3399,12 +3399,7 @@ int sysdb_store_custom(struct sss_domain_info *domain,
+                        struct sysdb_attrs *attrs)
+ {
+     TALLOC_CTX *tmp_ctx;
+-    const char *search_attrs[] = { "*", NULL };
+-    size_t resp_count = 0;
+-    struct ldb_message **resp;
+     struct ldb_message *msg;
+-    struct ldb_message_element *el;
+-    bool add_object = false;
+     int ret;
+     int i;
+ 
+@@ -3423,17 +3418,12 @@ int sysdb_store_custom(struct sss_domain_info *domain,
+         goto done;
+     }
+ 
+-    ret = sysdb_search_custom_by_name(tmp_ctx, domain,
+-                                      object_name, subtree_name,
+-                                      search_attrs, &resp_count, &resp);
+-    if (ret != EOK && ret != ENOENT) {
++    /* Always add a new object. */
++    ret = sysdb_delete_custom(domain, object_name, subtree_name);
++    if (ret != EOK) {
+         goto done;
+     }
+ 
+-    if (ret == ENOENT) {
+-       add_object = true;
+-    }
+-
+     msg = ldb_msg_new(tmp_ctx);
+     if (msg == NULL) {
+         ret = ENOMEM;
+@@ -3455,24 +3445,11 @@ int sysdb_store_custom(struct sss_domain_info *domain,
+ 
+     for (i = 0; i < attrs->num; i++) {
+         msg->elements[i] = attrs->a[i];
+-        if (add_object) {
+-            msg->elements[i].flags = LDB_FLAG_MOD_ADD;
+-        } else {
+-            el = ldb_msg_find_element(resp[0], attrs->a[i].name);
+-            if (el == NULL) {
+-                msg->elements[i].flags = LDB_FLAG_MOD_ADD;
+-            } else {
+-                msg->elements[i].flags = LDB_FLAG_MOD_REPLACE;
+-            }
+-        }
++        msg->elements[i].flags = LDB_FLAG_MOD_ADD;
+     }
+     msg->num_elements = attrs->num;
+ 
+-    if (add_object) {
+-        ret = ldb_add(domain->sysdb->ldb, msg);
+-    } else {
+-        ret = ldb_modify(domain->sysdb->ldb, msg);
+-    }
++    ret = ldb_add(domain->sysdb->ldb, msg);
+     if (ret != LDB_SUCCESS) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to store custom entry: %s(%d)[%s]\n",
+                   ldb_strerror(ret), ret, ldb_errstring(domain->sysdb->ldb));
+-- 
+2.14.3
+
