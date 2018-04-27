@@ -87,6 +87,7 @@ Patch0042: 0042-SDAP-Properly-handle-group-id-collision-when-renamin.patch
 Patch0043: 0043-SYSDB_OPS-Error-out-on-id-collision-when-adding-an-i.patch
 Patch0044: 0044-TESTS-Add-an-integration-test-for-renaming-incomplet.patch
 Patch0045: 0045-SYSDB-sysdb_add_incomplete_group-now-returns-EEXIST-.patch
+Patch0046: 0046-MAN-Document-which-principal-does-the-AD-provider-us.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1308,6 +1309,7 @@ fi
                             list out of bound?
 - Resolves: upstream#2653 - Group renaming issue when "id_provider = ldap" is
                             set.
+- Document which principal does the AD provider use
 
 * Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain
