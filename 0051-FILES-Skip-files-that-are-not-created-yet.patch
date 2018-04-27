@@ -1,0 +1,145 @@
+From 7703a7efe1ed4800a7676cfaac9bd00fec7de1c4 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 4 Apr 2018 14:13:56 +0200
+Subject: [PATCH] FILES: Skip files that are not created yet
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In order to avoid complex ordering logic, even if one file is updated,
+we flush all the entries. In theory, we could only flush the individual
+file and all the files preceding it, but it's safer to just create a
+complete mirror every time.
+
+And this can be problematic if one of the files we try to update is not
+created yet during the update. This can happen e.g. when a file is not
+created during early boot.
+
+To solve this, try to be very defensive and always flush the whole
+database, ignore ENOENT errors, but abort on all other errors.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit c1bce7da6c33b352dc708a5dd9712a4d96c63057)
+---
+ src/providers/files/files_ops.c       | 22 ++++++++++---
+ src/tests/intg/test_files_provider.py | 60 +++++++++++++++++++++++++++++++++++
+ 2 files changed, 78 insertions(+), 4 deletions(-)
+
+diff --git a/src/providers/files/files_ops.c b/src/providers/files/files_ops.c
+index b91078417..f5a40297a 100644
+--- a/src/providers/files/files_ops.c
++++ b/src/providers/files/files_ops.c
+@@ -734,8 +734,15 @@ static errno_t sf_enum_files(struct files_id_ctx *id_ctx,
+         /* All users were deleted, therefore we need to enumerate each file again */
+         for (size_t i = 0; id_ctx->passwd_files[i] != NULL; i++) {
+             ret = sf_enum_users(id_ctx, id_ctx->passwd_files[i]);
+-            if (ret != EOK) {
+-                DEBUG(SSSDBG_OP_FAILURE, "Cannot enumerate users\n");
++            if (ret == ENOENT) {
++                DEBUG(SSSDBG_MINOR_FAILURE,
++                      "The file %s does not exist (yet), skipping\n",
++                      id_ctx->passwd_files[i]);
++                continue;
++            } else if (ret != EOK) {
++                DEBUG(SSSDBG_OP_FAILURE,
++                      "Cannot enumerate users from %s, aborting\n",
++                      id_ctx->passwd_files[i]);
+                 goto done;
+             }
+         }
+@@ -750,8 +757,15 @@ static errno_t sf_enum_files(struct files_id_ctx *id_ctx,
+         /* All groups were deleted, therefore we need to enumerate each file again */
+         for (size_t i = 0; id_ctx->group_files[i] != NULL; i++) {
+             ret = sf_enum_groups(id_ctx, id_ctx->group_files[i]);
+-            if (ret != EOK) {
+-                DEBUG(SSSDBG_OP_FAILURE, "Cannot enumerate groups\n");
++            if (ret == ENOENT) {
++                DEBUG(SSSDBG_MINOR_FAILURE,
++                      "The file %s does not exist (yet), skipping\n",
++                      id_ctx->group_files[i]);
++                continue;
++            } else if (ret != EOK) {
++                DEBUG(SSSDBG_OP_FAILURE,
++                      "Cannot enumerate groups from %s, aborting\n",
++                      id_ctx->group_files[i]);
+                 goto done;
+             }
+         }
+diff --git a/src/tests/intg/test_files_provider.py b/src/tests/intg/test_files_provider.py
+index ce5c7b774..cc9c1f1c7 100644
+--- a/src/tests/intg/test_files_provider.py
++++ b/src/tests/intg/test_files_provider.py
+@@ -187,6 +187,40 @@ def files_multiple_sources(request):
+     return alt_pwops, alt_grops
+ 
+ 
++@pytest.fixture
++def files_multiple_sources_nocreate(request):
++    """
++    Sets up SSSD with multiple sources, but does not actually create
++    the files.
++    """
++    alt_passwd_path = tempfile.mktemp(prefix='altpasswd')
++    request.addfinalizer(lambda: os.unlink(alt_passwd_path))
++
++    alt_group_path = tempfile.mktemp(prefix='altgroup')
++    request.addfinalizer(lambda: os.unlink(alt_group_path))
++
++    passwd_list = ",".join([os.environ["NSS_WRAPPER_PASSWD"], alt_passwd_path])
++    group_list = ",".join([os.environ["NSS_WRAPPER_GROUP"], alt_group_path])
++
++    conf = unindent("""\
++        [sssd]
++        domains             = files
++        services            = nss
++
++        [nss]
++        debug_level = 10
++
++        [domain/files]
++        id_provider = files
++        passwd_files = {passwd_list}
++        group_files = {group_list}
++        debug_level = 10
++    """).format(**locals())
++    create_conf_fixture(request, conf)
++    create_sssd_fixture(request)
++    return alt_passwd_path, alt_group_path
++
++
+ @pytest.fixture
+ def proxy_to_files_domain_only(request):
+     conf = unindent("""\
+@@ -1113,3 +1147,29 @@ def test_multiple_passwd_group_files(add_user_with_canary,
+ 
+     check_group(GROUP1)
+     check_group(ALT_GROUP1)
++
++
++def test_multiple_files_created_after_startup(add_user_with_canary,
++                                              add_group_with_canary,
++                                              files_multiple_sources_nocreate):
++    """
++    Test that users and groups can be mirrored from multiple files,
++    but those files are not created when SSSD starts, only afterwards.
++    """
++    alt_passwd_path, alt_group_path = files_multiple_sources_nocreate
++
++    check_user(USER1)
++    check_group(GROUP1)
++
++    # touch the files
++    for fpath in (alt_passwd_path, alt_group_path):
++        with open(fpath, "w") as f:
++            pass
++
++    alt_pwops = PasswdOps(alt_passwd_path)
++    alt_grops = GroupOps(alt_group_path)
++    alt_pwops.useradd(**ALT_USER1)
++    alt_grops.groupadd(**ALT_GROUP1)
++
++    check_user(ALT_USER1)
++    check_group(ALT_GROUP1)
+-- 
+2.14.3
+

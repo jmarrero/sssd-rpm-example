@@ -1,0 +1,75 @@
+From 12876995fe664ac05149fa5d843836aed5ce33e9 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 17 Apr 2018 14:38:03 +0200
+Subject: [PATCH] FILES: Reset the domain status back even on errors
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The block that resets the domain status was only called on success, so
+on error, the domain would have been permanently stuck in an
+inconsistent state.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit 81f16996c980a75e98538c7dd91baf9e0e635f58)
+---
+ src/providers/files/files_ops.c | 16 ++++++----------
+ 1 file changed, 6 insertions(+), 10 deletions(-)
+
+diff --git a/src/providers/files/files_ops.c b/src/providers/files/files_ops.c
+index 370af1274..b91078417 100644
+--- a/src/providers/files/files_ops.c
++++ b/src/providers/files/files_ops.c
+@@ -793,8 +793,7 @@ static int sf_passwd_cb(const char *filename, uint32_t flags, void *pvt)
+ 
+     id_ctx = talloc_get_type(pvt, struct files_id_ctx);
+     if (id_ctx == NULL) {
+-        ret = EINVAL;
+-        goto done;
++        return EINVAL;
+     }
+ 
+     DEBUG(SSSDBG_TRACE_FUNC, "passwd notification\n");
+@@ -818,12 +817,11 @@ static int sf_passwd_cb(const char *filename, uint32_t flags, void *pvt)
+         goto done;
+     }
+ 
++    ret = EOK;
++done:
+     id_ctx->updating_passwd = false;
+     sf_cb_done(id_ctx);
+     files_account_info_finished(id_ctx, BE_REQ_USER, ret);
+-
+-    ret = EOK;
+-done:
+     return ret;
+ }
+ 
+@@ -834,8 +832,7 @@ static int sf_group_cb(const char *filename, uint32_t flags, void *pvt)
+ 
+     id_ctx = talloc_get_type(pvt, struct files_id_ctx);
+     if (id_ctx == NULL) {
+-        ret = EINVAL;
+-        goto done;
++        return EINVAL;
+     }
+ 
+     DEBUG(SSSDBG_TRACE_FUNC, "group notification\n");
+@@ -855,12 +852,11 @@ static int sf_group_cb(const char *filename, uint32_t flags, void *pvt)
+         goto done;
+     }
+ 
++    ret = EOK;
++done:
+     id_ctx->updating_groups = false;
+     sf_cb_done(id_ctx);
+     files_account_info_finished(id_ctx, BE_REQ_GROUP, ret);
+-
+-    ret = EOK;
+-done:
+     return ret;
+ }
+ 
+-- 
+2.14.3
+

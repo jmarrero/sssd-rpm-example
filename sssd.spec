@@ -89,6 +89,11 @@ Patch0044: 0044-TESTS-Add-an-integration-test-for-renaming-incomplet.patch
 Patch0045: 0045-SYSDB-sysdb_add_incomplete_group-now-returns-EEXIST-.patch
 Patch0046: 0046-MAN-Document-which-principal-does-the-AD-provider-us.patch
 Patch0047: 0047-GPO-Fix-bug-with-empty-GPO-rules.patch
+Patch0048: 0048-FILES-Do-not-overwrite-and-actually-remove-files_ctx.patch
+Patch0049: 0049-FILES-Reduce-code-duplication.patch
+Patch0050: 0050-FILES-Reset-the-domain-status-back-even-on-errors.patch
+Patch0051: 0051-FILES-Skip-files-that-are-not-created-yet.patch
+Patch0052: 0052-FILES-Only-send-the-request-for-update-if-the-files-.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1313,6 +1318,10 @@ fi
 - Document which principal does the AD provider use
 - Resolves: upstream#3680 - GPO: SSSD fails to process GPOs If a rule is
                             defined, but contains no SIDs
+- Resolves: upstream#3520 - Files provider supports only BE_FILTER_ENUM
+- Resolves: rhbz#1540703 - FreeIPA/SSSD implicit_file sssd_nss error: The Data
+                           Provider returned an error
+                           [org.freedesktop.sssd.Error.DataProvider.Fatal]
 
 * Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain

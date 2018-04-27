@@ -1,0 +1,88 @@
+From 8c86f78e41bdb0fa4d77ffaffd13e602b77cdf2f Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 4 Apr 2018 14:18:10 +0200
+Subject: [PATCH] FILES: Do not overwrite and actually remove
+ files_ctx.{pwd,grp}_watch
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The snotify_ctx structures were unused, are completely opaque (their
+only value is that if they are freed, the watches disappear which
+the files provider never does).
+
+And moreover, since the patches to support multiple files, the watches
+were overwritten with subsequent assignments.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit d69e1da370fa33c5085b31eb6302a30d81817534)
+---
+ src/providers/files/files_ops.c | 35 +++++++++++++++++++++++------------
+ 1 file changed, 23 insertions(+), 12 deletions(-)
+
+diff --git a/src/providers/files/files_ops.c b/src/providers/files/files_ops.c
+index a2a2798d3..95c4d2a06 100644
+--- a/src/providers/files/files_ops.c
++++ b/src/providers/files/files_ops.c
+@@ -36,9 +36,6 @@
+ #define GRP_MAXSIZE         2048
+ 
+ struct files_ctx {
+-    struct snotify_ctx *pwd_watch;
+-    struct snotify_ctx *grp_watch;
+-
+     struct files_ops_ctx *ops;
+ };
+ 
+@@ -957,6 +954,7 @@ struct files_ctx *sf_init(TALLOC_CTX *mem_ctx,
+     struct files_ctx *fctx;
+     struct tevent_immediate *imm;
+     int i;
++    struct snotify_ctx *snctx;
+ 
+     fctx = talloc(mem_ctx, struct files_ctx);
+     if (fctx == NULL) {
+@@ -964,18 +962,31 @@ struct files_ctx *sf_init(TALLOC_CTX *mem_ctx,
+     }
+ 
+     for (i = 0; passwd_files[i]; i++) {
+-        fctx->pwd_watch = sf_setup_watch(fctx, ev, passwd_files[i],
+-                                         sf_passwd_cb, id_ctx);
++        snctx = sf_setup_watch(fctx, ev, passwd_files[i],
++                               sf_passwd_cb, id_ctx);
++        if (snctx == NULL) {
++            DEBUG(SSSDBG_FATAL_FAILURE,
++                  "Cannot set watch for passwd file %s\n", passwd_files[i]);
++            /* Rather than reporting incomplete or inconsistent information
++             * in case e.g. group memberships span multiple files, just abort
++             */
++            talloc_free(fctx);
++            return NULL;
+         }
+-
+-    for (i = 0; group_files[i]; i++) {
+-        fctx->grp_watch = sf_setup_watch(fctx, ev, group_files[i],
+-                                         sf_group_cb, id_ctx);
+     }
+ 
+-    if (fctx->pwd_watch == NULL || fctx->grp_watch == NULL) {
+-        talloc_free(fctx);
+-        return NULL;
++    for (i = 0; group_files[i]; i++) {
++        snctx = sf_setup_watch(fctx, ev, group_files[i],
++                                sf_group_cb, id_ctx);
++        if (snctx == NULL) {
++            DEBUG(SSSDBG_FATAL_FAILURE,
++                  "Cannot set watch for group file %s\n", group_files[i]);
++            /* Rather than reporting incomplete or inconsistent information
++             * in case e.g. group memberships span multiple files, just abort
++             */
++            talloc_free(fctx);
++            return NULL;
++        }
+     }
+ 
+     /* Enumerate users and groups on startup to process any changes when
+-- 
+2.14.3
+
