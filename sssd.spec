@@ -71,6 +71,8 @@ Patch0026: 0026-GPO-Add-ad_options-to-ad_gpo_process_som_state.patch
 Patch0027: 0027-GPO-Use-AD-site-override-if-set.patch
 Patch0028: 0028-nss-initialize-nss_enum_index-in-nss_setnetgrent.patch
 Patch0029: 0029-nss-add-a-netgroup-counter-to-struct-nss_enum_index.patch
+Patch0030: 0030-sssctl-Showing-help-even-when-sssd-not-configured.patch
+Patch0031: 0031-sssctl-move-check-for-version-error-to-correct-place.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1283,6 +1285,8 @@ fi
 - Resolves: upstream#3402 - Support alternative sources for the files provider
 - Resolves: upstream#3646 - SSSD's GPO code ignores ad_site option
 - Resolves: upstream#3679 - Make nss netgroup requests more robust
+- Resolves: upstream#3634 - sssctl COMMAND --help fails if sssd is not
+                            configured
 
 * Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain
