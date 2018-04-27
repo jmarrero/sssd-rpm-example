@@ -1,0 +1,116 @@
+From 9f85ab4d8eba042b43a9346ed6dfbf3fc60ea488 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 15 Mar 2018 12:50:20 +0100
+Subject: [PATCH] nss: add a netgroup counter to struct nss_enum_index
+
+Netgroups are not looked up with the help of a single request but by
+calling setnetgrent(), getnetgrent() and endnetgrent() where
+getnetgrent() might be called multiple times depending on the number of
+netgroup elements. Since the caller does not provide a state the state
+has to be maintained by the SSSD nss responder. Besides the netgroup
+name this is mainly the number of elements already returned.
+
+This number is used to select the next element to return and currently
+it is assumed that there are not changes to the netgroup while the
+client is requesting the individual elements. But if e.g. the 3 nss
+calls are not used correctly or the netgroup is modified while the
+client is sending getnetgrent() calls the stored number might be out of
+range. To be on the safe side the stored number should be always
+compared with the current number of netgroup elements.
+
+Related to https://pagure.io/SSSD/sssd/issue/3679
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 08db22b1b1a2e742edbca92e35087294d963adda)
+---
+ src/db/sysdb.h                         | 3 ++-
+ src/db/sysdb_search.c                  | 5 ++++-
+ src/responder/nss/nss_enum.c           | 3 ++-
+ src/responder/nss/nss_private.h        | 1 +
+ src/responder/nss/nss_protocol_netgr.c | 7 +++++++
+ 5 files changed, 16 insertions(+), 3 deletions(-)
+
+diff --git a/src/db/sysdb.h b/src/db/sysdb.h
+index fd18ecefe..2660314a7 100644
+--- a/src/db/sysdb.h
++++ b/src/db/sysdb.h
+@@ -1219,7 +1219,8 @@ errno_t sysdb_attrs_to_list(TALLOC_CTX *mem_ctx,
+ 
+ errno_t sysdb_netgr_to_entries(TALLOC_CTX *mem_ctx,
+                                struct ldb_result *res,
+-                               struct sysdb_netgroup_ctx ***entries);
++                               struct sysdb_netgroup_ctx ***entries,
++                               size_t *netgroup_count);
+ 
+ errno_t sysdb_dn_sanitize(TALLOC_CTX *mem_ctx, const char *input,
+                           char **sanitized);
+diff --git a/src/db/sysdb_search.c b/src/db/sysdb_search.c
+index dc0bd4f2c..b7ceb6e59 100644
+--- a/src/db/sysdb_search.c
++++ b/src/db/sysdb_search.c
+@@ -1831,7 +1831,8 @@ done:
+ 
+ errno_t sysdb_netgr_to_entries(TALLOC_CTX *mem_ctx,
+                                struct ldb_result *res,
+-                               struct sysdb_netgroup_ctx ***entries)
++                               struct sysdb_netgroup_ctx ***entries,
++                               size_t *netgroup_count)
+ {
+     errno_t ret;
+     size_t size = 0;
+@@ -1935,6 +1936,8 @@ errno_t sysdb_netgr_to_entries(TALLOC_CTX *mem_ctx,
+     tmp_entry[c] = NULL;
+ 
+     *entries = talloc_steal(mem_ctx, tmp_entry);
++    *netgroup_count = c;
++
+     ret = EOK;
+ 
+ done:
+diff --git a/src/responder/nss/nss_enum.c b/src/responder/nss/nss_enum.c
+index 031db9f2e..a45b65233 100644
+--- a/src/responder/nss/nss_enum.c
++++ b/src/responder/nss/nss_enum.c
+@@ -144,7 +144,8 @@ static void nss_setent_internal_done(struct tevent_req *subreq)
+             /* We need to expand the netgroup into triples and members. */
+             ret = sysdb_netgr_to_entries(state->enum_ctx,
+                                          result[0]->ldb_result,
+-                                         &state->enum_ctx->netgroup);
++                                         &state->enum_ctx->netgroup,
++                                         &state->enum_ctx->netgroup_count);
+             if (ret != EOK) {
+                 goto done;
+             }
+diff --git a/src/responder/nss/nss_private.h b/src/responder/nss/nss_private.h
+index 5fc19d26b..aa8d8e9cd 100644
+--- a/src/responder/nss/nss_private.h
++++ b/src/responder/nss/nss_private.h
+@@ -41,6 +41,7 @@ struct nss_enum_index {
+ struct nss_enum_ctx {
+     struct cache_req_result **result;
+     struct sysdb_netgroup_ctx **netgroup;
++    size_t netgroup_count;
+ 
+     /* Ongoing cache request that is constructing enumeration result. */
+     struct tevent_req *ongoing;
+diff --git a/src/responder/nss/nss_protocol_netgr.c b/src/responder/nss/nss_protocol_netgr.c
+index ed04fd258..9f27c6b78 100644
+--- a/src/responder/nss/nss_protocol_netgr.c
++++ b/src/responder/nss/nss_protocol_netgr.c
+@@ -126,6 +126,13 @@ nss_protocol_fill_netgrent(struct nss_ctx *nss_ctx,
+     idx = cmd_ctx->enum_index;
+     entries = cmd_ctx->enum_ctx->netgroup;
+ 
++    if (idx->result > cmd_ctx->enum_ctx->netgroup_count) {
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Unconsistent state while processing netgroups.\n");
++        ret = EINVAL;
++        goto done;
++    }
++
+     /* First two fields (length and reserved), filled up later. */
+     ret = sss_packet_grow(packet, 2 * sizeof(uint32_t));
+     if (ret != EOK) {
+-- 
+2.14.3
+
