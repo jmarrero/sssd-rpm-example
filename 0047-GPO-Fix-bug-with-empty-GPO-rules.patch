@@ -1,0 +1,77 @@
+From c83f6c6da3958475ca4782ffcb49fbc41f8c8f17 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Michal=20=C5=BDidek?= <mzidek@redhat.com>
+Date: Wed, 11 Apr 2018 18:56:53 +0200
+Subject: [PATCH] GPO: Fix bug with empty GPO rules
+
+When two or more GPO rules were defined on the server
+and one of them contained no SIDs (no users or groups
+were specified), then SSSD failed to store such rule
+and users were denied access (system error).
+
+This patch changes the behavior so that in case
+there are no SIDs in the rule a special value is
+stored with the rule to indicate that the rule
+was actually specified, but this value will not
+match any real SID (because the rule should be
+empty).
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3680
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit e6e5fe349aa6ed85eb9acb3273007fa90ee99450)
+---
+ src/providers/ad/ad_gpo.c | 12 +++++++++---
+ 1 file changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/src/providers/ad/ad_gpo.c b/src/providers/ad/ad_gpo.c
+index a48f264c7..ae3329b90 100644
+--- a/src/providers/ad/ad_gpo.c
++++ b/src/providers/ad/ad_gpo.c
+@@ -1132,6 +1132,7 @@ ad_gpo_store_policy_settings(struct sss_domain_info *domain,
+     int i;
+     char *allow_value = NULL;
+     char *deny_value = NULL;
++    const char *empty_val = "NO_SID";
+     const char *allow_key = NULL;
+     const char *deny_key = NULL;
+     TALLOC_CTX *tmp_ctx = NULL;
+@@ -1236,7 +1237,10 @@ ad_gpo_store_policy_settings(struct sss_domain_info *domain,
+     }
+ 
+     for (i = 0; i < GPO_MAP_NUM_OPTS; i++) {
+-
++        /* The NO_SID val is used as special SID value for the case when
++         * no SIDs are found in the rule, but we need to store some
++         * value (SID) with the key (rule name) so that it is clear
++         * that the rule is defined on the server. */
+         struct gpo_map_option_entry entry = gpo_map_option_entries[i];
+ 
+         allow_key = entry.allow_key;
+@@ -1252,9 +1256,10 @@ ad_gpo_store_policy_settings(struct sss_domain_info *domain,
+                       allow_key, ret, sss_strerror(ret));
+                 goto done;
+             } else if (ret != ENOENT) {
++                const char *value = allow_value ? allow_value : empty_val;
+                 ret = sysdb_gpo_store_gpo_result_setting(domain,
+                                                          allow_key,
+-                                                         allow_value);
++                                                         value);
+                 if (ret != EOK) {
+                     DEBUG(SSSDBG_CRIT_FAILURE,
+                           "sysdb_gpo_store_gpo_result_setting failed for key:"
+@@ -1278,9 +1283,10 @@ ad_gpo_store_policy_settings(struct sss_domain_info *domain,
+                       deny_key, ret, sss_strerror(ret));
+                 goto done;
+             } else if (ret != ENOENT) {
++                const char *value = deny_value ? deny_value : empty_val;
+                 ret = sysdb_gpo_store_gpo_result_setting(domain,
+                                                          deny_key,
+-                                                         deny_value);
++                                                         value);
+                 if (ret != EOK) {
+                     DEBUG(SSSDBG_CRIT_FAILURE,
+                           "sysdb_gpo_store_gpo_result_setting failed for key:"
+-- 
+2.14.3
+
