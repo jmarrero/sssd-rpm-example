@@ -66,6 +66,9 @@ Patch0021: 0021-NSS-Adjust-netgroup-setnetgrent-cache-lifetime-if-mi.patch
 Patch0022: 0022-CONFDB-Add-passwd_files-and-group_files-options.patch
 Patch0023: 0023-FILES-Handle-files-provider-sources.patch
 Patch0024: 0024-TESTS-Add-a-test-for-the-multiple-files-feature.patch
+Patch0025: 0025-AD-Missing-header-in-ad_access.h.patch
+Patch0026: 0026-GPO-Add-ad_options-to-ad_gpo_process_som_state.patch
+Patch0027: 0027-GPO-Use-AD-site-override-if-set.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1276,6 +1279,7 @@ fi
 - Resolves: upstream#3550 - refresh_expired_interval does not work with
                             netgrous in 1.15
 - Resolves: upstream#3402 - Support alternative sources for the files provider
+- Resolves: upstream#3646 - SSSD's GPO code ignores ad_site option
 
 * Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain
