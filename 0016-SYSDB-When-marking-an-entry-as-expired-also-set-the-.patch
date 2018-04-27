@@ -1,0 +1,120 @@
+From 68b14b6f94cf23fe2f66ee592e2e1fa5abfe3b9c Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 23 Mar 2018 13:40:34 +0100
+Subject: [PATCH] SYSDB: When marking an entry as expired, also set the
+ originalModifyTimestamp to 1
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3684
+
+If the cleanup task removes a user who was a fully resolved member (not a
+ghost), but then the group the user was a member of is requested, unless
+the group had changed, the user doesn't appear as a member of the group
+again. This is because the modify timestamp would prevent the group from
+updating and therefore the ghost attribute is not readded.
+
+To mitigate this, let's also set the originalModifyTimestamp attribute
+to 1, so that we never take the optimized path while updating the group.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 250751bf8b0532d6175e762b7f2f008cc1c39a78)
+---
+ src/db/sysdb_ops.c          | 13 +++++++++++
+ src/tests/intg/test_ldap.py | 54 +++++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 67 insertions(+)
+
+diff --git a/src/db/sysdb_ops.c b/src/db/sysdb_ops.c
+index cc86a114e..09aa04a29 100644
+--- a/src/db/sysdb_ops.c
++++ b/src/db/sysdb_ops.c
+@@ -5410,6 +5410,19 @@ errno_t sysdb_mark_entry_as_expired_ldb_dn(struct sss_domain_info *dom,
+         goto done;
+     }
+ 
++    ret = ldb_msg_add_empty(msg, SYSDB_ORIG_MODSTAMP,
++                            LDB_FLAG_MOD_REPLACE, NULL);
++    if (ret != LDB_SUCCESS) {
++        ret = sysdb_error_to_errno(ret);
++        goto done;
++    }
++
++    ret = ldb_msg_add_string(msg, SYSDB_ORIG_MODSTAMP, "1");
++    if (ret != LDB_SUCCESS) {
++        ret = sysdb_error_to_errno(ret);
++        goto done;
++    }
++
+     ret = ldb_modify(dom->sysdb->ldb, msg);
+     if (ret != LDB_SUCCESS) {
+         ret = sysdb_error_to_errno(ret);
+diff --git a/src/tests/intg/test_ldap.py b/src/tests/intg/test_ldap.py
+index a6659b1b7..db3253858 100644
+--- a/src/tests/intg/test_ldap.py
++++ b/src/tests/intg/test_ldap.py
+@@ -434,6 +434,60 @@ def test_refresh_after_cleanup_task(ldap_conn, refresh_after_cleanup_task):
+         dict(mem=ent.contains_only("user1")))
+ 
+ 
++@pytest.fixture
++def update_ts_after_cleanup_task(request, ldap_conn):
++    ent_list = ldap_ent.List(ldap_conn.ds_inst.base_dn)
++    ent_list.add_user("user1", 1001, 2001)
++    ent_list.add_user("user2", 1002, 2001)
++
++    ent_list.add_group_bis("group1", 2001, ["user1", "user2"])
++
++    create_ldap_fixture(request, ldap_conn, ent_list)
++
++    conf = \
++        format_basic_conf(ldap_conn, SCHEMA_RFC2307_BIS) + \
++        unindent("""
++            [domain/LDAP]
++            ldap_purge_cache_timeout = 3
++        """).format(**locals())
++    create_conf_fixture(request, conf)
++    create_sssd_fixture(request)
++    return None
++
++
++def test_update_ts_cache_after_cleanup_task(ldap_conn,
++                                            update_ts_after_cleanup_task):
++    """
++    Regression test for ticket:
++    https://fedorahosted.org/sssd/ticket/2676
++    """
++    ent.assert_group_by_name(
++        "group1",
++        dict(mem=ent.contains_only("user1", "user2")))
++
++    ent.assert_passwd_by_name(
++        'user1',
++        dict(name='user1', passwd='*', uid=1001, gid=2001,
++             gecos='1001', shell='/bin/bash'))
++
++    ent.assert_passwd_by_name(
++        'user2',
++        dict(name='user2', passwd='*', uid=1002, gid=2001,
++             gecos='1002', shell='/bin/bash'))
++
++    if subprocess.call(["sss_cache", "-u", "user1"]) != 0:
++        raise Exception("sssd_cache failed")
++
++    # The cleanup task runs every 3 seconds, so sleep for 6
++    # so that we know the cleanup task ran at least once
++    # even if we start sleeping during the first one
++    time.sleep(6)
++
++    ent.assert_group_by_name(
++        "group1",
++        dict(mem=ent.contains_only("user1", "user2")))
++
++
+ @pytest.fixture
+ def blank_rfc2307(request, ldap_conn):
+     """Create blank RFC2307 directory fixture with interactive SSSD conf"""
+-- 
+2.14.3
+
