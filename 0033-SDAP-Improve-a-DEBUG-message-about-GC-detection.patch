@@ -1,0 +1,42 @@
+From ac1636acadcf8e799a93d799140e8ff2d533f313 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 23 Jan 2018 11:23:37 +0100
+Subject: [PATCH] SDAP: Improve a DEBUG message about GC detection
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It was not entirely clear what the message means. We should improve the
+debug message to make it clear that all or none attributes should be
+replicated to the Global Catalog.
+
+This patch can be reverted once we fix
+https://pagure.io/SSSD/sssd/issue/3538 and only use the GC to look up
+the entry DN, not the entry itself.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 2d43eaf43540c375d39c5e1c2482595e919fb4df)
+---
+ src/providers/ldap/sdap_async.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ldap/sdap_async.c b/src/providers/ldap/sdap_async.c
+index 76cfce207..1e77b1c3c 100644
+--- a/src/providers/ldap/sdap_async.c
++++ b/src/providers/ldap/sdap_async.c
+@@ -2720,7 +2720,11 @@ static void sdap_gc_posix_check_done(struct tevent_req *subreq)
+ 
+     /* Positive hit is definitive, no need to search other bases */
+     if (state->has_posix == true) {
+-        DEBUG(SSSDBG_FUNC_DATA, "Server has POSIX attributes\n");
++        DEBUG(SSSDBG_FUNC_DATA, "Server has POSIX attributes. Global Catalog will "
++                                "be used for user and group lookups. Note that if "
++                                "only a subset of POSIX attributes is present "
++                                "in GC, the non-replicated attributes are "
++                                "currently not read from the LDAP port\n");
+         tevent_req_done(req);
+         return;
+     }
+-- 
+2.14.3
+

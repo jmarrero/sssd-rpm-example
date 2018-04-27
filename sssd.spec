@@ -74,6 +74,8 @@ Patch0029: 0029-nss-add-a-netgroup-counter-to-struct-nss_enum_index.patch
 Patch0030: 0030-sssctl-Showing-help-even-when-sssd-not-configured.patch
 Patch0031: 0031-sssctl-move-check-for-version-error-to-correct-place.patch
 Patch0032: 0032-MAN-Add-sss-certmap-man-page-regarding-priority-proc.patch
+Patch0033: 0033-SDAP-Improve-a-DEBUG-message-about-GC-detection.patch
+Patch0034: 0034-MAN-Improve-docs-about-GC-detection.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1290,6 +1292,7 @@ fi
                             configured
 - Resolves: upstream#3469 - extend sss-certmap man page regarding priority
                             processing
+- Improve docs/debug message about GC detection
 
 * Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain
