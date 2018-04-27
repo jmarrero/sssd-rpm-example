@@ -61,6 +61,7 @@ Patch0016: 0016-SYSDB-When-marking-an-entry-as-expired-also-set-the-.patch
 Patch0017: 0017-sudo-ldap-do-not-store-rules-without-sudoHost-attrib.patch
 Patch0018: 0018-sysdb-custom-completely-replace-old-object-instead-o.patch
 Patch0019: 0019-SERVER-Tone-down-shutdown-messages-for-socket-activa.patch
+Patch0020: 0020-IPA-Qualify-the-externalUser-sudo-attribute.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1267,6 +1268,7 @@ fi
                             change
 - Resolves: upstream#3558 - sudo: report error when two rules share cn
 - Tone down shutdown messages for socket activated responders
+- IPA: Qualify the externalUser sudo attribute
 
 * Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain

@@ -1,0 +1,70 @@
+From 999420ed67439bb662e92b47792a06310d173c53 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 26 Mar 2018 11:36:00 +0200
+Subject: [PATCH] IPA: Qualify the externalUser sudo attribute
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+We broke the externalUser support with the introduction of the fully
+qualified attributes, because the provider was saving the data verbatim,
+but the sudo responder expects a fully qualified name.
+
+Reproducer:
+    on the server:
+        ipa sudocmd-add --desc='For reading log files' /usr/bin/less
+        ipa sudorule-add readfiles
+        ipa sudorule-add-user --users=lcluser
+        ipa sudorule-mod --hostcat=all readfiles
+
+    then on the client:
+        configure sssd with:
+            id_provider = files
+            sudo_provider = ipa
+            ipa_domain = ipa.test
+
+        run:
+            sudo useradd lcluser
+            sudo passwd lcluser
+            su - lcluser
+            sudo -l
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit 0f6b5b02afb35caae774ff4d52854a844d49f52e)
+---
+ src/providers/ipa/ipa_sudo_conversion.c | 11 ++++++++++-
+ 1 file changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/src/providers/ipa/ipa_sudo_conversion.c b/src/providers/ipa/ipa_sudo_conversion.c
+index a96ae3447..bfa66b2c6 100644
+--- a/src/providers/ipa/ipa_sudo_conversion.c
++++ b/src/providers/ipa/ipa_sudo_conversion.c
+@@ -873,6 +873,15 @@ convert_user_fqdn(TALLOC_CTX *mem_ctx,
+     return fqdn;
+ }
+ 
++static const char *
++convert_ext_user(TALLOC_CTX *mem_ctx,
++                 struct ipa_sudo_conv *conv,
++                 const char *value,
++                 bool *skip_entry)
++{
++    return sss_create_internal_fqname(mem_ctx, value, conv->dom->name);
++}
++
+ static const char *
+ convert_group(TALLOC_CTX *mem_ctx,
+               struct ipa_sudo_conv *conv,
+@@ -959,7 +968,7 @@ convert_attributes(struct ipa_sudo_conv *conv,
+                  {SYSDB_IPA_SUDORULE_RUNASEXTUSER,       SYSDB_SUDO_CACHE_AT_RUNASUSER  , NULL},
+                  {SYSDB_IPA_SUDORULE_RUNASEXTGROUP,      SYSDB_SUDO_CACHE_AT_RUNASGROUP , NULL},
+                  {SYSDB_IPA_SUDORULE_RUNASEXTUSERGROUP,  SYSDB_SUDO_CACHE_AT_RUNASUSER  , convert_runasextusergroup},
+-                 {SYSDB_IPA_SUDORULE_EXTUSER,            SYSDB_SUDO_CACHE_AT_USER       , NULL},
++                 {SYSDB_IPA_SUDORULE_EXTUSER,            SYSDB_SUDO_CACHE_AT_USER       , convert_ext_user},
+                  {SYSDB_IPA_SUDORULE_ALLOWCMD,           SYSDB_IPA_SUDORULE_ORIGCMD     , NULL},
+                  {SYSDB_IPA_SUDORULE_DENYCMD,            SYSDB_IPA_SUDORULE_ORIGCMD     , NULL},
+                  {NULL, NULL, NULL}};
+-- 
+2.14.3
+
