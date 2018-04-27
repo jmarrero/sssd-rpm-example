@@ -1,0 +1,69 @@
+From b24ef81656fc3d0dce49b1756ba53c46b5881a14 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 18 Apr 2018 10:23:22 +0200
+Subject: [PATCH] nss-idmap: use right group list pointer after sss_get_ex()
+
+If the initial array is too small it will be reallocated during
+sss_get_ex() and the pointer might change and the initial memory area
+should not be used anymore.
+
+Related to https://pagure.io/SSSD/sssd/issue/3715
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 2c4dc7a4d98c439c69625f12ba4c3c8253f4cc5b)
+---
+ src/sss_client/idmap/sss_nss_ex.c | 18 +++++++++---------
+ 1 file changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/src/sss_client/idmap/sss_nss_ex.c b/src/sss_client/idmap/sss_nss_ex.c
+index b87b5e3b2..971422063 100644
+--- a/src/sss_client/idmap/sss_nss_ex.c
++++ b/src/sss_client/idmap/sss_nss_ex.c
+@@ -485,7 +485,6 @@ int sss_nss_getgrouplist_timeout(const char *name, gid_t group,
+                                  uint32_t flags, unsigned int timeout)
+ {
+     int ret;
+-    gid_t *new_groups;
+     long int new_ngroups;
+     long int start = 1;
+     struct nss_input inp = {
+@@ -498,27 +497,28 @@ int sss_nss_getgrouplist_timeout(const char *name, gid_t group,
+     }
+ 
+     new_ngroups = MAX(1, *ngroups);
+-    new_groups = malloc(new_ngroups * sizeof(gid_t));
+-    if (new_groups == NULL) {
++    inp.result.initgrrep.groups = malloc(new_ngroups * sizeof(gid_t));
++    if (inp.result.initgrrep.groups == NULL) {
+         free(discard_const(inp.rd.data));
+         return ENOMEM;
+     }
+-    new_groups[0] = group;
++    inp.result.initgrrep.groups[0] = group;
+ 
+-    inp.result.initgrrep.groups = new_groups,
+     inp.result.initgrrep.ngroups = &new_ngroups;
+     inp.result.initgrrep.start = &start;
+ 
+-
++    /* inp.result.initgrrep.groups, inp.result.initgrrep.ngroups and
++     * inp.result.initgrrep.start might be modified by sss_get_ex() */
+     ret = sss_get_ex(&inp, flags, timeout);
+     free(discard_const(inp.rd.data));
+     if (ret != 0) {
+-        free(new_groups);
++        free(inp.result.initgrrep.groups);
+         return ret;
+     }
+ 
+-    memcpy(groups, new_groups, MIN(*ngroups, start) * sizeof(gid_t));
+-    free(new_groups);
++    memcpy(groups, inp.result.initgrrep.groups,
++           MIN(*ngroups, start) * sizeof(gid_t));
++    free(inp.result.initgrrep.groups);
+ 
+     if (start > *ngroups) {
+         ret = ERANGE;
+-- 
+2.14.3
+
