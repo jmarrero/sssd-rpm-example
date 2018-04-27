@@ -1,0 +1,91 @@
+From efaabeae96f76036bbe06122f7fbf70a66d26c56 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 19 Feb 2018 08:42:10 +0100
+Subject: [PATCH] DP: Add dp_sbus_invalidate_group_memcache()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This function will be called from the data provider to the NSS
+responder, which will invalidate a group in the memcache.
+
+Related:
+https://pagure.io/SSSD/sssd/issue/2653
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit 709c42f0cabc96d0e0edf72753a0967593206ff4)
+---
+ src/providers/data_provider/dp.h             |  2 ++
+ src/providers/data_provider/dp_resp_client.c | 45 ++++++++++++++++++++++++++++
+ 2 files changed, 47 insertions(+)
+
+diff --git a/src/providers/data_provider/dp.h b/src/providers/data_provider/dp.h
+index ceb49da53..e8b2f9c8f 100644
+--- a/src/providers/data_provider/dp.h
++++ b/src/providers/data_provider/dp.h
+@@ -179,6 +179,8 @@ void dp_sbus_reset_groups_ncache(struct data_provider *provider,
+ void dp_sbus_reset_users_memcache(struct data_provider *provider);
+ void dp_sbus_reset_groups_memcache(struct data_provider *provider);
+ void dp_sbus_reset_initgr_memcache(struct data_provider *provider);
++void dp_sbus_invalidate_group_memcache(struct data_provider *provider,
++                                       gid_t gid);
+ 
+ /*
+  * A dummy handler for DPM_ACCT_DOMAIN_HANDLER.
+diff --git a/src/providers/data_provider/dp_resp_client.c b/src/providers/data_provider/dp_resp_client.c
+index 5735188a6..a61f7c59d 100644
+--- a/src/providers/data_provider/dp_resp_client.c
++++ b/src/providers/data_provider/dp_resp_client.c
+@@ -189,3 +189,48 @@ void dp_sbus_reset_initgr_memcache(struct data_provider *provider)
+     return dp_sbus_reset_memcache(provider,
+                           IFACE_NSS_MEMORYCACHE_INVALIDATEALLINITGROUPS);
+ }
++
++void dp_sbus_invalidate_group_memcache(struct data_provider *provider,
++                                       gid_t gid)
++{
++    struct dp_client *dp_cli;
++    DBusMessage *msg;
++    dbus_bool_t dbret;
++
++    if (provider == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "No provider pointer\n");
++        return;
++    }
++
++    dp_cli = provider->clients[DPC_NSS];
++    if (dp_cli == NULL) {
++        return;
++    }
++
++    msg = dbus_message_new_method_call(NULL,
++                                       NSS_MEMORYCACHE_PATH,
++                                       IFACE_NSS_MEMORYCACHE,
++                                       IFACE_NSS_MEMORYCACHE_INVALIDATEGROUPBYID);
++    if (msg == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory?!\n");
++        return;
++    }
++
++    dbret = dbus_message_append_args(msg,
++                                     DBUS_TYPE_UINT32, &gid,
++                                     DBUS_TYPE_INVALID);
++    if (!dbret) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory?!\n");
++        dbus_message_unref(msg);
++        return;
++    }
++
++    DEBUG(SSSDBG_TRACE_FUNC,
++          "Ordering NSS responder to invalidate the group %"PRIu32" \n",
++          gid);
++
++    sbus_conn_send_reply(dp_client_conn(dp_cli), msg);
++    dbus_message_unref(msg);
++
++    return;
++}
+-- 
+2.14.3
+

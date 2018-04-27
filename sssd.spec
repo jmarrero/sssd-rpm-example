@@ -78,6 +78,15 @@ Patch0033: 0033-SDAP-Improve-a-DEBUG-message-about-GC-detection.patch
 Patch0034: 0034-MAN-Improve-docs-about-GC-detection.patch
 Patch0035: 0035-nss-idmap-do-not-set-a-limit.patch
 Patch0036: 0036-nss-idmap-use-right-group-list-pointer-after-sss_get.patch
+Patch0037: 0037-NSS-Add-InvalidateGroupById-handler.patch
+Patch0038: 0038-DP-Add-dp_sbus_invalidate_group_memcache.patch
+Patch0039: 0039-ERRORS-Add-ERR_GID_DUPLICATED.patch
+Patch0040: 0040-LDAP-Augment-the-sdap_opts-structure-with-a-data-pro.patch
+Patch0041: 0041-SDAP-Add-sdap_handle_id_collision_for_incomplete_gro.patch
+Patch0042: 0042-SDAP-Properly-handle-group-id-collision-when-renamin.patch
+Patch0043: 0043-SYSDB_OPS-Error-out-on-id-collision-when-adding-an-i.patch
+Patch0044: 0044-TESTS-Add-an-integration-test-for-renaming-incomplet.patch
+Patch0045: 0045-SYSDB-sysdb_add_incomplete_group-now-returns-EEXIST-.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1297,6 +1306,8 @@ fi
 - Improve docs/debug message about GC detection
 - Resolves: upstream#3715 - ipa 389-ds-base crash in krb5-libs - k5_copy_etypes
                             list out of bound?
+- Resolves: upstream#2653 - Group renaming issue when "id_provider = ldap" is
+                            set.
 
 * Fri Mar 30 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-2
 - Resolves: upstream#3573 - sssd won't show netgroups with blank domain

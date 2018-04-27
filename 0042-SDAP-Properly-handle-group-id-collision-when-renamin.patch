@@ -1,0 +1,129 @@
+From de891b231464f10ce029593d7ee2ebb401e8a0b3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Fabiano=20Fid=C3=AAncio?= <fidencio@redhat.com>
+Date: Mon, 19 Feb 2018 12:51:57 +0100
+Subject: [PATCH] SDAP: Properly handle group id-collision when renaming
+ incomplete groups
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/2653
+
+Signed-off-by: Fabiano Fidêncio <fidencio@redhat.com>
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+(cherry picked from commit a2e743cd23e8e2033340612c77a8dbb8ef48c1e1)
+---
+ src/providers/ad/ad_pac.c                     |  3 +++
+ src/providers/ldap/sdap_async_ad.h            |  1 +
+ src/providers/ldap/sdap_async_initgroups.c    | 13 +++++++++++++
+ src/providers/ldap/sdap_async_initgroups_ad.c | 15 +++++++++++++++
+ 4 files changed, 32 insertions(+)
+
+diff --git a/src/providers/ad/ad_pac.c b/src/providers/ad/ad_pac.c
+index 6b47462cf..1a344725f 100644
+--- a/src/providers/ad/ad_pac.c
++++ b/src/providers/ad/ad_pac.c
+@@ -434,6 +434,7 @@ struct ad_handle_pac_initgr_state {
+     const char *err;
+     int dp_error;
+     int sdap_ret;
++    struct sdap_options *opts;
+ 
+     size_t num_missing_sids;
+     char **missing_sids;
+@@ -471,6 +472,7 @@ struct tevent_req *ad_handle_pac_initgr_send(TALLOC_CTX *mem_ctx,
+         return NULL;
+     }
+     state->user_dom = sdom->dom;
++    state->opts = id_ctx->opts;
+ 
+     /* The following variables are currently unused because no sub-request
+      * returns any of them. But they are needed to allow the same signature as
+@@ -514,6 +516,7 @@ struct tevent_req *ad_handle_pac_initgr_send(TALLOC_CTX *mem_ctx,
+         DEBUG(SSSDBG_TRACE_ALL, "Running PAC processing with id-mapping.\n");
+ 
+         ret = sdap_ad_save_group_membership_with_idmapping(state->username,
++                                                        state->opts,
+                                                         sdom->dom,
+                                                         id_ctx->opts->idmap_ctx,
+                                                         num_sids, group_sids);
+diff --git a/src/providers/ldap/sdap_async_ad.h b/src/providers/ldap/sdap_async_ad.h
+index 950f5a030..a5f47a1a9 100644
+--- a/src/providers/ldap/sdap_async_ad.h
++++ b/src/providers/ldap/sdap_async_ad.h
+@@ -25,6 +25,7 @@
+ #define SDAP_ASYNC_AD_H_
+ 
+ errno_t sdap_ad_save_group_membership_with_idmapping(const char *username,
++                                               struct sdap_options *opts,
+                                                struct sss_domain_info *user_dom,
+                                                struct sdap_idmap_ctx *idmap_ctx,
+                                                size_t num_sids,
+diff --git a/src/providers/ldap/sdap_async_initgroups.c b/src/providers/ldap/sdap_async_initgroups.c
+index 34747be59..03f6de01a 100644
+--- a/src/providers/ldap/sdap_async_initgroups.c
++++ b/src/providers/ldap/sdap_async_initgroups.c
+@@ -225,6 +225,19 @@ errno_t sdap_add_incomplete_groups(struct sysdb_ctx *sysdb,
+                 ret = sysdb_add_incomplete_group(domain, groupname, gid,
+                                                  original_dn, sid_str,
+                                                  uuid, posix, now);
++                if (ret == ERR_GID_DUPLICATED) {
++                    /* In case o group id-collision, do:
++                     * - Delete the group from sysdb
++                     * - Add the new incomplete group
++                     * - Notify the NSS responder that the entry has also to be
++                     *   removed from the memory cache
++                     */
++                    ret = sdap_handle_id_collision_for_incomplete_groups(
++                                            opts->dp, domain, groupname, gid,
++                                            original_dn, sid_str, uuid, posix,
++                                            now);
++                }
++
+                 if (ret != EOK) {
+                     goto done;
+                 }
+diff --git a/src/providers/ldap/sdap_async_initgroups_ad.c b/src/providers/ldap/sdap_async_initgroups_ad.c
+index 30f1d3db2..eab103652 100644
+--- a/src/providers/ldap/sdap_async_initgroups_ad.c
++++ b/src/providers/ldap/sdap_async_initgroups_ad.c
+@@ -836,6 +836,7 @@ sdap_ad_tokengroups_initgr_mapping_connect_done(struct tevent_req *subreq)
+ }
+ 
+ errno_t sdap_ad_save_group_membership_with_idmapping(const char *username,
++                                               struct sdap_options *opts,
+                                                struct sss_domain_info *user_dom,
+                                                struct sdap_idmap_ctx *idmap_ctx,
+                                                size_t num_sids,
+@@ -921,6 +922,19 @@ errno_t sdap_ad_save_group_membership_with_idmapping(const char *username,
+ 
+             ret = sysdb_add_incomplete_group(domain, name, gid,
+                                              NULL, sid, NULL, false, now);
++            if (ret == ERR_GID_DUPLICATED) {
++                /* In case o group id-collision, do:
++                 * - Delete the group from sysdb
++                 * - Add the new incomplete group
++                 * - Notify the NSS responder that the entry has also to be
++                 *   removed from the memory cache
++                 */
++                ret = sdap_handle_id_collision_for_incomplete_groups(
++                                            idmap_ctx->id_ctx->be->provider,
++                                            domain, name, gid, NULL, sid, NULL,
++                                            false, now);
++            }
++
+             if (ret != EOK) {
+                 DEBUG(SSSDBG_MINOR_FAILURE, "Could not create incomplete "
+                                              "group: [%s]\n", strerror(ret));
+@@ -992,6 +1006,7 @@ static void sdap_ad_tokengroups_initgr_mapping_done(struct tevent_req *subreq)
+     }
+ 
+     ret = sdap_ad_save_group_membership_with_idmapping(state->username,
++                                                       state->opts,
+                                                        state->domain,
+                                                        state->idmap_ctx,
+                                                        num_sids,
+-- 
+2.14.3
+
