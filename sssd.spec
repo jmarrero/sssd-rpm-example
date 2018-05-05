@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.1
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -59,7 +59,7 @@ Patch0014: 0014-KCM-Fix-typo-in-ccdb_sec_delete_list_done.patch
 Patch0015: 0015-KCM-Only-print-the-number-of-found-items-after-we-ha.patch
 Patch0016: 0016-SYSDB-When-marking-an-entry-as-expired-also-set-the-.patch
 Patch0017: 0017-sudo-ldap-do-not-store-rules-without-sudoHost-attrib.patch
-Patch0018: 0018-sysdb-custom-completely-replace-old-object-instead-o.patch
+#Patch0018: 0018-sysdb-custom-completely-replace-old-object-instead-o.patch
 Patch0019: 0019-SERVER-Tone-down-shutdown-messages-for-socket-activa.patch
 Patch0020: 0020-IPA-Qualify-the-externalUser-sudo-attribute.patch
 Patch0021: 0021-NSS-Adjust-netgroup-setnetgrent-cache-lifetime-if-mi.patch
@@ -1295,6 +1295,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Sat May 05 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-4
+- Resolves: rhbz#1574778 - sssd fails to download known_hosts from freeipa
+
 * Fri Apr 27 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-3
 - Resolves: upstream#3684 - A group is not updated if its member is removed
                             with the cleanup task, but the group does not
