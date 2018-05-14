@@ -96,6 +96,8 @@ Patch0051: 0051-FILES-Skip-files-that-are-not-created-yet.patch
 Patch0052: 0052-FILES-Only-send-the-request-for-update-if-the-files-.patch
 Patch0053: 0053-TESTS-simple-CA-to-generate-certificates-for-test.patch
 Patch0054: 0054-TESTS-replace-hardcoded-certificates.patch
+Patch0055: 0055-DYNDNS-Move-the-retry-logic-into-a-separate-function.patch
+Patch0056: 0056-DYNDNS-Retry-also-on-timeouts.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1300,6 +1302,8 @@ fi
 * Mon May 14 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-5
 - Related: upstream#3436 - Certificates used in unit tests have limited
                            lifetime
+- Resolves: upstream#3725 - sssd not honoring dyndns_server if the DNS update
+                            process is terminated with a signal
 
 * Sat May 05 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-4
 - Resolves: rhbz#1574778 - sssd fails to download known_hosts from freeipa

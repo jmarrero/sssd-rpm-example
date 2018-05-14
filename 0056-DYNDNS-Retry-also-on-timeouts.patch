@@ -1,0 +1,65 @@
+From 288c9c42534f0ae24af51ad4b439cdd2656266f9 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 30 Apr 2018 11:18:49 +0200
+Subject: [PATCH] DYNDNS: Retry also on timeouts
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There is the dyndns_server option that is supposed to make it possible
+for the admin to select a server to update DNS with if the server
+detected by nsupdate does not work. The fallback works OK for the case
+where nsupdate fails with a non-zero return code, but doesn't work
+for the case where nsupdate times out.
+
+This patch extends the retry condition to also fallback to the
+dyndns_server directive if nsupdate return ERR_DYNDNS_TIMEOUT.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3725
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit b57dfac8a047494162395422447ed5675806cfdc)
+---
+ src/providers/ldap/sdap_dyndns.c | 10 +++++-----
+ 1 file changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/src/providers/ldap/sdap_dyndns.c b/src/providers/ldap/sdap_dyndns.c
+index f791ba9f3..20d97ca41 100644
+--- a/src/providers/ldap/sdap_dyndns.c
++++ b/src/providers/ldap/sdap_dyndns.c
+@@ -79,10 +79,10 @@ static struct sss_iface_addr*
+ sdap_get_address_to_delete(struct sss_iface_addr *address_it,
+                            uint8_t remove_af);
+ 
+-static bool should_retry(int child_status)
++static bool should_retry(int nsupdate_ret, int child_status)
+ {
+-    if (WIFEXITED(child_status)
+-            && WEXITSTATUS(child_status) != 0) {
++    if ((WIFEXITED(child_status) && WEXITSTATUS(child_status) != 0)
++         || nsupdate_ret == ERR_DYNDNS_TIMEOUT) {
+         return true;
+     }
+ 
+@@ -381,7 +381,7 @@ sdap_dyndns_update_done(struct tevent_req *subreq)
+     if (ret != EOK) {
+         /* If the update didn't succeed, we can retry using the server name */
+         if (state->fallback_mode == false
+-                && should_retry(child_status)) {
++                && should_retry(ret, child_status)) {
+             state->fallback_mode = true;
+             DEBUG(SSSDBG_MINOR_FAILURE,
+                   "nsupdate failed, retrying.\n");
+@@ -523,7 +523,7 @@ sdap_dyndns_update_ptr_done(struct tevent_req *subreq)
+     if (ret != EOK) {
+         /* If the update didn't succeed, we can retry using the server name */
+         if (state->fallback_mode == false
+-                && should_retry(child_status)) {
++                && should_retry(ret, child_status)) {
+             state->fallback_mode = true;
+             DEBUG(SSSDBG_MINOR_FAILURE, "nsupdate failed, retrying\n");
+             ret = sdap_dyndns_update_ptr_step(req);
+-- 
+2.17.0
+
