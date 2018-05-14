@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.1
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -94,6 +94,8 @@ Patch0049: 0049-FILES-Reduce-code-duplication.patch
 Patch0050: 0050-FILES-Reset-the-domain-status-back-even-on-errors.patch
 Patch0051: 0051-FILES-Skip-files-that-are-not-created-yet.patch
 Patch0052: 0052-FILES-Only-send-the-request-for-update-if-the-files-.patch
+Patch0053: 0053-TESTS-simple-CA-to-generate-certificates-for-test.patch
+Patch0054: 0054-TESTS-replace-hardcoded-certificates.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1295,6 +1297,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon May 14 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-5
+- Related: upstream#3436 - Certificates used in unit tests have limited
+                           lifetime
+
 * Sat May 05 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-4
 - Resolves: rhbz#1574778 - sssd fails to download known_hosts from freeipa
 
