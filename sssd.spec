@@ -98,6 +98,7 @@ Patch0053: 0053-TESTS-simple-CA-to-generate-certificates-for-test.patch
 Patch0054: 0054-TESTS-replace-hardcoded-certificates.patch
 Patch0055: 0055-DYNDNS-Move-the-retry-logic-into-a-separate-function.patch
 Patch0056: 0056-DYNDNS-Retry-also-on-timeouts.patch
+Patch0057: 0057-AD-Warn-if-the-LDAP-schema-is-overriden-with-the-AD-.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1304,6 +1305,9 @@ fi
                            lifetime
 - Resolves: upstream#3725 - sssd not honoring dyndns_server if the DNS update
                             process is terminated with a signal
+- Resolves: upstream#3726 - SSSD with ID provider 'ad' should give a warning
+                            in case the ldap schema is manually changed to
+                            something different than 'ad'.
 
 * Sat May 05 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-4
 - Resolves: rhbz#1574778 - sssd fails to download known_hosts from freeipa

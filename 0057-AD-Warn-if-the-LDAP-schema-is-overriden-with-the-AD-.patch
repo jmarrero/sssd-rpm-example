@@ -1,0 +1,50 @@
+From 1ff0edffde5b86e73c20c485236b9b20f22f6f7a Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 30 Apr 2018 15:31:49 +0200
+Subject: [PATCH] AD: Warn if the LDAP schema is overriden with the AD provider
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3726
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 3cff2c5e563d967366d534bd3fc8c410f6467ea6)
+---
+ src/providers/ad/ad_common.c | 12 ++++++++++++
+ 1 file changed, 12 insertions(+)
+
+diff --git a/src/providers/ad/ad_common.c b/src/providers/ad/ad_common.c
+index d92c68e6f..c39dcfad6 100644
+--- a/src/providers/ad/ad_common.c
++++ b/src/providers/ad/ad_common.c
+@@ -1000,6 +1000,7 @@ ad_set_sdap_options(struct ad_options *ad_opts,
+     errno_t ret;
+     char *krb5_realm;
+     char *keytab_path;
++    const char *schema;
+ 
+     /* We only support Kerberos password policy with AD, so
+      * force that on.
+@@ -1050,6 +1051,17 @@ ad_set_sdap_options(struct ad_options *ad_opts,
+         goto done;
+     }
+ 
++    /* Warn if the user is doing something silly like overriding the schema
++     * with the AD provider
++     */
++    schema = dp_opt_get_string(id_opts->basic, SDAP_SCHEMA);
++    if (schema != NULL && strcasecmp(schema, "ad") != 0) {
++        DEBUG(SSSDBG_IMPORTANT_INFO,
++              "The AD provider only supports the AD LDAP schema. "
++              "SSSD will ignore the ldap_schema option value and proceed "
++              "with ldap_schema=ad\n");
++    }
++
+     /* fix schema to AD  */
+     id_opts->schema_type = SDAP_SCHEMA_AD;
+ 
+-- 
+2.17.0
+
