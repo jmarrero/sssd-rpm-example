@@ -99,6 +99,7 @@ Patch0054: 0054-TESTS-replace-hardcoded-certificates.patch
 Patch0055: 0055-DYNDNS-Move-the-retry-logic-into-a-separate-function.patch
 Patch0056: 0056-DYNDNS-Retry-also-on-timeouts.patch
 Patch0057: 0057-AD-Warn-if-the-LDAP-schema-is-overriden-with-the-AD-.patch
+Patch0058: 0058-SYSDB-Only-check-non-POSIX-groups-for-GID-conflicts.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1308,6 +1309,8 @@ fi
 - Resolves: upstream#3726 - SSSD with ID provider 'ad' should give a warning
                             in case the ldap schema is manually changed to
                             something different than 'ad'.
+- Related: upstream#2653 - Group renaming issue when "id_provider = ldap" is
+                           set.
 
 * Sat May 05 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-4
 - Resolves: rhbz#1574778 - sssd fails to download known_hosts from freeipa

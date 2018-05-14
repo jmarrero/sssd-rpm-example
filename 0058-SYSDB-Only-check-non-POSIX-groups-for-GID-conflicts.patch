@@ -1,0 +1,144 @@
+From f2c1a2c4a209f1d8db13ec8a875b5787747dca61 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 1 May 2018 21:05:21 +0200
+Subject: [PATCH] SYSDB: Only check non-POSIX groups for GID conflicts
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When checking for a GID conflict, it doesn't make sense to check for one
+when the group being added is a non-POSIX one, because then the GID will
+always be 0.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 8a8285cf515c78709e16ec03b254c89466fe3ea2)
+---
+ src/db/sysdb_ops.c      | 38 ++++++++++++++++---------------
+ src/tests/sysdb-tests.c | 50 ++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 69 insertions(+), 19 deletions(-)
+
+diff --git a/src/db/sysdb_ops.c b/src/db/sysdb_ops.c
+index 93b967e75..124c1285e 100644
+--- a/src/db/sysdb_ops.c
++++ b/src/db/sysdb_ops.c
+@@ -2388,28 +2388,30 @@ int sysdb_add_incomplete_group(struct sss_domain_info *domain,
+         return ENOMEM;
+     }
+ 
+-    ret = sysdb_search_group_by_gid(tmp_ctx, domain, gid, group_attrs, &msg);
+-    if (ret == EOK) {
+-        for (int i = 0; !same && group_attrs[i] != NULL; i++) {
+-            previous = ldb_msg_find_attr_as_string(msg,
+-                                                   group_attrs[i],
+-                                                   NULL);
+-            if (previous != NULL && values[i] != NULL) {
+-                same = strcmp(previous, values[i]) == 0;
++    if (posix) {
++        ret = sysdb_search_group_by_gid(tmp_ctx, domain, gid, group_attrs, &msg);
++        if (ret == EOK) {
++            for (int i = 0; !same && group_attrs[i] != NULL; i++) {
++                previous = ldb_msg_find_attr_as_string(msg,
++                                                       group_attrs[i],
++                                                       NULL);
++                if (previous != NULL && values[i] != NULL) {
++                    same = strcmp(previous, values[i]) == 0;
++                }
++            }
++
++            if (same == true) {
++                DEBUG(SSSDBG_TRACE_LIBS,
++                      "The group with GID [%"SPRIgid"] was renamed\n", gid);
++                ret = ERR_GID_DUPLICATED;
++                goto done;
+             }
+-        }
+ 
+-        if (same == true) {
+-            DEBUG(SSSDBG_TRACE_LIBS,
+-                  "The group with GID [%"SPRIgid"] was renamed\n", gid);
+-            ret = ERR_GID_DUPLICATED;
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "Another group with GID [%"SPRIgid"] already exists\n", gid);
++            ret = EEXIST;
+             goto done;
+         }
+-
+-        DEBUG(SSSDBG_OP_FAILURE,
+-              "Another group with GID [%"SPRIgid"] already exists\n", gid);
+-        ret = EEXIST;
+-        goto done;
+     }
+ 
+     /* try to add the group */
+diff --git a/src/tests/sysdb-tests.c b/src/tests/sysdb-tests.c
+index 416dedb5e..19cdcc2f8 100644
+--- a/src/tests/sysdb-tests.c
++++ b/src/tests/sysdb-tests.c
+@@ -1557,6 +1557,53 @@ START_TEST (test_sysdb_add_nonposix_user)
+ }
+ END_TEST
+ 
++static void add_nonposix_incomplete_group(struct sysdb_test_ctx *test_ctx,
++                                          const char *groupname)
++{
++    const char *get_attrs[] = { SYSDB_GIDNUM,
++                                SYSDB_POSIX,
++                                NULL };
++    struct ldb_message *msg;
++    const char *attrval;
++    const char *fq_name;
++    int ret;
++    uint64_t id;
++
++    /* Create group */
++    fq_name = sss_create_internal_fqname(test_ctx, groupname, test_ctx->domain->name);
++    fail_if(fq_name == NULL, "Failed to create fq name.");
++
++    ret = sysdb_add_incomplete_group(test_ctx->domain, fq_name, 0,
++                                     NULL, NULL, NULL, false, 0);
++    fail_if(ret != EOK, "sysdb_add_group failed.");
++
++    /* Test */
++    ret = sysdb_search_group_by_name(test_ctx, test_ctx->domain, fq_name, get_attrs, &msg);
++    fail_if(ret != EOK, "sysdb_search_group_by_name failed.");
++
++    attrval = ldb_msg_find_attr_as_string(msg, SYSDB_POSIX, NULL);
++    fail_if(strcasecmp(attrval, "false") != 0, "Got bad attribute value.");
++
++    id = ldb_msg_find_attr_as_uint64(msg, SYSDB_GIDNUM, 123);
++    fail_unless(id == 0, "Wrong GID value");
++}
++
++START_TEST (test_sysdb_add_nonposix_group)
++{
++    struct sysdb_test_ctx *test_ctx;
++    int ret;
++
++    /* Setup */
++    ret = setup_sysdb_tests(&test_ctx);
++    fail_if(ret != EOK, "Could not set up the test");
++
++    add_nonposix_incomplete_group(test_ctx, "nonposix1");
++    add_nonposix_incomplete_group(test_ctx, "nonposix2");
++
++    talloc_free(test_ctx);
++}
++END_TEST
++
+ START_TEST (test_sysdb_add_group_member)
+ {
+     struct sysdb_test_ctx *test_ctx;
+@@ -7268,8 +7315,9 @@ Suite *create_sysdb_suite(void)
+     /* Test GetUserAttr with subdomain user */
+     tcase_add_test(tc_sysdb, test_sysdb_get_user_attr_subdomain);
+ 
+-    /* Test adding a non-POSIX user */
++    /* Test adding a non-POSIX user and group */
+     tcase_add_test(tc_sysdb, test_sysdb_add_nonposix_user);
++    tcase_add_test(tc_sysdb, test_sysdb_add_nonposix_group);
+ 
+ /* ===== NETGROUP TESTS ===== */
+ 
+-- 
+2.17.0
+
