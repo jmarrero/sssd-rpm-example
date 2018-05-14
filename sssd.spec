@@ -101,6 +101,7 @@ Patch0056: 0056-DYNDNS-Retry-also-on-timeouts.patch
 Patch0057: 0057-AD-Warn-if-the-LDAP-schema-is-overriden-with-the-AD-.patch
 Patch0058: 0058-SYSDB-Only-check-non-POSIX-groups-for-GID-conflicts.patch
 Patch0059: 0059-Do-not-keep-allocating-external-groups-on-a-long-liv.patch
+Patch0060: 0060-CACHE_REQ-Do-not-fail-the-domain-locator-plugin-if-I.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1315,6 +1316,8 @@ fi
 - Resolves: upstream#3719 - The SSSD IPA provider allocates information about
                             external groups on a long lived memory context,
                             causing memory growth of the sssd_be process
+- Resolves: upstream#3728 - Request by ID outside the min_id/max_id limit of a
+                            first domain does not reach the second domain
 
 * Sat May 05 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-4
 - Resolves: rhbz#1574778 - sssd fails to download known_hosts from freeipa

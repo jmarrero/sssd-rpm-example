@@ -1,0 +1,124 @@
+From 2b965403ecc5a6685602859945a4b73d0f5cddcd Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Wed, 2 May 2018 11:37:55 +0200
+Subject: [PATCH] CACHE_REQ: Do not fail the domain locator plugin if ID
+ outside the domain range is looked up
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+A fix for upstream bug #3569 and the domain-locator feature were both
+developed in the context of the same upstream version and therefore
+touched the same code, but the domain locator did not account for the
+ERR_ID_OUTSIDE_RANGE error code.
+
+Therefore lookups for IDs that are outside the range for the domain
+caused the whole lookup to fail instead of carrying on to the next
+domain.
+
+This patch just handles ERR_ID_OUTSIDE_RANGE the same way as if the ID
+was not found at all. Also some whitespace errors are fixed.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3728
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 2952de740f2ec1da9cbd682fb1d9219e5370e6a1)
+---
+ src/responder/common/cache_req/cache_req.c    |  1 +
+ .../cache_req/plugins/cache_req_common.c      |  2 +-
+ .../cache_req/plugins/cache_req_group_by_id.c |  2 +-
+ src/tests/cmocka/test_responder_cache_req.c   | 32 +++++++++++++++++++
+ 4 files changed, 35 insertions(+), 2 deletions(-)
+
+diff --git a/src/responder/common/cache_req/cache_req.c b/src/responder/common/cache_req/cache_req.c
+index 134688b0f..28b563392 100644
+--- a/src/responder/common/cache_req/cache_req.c
++++ b/src/responder/common/cache_req/cache_req.c
+@@ -523,6 +523,7 @@ static void cache_req_locate_dom_cache_done(struct tevent_req *subreq)
+         DEBUG(SSSDBG_TRACE_INTERNAL, "Result found in the cache\n");
+         tevent_req_done(req);
+         return;
++    case ERR_ID_OUTSIDE_RANGE:
+     case ENOENT:
+         /* Not cached and locator was requested, run the locator
+          * DP request plugin
+diff --git a/src/responder/common/cache_req/plugins/cache_req_common.c b/src/responder/common/cache_req/plugins/cache_req_common.c
+index 240416803..d19ca8912 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_common.c
++++ b/src/responder/common/cache_req/plugins/cache_req_common.c
+@@ -27,7 +27,7 @@
+ #include "responder/common/cache_req/cache_req_plugin.h"
+ 
+ errno_t cache_req_idminmax_check(struct cache_req_data *data,
+-	                         struct sss_domain_info *domain)
++                                 struct sss_domain_info *domain)
+ {
+    if (((domain->id_min != 0) && (data->id < domain->id_min)) ||
+        ((domain->id_max != 0) && (data->id > domain->id_max))) {
+diff --git a/src/responder/common/cache_req/plugins/cache_req_group_by_id.c b/src/responder/common/cache_req/plugins/cache_req_group_by_id.c
+index 3fb81032b..e0c6b6515 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_group_by_id.c
++++ b/src/responder/common/cache_req/plugins/cache_req_group_by_id.c
+@@ -85,7 +85,7 @@ cache_req_group_by_id_lookup(TALLOC_CTX *mem_ctx,
+ 
+     ret = cache_req_idminmax_check(data, domain);
+     if (ret != EOK) {
+-	return ret;
++        return ret;
+     }
+     return sysdb_getgrgid_with_views(mem_ctx, domain, data->id, _result);
+ }
+diff --git a/src/tests/cmocka/test_responder_cache_req.c b/src/tests/cmocka/test_responder_cache_req.c
+index 252d89dad..45d71b83b 100644
+--- a/src/tests/cmocka/test_responder_cache_req.c
++++ b/src/tests/cmocka/test_responder_cache_req.c
+@@ -1827,6 +1827,37 @@ void test_group_by_id_multiple_domains_notfound(void **state)
+     assert_true(test_ctx->dp_called);
+ }
+ 
++void test_group_by_id_multiple_domains_outside_id_range(void **state)
++{
++    struct cache_req_test_ctx *test_ctx = NULL;
++    struct sss_domain_info *domain = NULL;
++    struct sss_domain_info *domain_a = NULL;
++
++    test_ctx = talloc_get_type_abort(*state, struct cache_req_test_ctx);
++
++    domain_a = find_domain_by_name(test_ctx->tctx->dom,
++                                   "responder_cache_req_test_a", true);
++    assert_non_null(domain_a);
++    domain_a->id_min = 1;
++    domain_a->id_max = 100;
++
++    /* Setup group. */
++    domain = find_domain_by_name(test_ctx->tctx->dom,
++                                 "responder_cache_req_test_d", true);
++    assert_non_null(domain);
++    prepare_group(domain, &groups[0], 1000, time(NULL));
++
++    /* Mock values. */
++    will_return_always(__wrap_sss_dp_get_account_send, test_ctx);
++    will_return_always(sss_dp_req_recv, 0);
++    will_return_always(sss_dp_get_account_domain_recv, ERR_GET_ACCT_DOM_NOT_SUPPORTED);
++
++    /* Test. */
++    run_group_by_id(test_ctx, NULL, 0, ERR_OK);
++    assert_true(test_ctx->dp_called);
++    check_group(test_ctx, &groups[0], domain);
++}
++
+ void test_group_by_id_multiple_domains_locator_cache_valid(void **state)
+ {
+     struct cache_req_test_ctx *test_ctx = NULL;
+@@ -3970,6 +4001,7 @@ int main(int argc, const char *argv[])
+         new_single_domain_test(group_by_id_missing_notfound),
+         new_multi_domain_test(group_by_id_multiple_domains_found),
+         new_multi_domain_test(group_by_id_multiple_domains_notfound),
++        new_multi_domain_test(group_by_id_multiple_domains_outside_id_range),
+ 
+         new_multi_domain_test(group_by_id_multiple_domains_locator_cache_valid),
+         new_multi_domain_test(group_by_id_multiple_domains_locator_cache_expired),
+-- 
+2.17.0
+
