@@ -102,6 +102,7 @@ Patch0057: 0057-AD-Warn-if-the-LDAP-schema-is-overriden-with-the-AD-.patch
 Patch0058: 0058-SYSDB-Only-check-non-POSIX-groups-for-GID-conflicts.patch
 Patch0059: 0059-Do-not-keep-allocating-external-groups-on-a-long-liv.patch
 Patch0060: 0060-CACHE_REQ-Do-not-fail-the-domain-locator-plugin-if-I.patch
+Patch0061: 0061-NSS-nss_clear_netgroup_hash_table-do-not-free-data.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1318,6 +1319,8 @@ fi
                             causing memory growth of the sssd_be process
 - Resolves: upstream#3728 - Request by ID outside the min_id/max_id limit of a
                             first domain does not reach the second domain
+- Resolves: upstream#3731 - nss_clear_netgroup_hash_table(): only remove
+                            entries from the hash table, do not free them
 
 * Sat May 05 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-4
 - Resolves: rhbz#1574778 - sssd fails to download known_hosts from freeipa
