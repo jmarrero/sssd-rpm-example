@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.1
-Release: 5%{?dist}
+Release: 6%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -187,6 +187,9 @@ BuildRequires: libuuid-devel
 BuildRequires: jansson-devel
 BuildRequires: libcurl-devel
 BuildRequires: gdm-pam-extensions-devel
+BuildRequires: openssl
+BuildRequires: openssh
+BuildRequires: nss-tools
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -1305,6 +1308,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon May 14 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-6
+- Related: upstream#3436 - Add openssl, openssh and nss-tools as BuildRequires
+
 * Mon May 14 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-5
 - Related: upstream#3436 - Certificates used in unit tests have limited
                            lifetime
