@@ -1,0 +1,42 @@
+From f6d3289ca95bcaca68647f0db76c100d616679bc Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Wed, 14 Mar 2018 15:15:19 +0100
+Subject: [PATCH] test_ca: add empty index.txt.attr file
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Although is does not harm because 'openssl ca' creates the
+index.tx.tattr file with a suitable content automatically this patch
+adds the file to the test_CA directory to silence a message like:
+
+Can't open ./index.txt.attr for reading, No such file or directory
+139867607979840:error:02001002:system library:fopen:No such file or
+directory:crypto/bio/bss_file.c:74:fopen('./index.txt.attr','r')
+139867607979840:error:2006D080:BIO routines:BIO_new_file:no such
+file:crypto/bio/bss_file.c:81:
+
+which is show by recent versions of OpenSSL.
+
+Related to https://pagure.io/SSSD/sssd/issue/3436
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 86c06c3b3d1cb4f590bcd951939bf3ef0001c4d3)
+---
+ src/tests/test_CA/Makefile.am | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/tests/test_CA/Makefile.am b/src/tests/test_CA/Makefile.am
+index a23a3feef..bfcd908e3 100644
+--- a/src/tests/test_CA/Makefile.am
++++ b/src/tests/test_CA/Makefile.am
+@@ -89,5 +89,6 @@ clean-local:
+ 
+ serial: clean
+ 	touch index.txt
++	touch index.txt.attr
+ 	mkdir newcerts
+ 	echo -n 01 > serial
+-- 
+2.17.0
+

@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.1
-Release: 6%{?dist}
+Release: 7%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -104,6 +104,7 @@ Patch0059: 0059-Do-not-keep-allocating-external-groups-on-a-long-liv.patch
 Patch0060: 0060-CACHE_REQ-Do-not-fail-the-domain-locator-plugin-if-I.patch
 Patch0061: 0061-NSS-nss_clear_netgroup_hash_table-do-not-free-data.patch
 Patch0062: 0062-SYSDB-Properly-handle-name-gid-override-when-using-d.patch
+Patch0063: 0063-test_ca-add-empty-index.txt.attr-file.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1308,6 +1309,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed May 16 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-7
+- Related: upstream#3436 - Certificates used in unit tests have limited
+                           lifetime
+
 * Mon May 14 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-6
 - Related: upstream#3436 - Add openssl, openssh and nss-tools as BuildRequires
 
