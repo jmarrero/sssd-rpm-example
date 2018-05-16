@@ -218,6 +218,7 @@ Recommends: libsss_autofs%{?_isa} = %{version}-%{release}
 Recommends: sssd-nfs-idmap = %{version}-%{release}
 Requires: libsss_idmap = %{version}-%{release}
 %{?systemd_requires}
+ExcludeArch: armv7hl
 
 ### Provides ###
 Provides: libsss_sudo-devel = %{version}-%{release}
@@ -236,6 +237,7 @@ Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 Requires(post):  /usr/sbin/alternatives
 Requires(preun): /usr/sbin/alternatives
+ExcludeArch: armv7hl
 
 %description client
 Provides the libraries needed by the PAM and NSS stacks to connect to the SSSD
@@ -248,6 +250,7 @@ License: LGPLv3+
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 Conflicts: sssd-common < %{version}-%{release}
+ExcludeArch: armv7hl
 
 %description -n libsss_sudo
 A utility library to allow communication between SUDO and SSSD
@@ -257,6 +260,8 @@ Summary: A library to allow communication between Autofs and SSSD
 Group: Development/Libraries
 License: LGPLv3+
 Conflicts: sssd-common < %{version}-%{release}
+ExcludeArch: armv7hl
+
 
 %description -n libsss_autofs
 A utility library to allow communication between Autofs and SSSD
@@ -269,6 +274,7 @@ Requires: sssd-common = %{version}-%{release}
 # required by sss_obfuscate
 Requires: python3-sss = %{version}-%{release}
 Requires: python3-sssdconfig = %{version}-%{release}
+ExcludeArch: armv7hl
 
 %description tools
 Provides userspace tools for manipulating users, groups, and nested groups in
@@ -1312,6 +1318,7 @@ fi
 * Wed May 16 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-7
 - Related: upstream#3436 - Certificates used in unit tests have limited
                            lifetime
+- Add: "ExcludeArch: armv7hl"
 
 * Mon May 14 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-6
 - Related: upstream#3436 - Add openssl, openssh and nss-tools as BuildRequires
