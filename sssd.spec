@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.1
-Release: 7%{?dist}
+Release: 8%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -218,7 +218,6 @@ Recommends: libsss_autofs%{?_isa} = %{version}-%{release}
 Recommends: sssd-nfs-idmap = %{version}-%{release}
 Requires: libsss_idmap = %{version}-%{release}
 %{?systemd_requires}
-ExcludeArch: armv7hl
 
 ### Provides ###
 Provides: libsss_sudo-devel = %{version}-%{release}
@@ -237,7 +236,6 @@ Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 Requires(post):  /usr/sbin/alternatives
 Requires(preun): /usr/sbin/alternatives
-ExcludeArch: armv7hl
 
 %description client
 Provides the libraries needed by the PAM and NSS stacks to connect to the SSSD
@@ -250,7 +248,6 @@ License: LGPLv3+
 Requires(post): /sbin/ldconfig
 Requires(postun): /sbin/ldconfig
 Conflicts: sssd-common < %{version}-%{release}
-ExcludeArch: armv7hl
 
 %description -n libsss_sudo
 A utility library to allow communication between SUDO and SSSD
@@ -260,8 +257,6 @@ Summary: A library to allow communication between Autofs and SSSD
 Group: Development/Libraries
 License: LGPLv3+
 Conflicts: sssd-common < %{version}-%{release}
-ExcludeArch: armv7hl
-
 
 %description -n libsss_autofs
 A utility library to allow communication between Autofs and SSSD
@@ -274,7 +269,6 @@ Requires: sssd-common = %{version}-%{release}
 # required by sss_obfuscate
 Requires: python3-sss = %{version}-%{release}
 Requires: python3-sssdconfig = %{version}-%{release}
-ExcludeArch: armv7hl
 
 %description tools
 Provides userspace tools for manipulating users, groups, and nested groups in
@@ -1315,6 +1309,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu May 17 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-8
+- Revert 589d1a48 as the builders are back to f27
+
 * Wed May 16 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-7
 - Related: upstream#3436 - Certificates used in unit tests have limited
                            lifetime
