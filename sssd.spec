@@ -34,7 +34,7 @@
 
 Name: sssd
 Version: 1.16.1
-Release: 8%{?dist}
+Release: 9%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -58,7 +58,7 @@ Patch0013: 0013-intg-convert-results-returned-as-bytes-to-strings.patch
 Patch0014: 0014-KCM-Fix-typo-in-ccdb_sec_delete_list_done.patch
 Patch0015: 0015-KCM-Only-print-the-number-of-found-items-after-we-ha.patch
 Patch0016: 0016-SYSDB-When-marking-an-entry-as-expired-also-set-the-.patch
-Patch0017: 0017-sudo-ldap-do-not-store-rules-without-sudoHost-attrib.patch
+#Patch0017: 0017-sudo-ldap-do-not-store-rules-without-sudoHost-attrib.patch
 #Patch0018: 0018-sysdb-custom-completely-replace-old-object-instead-o.patch
 Patch0019: 0019-SERVER-Tone-down-shutdown-messages-for-socket-activa.patch
 Patch0020: 0020-IPA-Qualify-the-externalUser-sudo-attribute.patch
@@ -1309,6 +1309,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu May 24 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-9
+- Related: upstream#3742 - Change of: User may not run sudo --> a password is
+                           required
+
 * Thu May 17 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-8
 - Revert 589d1a48 as the builders are back to f27
 
