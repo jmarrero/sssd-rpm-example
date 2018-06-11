@@ -25,6 +25,10 @@
 
     %global with_gdm_pam_extensions 1
 
+%if (0%{?fedora} > 28)
+    %global use_openssl 1
+%endif
+
 %global libwbc_alternatives_version 0.14
 %global libwbc_lib_version %{libwbc_alternatives_version}.0
 %global libwbc_alternatives_suffix %nil
@@ -33,8 +37,8 @@
 %endif
 
 Name: sssd
-Version: 1.16.1
-Release: 9%{?dist}
+Version: 1.16.2
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -42,69 +46,6 @@ URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
-Patch0001: 0001-IPA-Handle-empty-nisDomainName.patch
-Patch0002: 0002-intg-enhance-netgroups-test.patch
-Patch0003: 0003-CONFDB-Start-a-ldb-transaction-from-sss_ldb_modify_p.patch
-Patch0004: 0004-TOOLS-Take-into-consideration-app-domains.patch
-Patch0005: 0005-TESTS-Move-get_call_output-to-util.py.patch
-Patch0006: 0006-TESTS-Make-get_call_output-more-flexible-about-the-s.patch
-Patch0007: 0007-TESTS-Add-a-basic-test-of-sssctl-domain-list.patch
-Patch0008: 0008-KCM-Use-json_loadb-when-dealing-with-sss_iobuf-data.patch
-Patch0009: 0009-KCM-Remove-mem_ctx-from-kcm_new_req.patch
-Patch0010: 0010-KCM-Introduce-kcm_input_get_payload_len.patch
-Patch0011: 0011-KCM-Do-not-use-2048-as-fixed-size-for-the-payload.patch
-Patch0012: 0012-KCM-Adjust-REPLY_MAX-to-the-one-used-in-krb5.patch
-Patch0013: 0013-intg-convert-results-returned-as-bytes-to-strings.patch
-Patch0014: 0014-KCM-Fix-typo-in-ccdb_sec_delete_list_done.patch
-Patch0015: 0015-KCM-Only-print-the-number-of-found-items-after-we-ha.patch
-Patch0016: 0016-SYSDB-When-marking-an-entry-as-expired-also-set-the-.patch
-#Patch0017: 0017-sudo-ldap-do-not-store-rules-without-sudoHost-attrib.patch
-#Patch0018: 0018-sysdb-custom-completely-replace-old-object-instead-o.patch
-Patch0019: 0019-SERVER-Tone-down-shutdown-messages-for-socket-activa.patch
-Patch0020: 0020-IPA-Qualify-the-externalUser-sudo-attribute.patch
-Patch0021: 0021-NSS-Adjust-netgroup-setnetgrent-cache-lifetime-if-mi.patch
-Patch0022: 0022-CONFDB-Add-passwd_files-and-group_files-options.patch
-Patch0023: 0023-FILES-Handle-files-provider-sources.patch
-Patch0024: 0024-TESTS-Add-a-test-for-the-multiple-files-feature.patch
-Patch0025: 0025-AD-Missing-header-in-ad_access.h.patch
-Patch0026: 0026-GPO-Add-ad_options-to-ad_gpo_process_som_state.patch
-Patch0027: 0027-GPO-Use-AD-site-override-if-set.patch
-Patch0028: 0028-nss-initialize-nss_enum_index-in-nss_setnetgrent.patch
-Patch0029: 0029-nss-add-a-netgroup-counter-to-struct-nss_enum_index.patch
-Patch0030: 0030-sssctl-Showing-help-even-when-sssd-not-configured.patch
-Patch0031: 0031-sssctl-move-check-for-version-error-to-correct-place.patch
-Patch0032: 0032-MAN-Add-sss-certmap-man-page-regarding-priority-proc.patch
-Patch0033: 0033-SDAP-Improve-a-DEBUG-message-about-GC-detection.patch
-Patch0034: 0034-MAN-Improve-docs-about-GC-detection.patch
-Patch0035: 0035-nss-idmap-do-not-set-a-limit.patch
-Patch0036: 0036-nss-idmap-use-right-group-list-pointer-after-sss_get.patch
-Patch0037: 0037-NSS-Add-InvalidateGroupById-handler.patch
-Patch0038: 0038-DP-Add-dp_sbus_invalidate_group_memcache.patch
-Patch0039: 0039-ERRORS-Add-ERR_GID_DUPLICATED.patch
-Patch0040: 0040-LDAP-Augment-the-sdap_opts-structure-with-a-data-pro.patch
-Patch0041: 0041-SDAP-Add-sdap_handle_id_collision_for_incomplete_gro.patch
-Patch0042: 0042-SDAP-Properly-handle-group-id-collision-when-renamin.patch
-Patch0043: 0043-SYSDB_OPS-Error-out-on-id-collision-when-adding-an-i.patch
-Patch0044: 0044-TESTS-Add-an-integration-test-for-renaming-incomplet.patch
-Patch0045: 0045-SYSDB-sysdb_add_incomplete_group-now-returns-EEXIST-.patch
-Patch0046: 0046-MAN-Document-which-principal-does-the-AD-provider-us.patch
-Patch0047: 0047-GPO-Fix-bug-with-empty-GPO-rules.patch
-Patch0048: 0048-FILES-Do-not-overwrite-and-actually-remove-files_ctx.patch
-Patch0049: 0049-FILES-Reduce-code-duplication.patch
-Patch0050: 0050-FILES-Reset-the-domain-status-back-even-on-errors.patch
-Patch0051: 0051-FILES-Skip-files-that-are-not-created-yet.patch
-Patch0052: 0052-FILES-Only-send-the-request-for-update-if-the-files-.patch
-Patch0053: 0053-TESTS-simple-CA-to-generate-certificates-for-test.patch
-Patch0054: 0054-TESTS-replace-hardcoded-certificates.patch
-Patch0055: 0055-DYNDNS-Move-the-retry-logic-into-a-separate-function.patch
-Patch0056: 0056-DYNDNS-Retry-also-on-timeouts.patch
-Patch0057: 0057-AD-Warn-if-the-LDAP-schema-is-overriden-with-the-AD-.patch
-Patch0058: 0058-SYSDB-Only-check-non-POSIX-groups-for-GID-conflicts.patch
-Patch0059: 0059-Do-not-keep-allocating-external-groups-on-a-long-liv.patch
-Patch0060: 0060-CACHE_REQ-Do-not-fail-the-domain-locator-plugin-if-I.patch
-Patch0061: 0061-NSS-nss_clear_netgroup_hash_table-do-not-free-data.patch
-Patch0062: 0062-SYSDB-Properly-handle-name-gid-override-when-using-d.patch
-Patch0063: 0063-test_ca-add-empty-index.txt.attr-file.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -182,12 +123,19 @@ BuildRequires: cifs-utils-devel
 BuildRequires: libnfsidmap-devel
 BuildRequires: samba4-devel
 BuildRequires: libsmbclient-devel
+BuildRequires: samba-winbind
 BuildRequires: systemtap-sdt-devel
 BuildRequires: http-parser-devel
 BuildRequires: libuuid-devel
 BuildRequires: jansson-devel
 BuildRequires: libcurl-devel
 BuildRequires: gdm-pam-extensions-devel
+%if (0%{?use_openssl} == 1)
+BuildRequires: p11-kit-devel
+BuildRequires: openssl-devel
+BuildRequires: gnutls-utils
+BuildRequires: softhsm >= 2.1.0
+%endif
 BuildRequires: openssl
 BuildRequires: openssh
 BuildRequires: nss-tools
@@ -688,11 +636,13 @@ autoreconf -ivf
     --disable-rpath \
     --with-initscript=systemd \
     --with-syslog=journald \
+%if (0%{?use_openssl} == 1)
+    --with-crypto=libcrypto \
+%endif
     --enable-sss-default-nss-plugin \
     --enable-files-domain \
     %{?with_cifs_utils_plugin_option} \
-    %{?enable_systemtap_opt} \
-
+    %{?enable_systemtap_opt}
 
 make %{?_smp_mflags} all docs
 
@@ -909,6 +859,9 @@ done
 %attr(750,root,root) %dir %{_var}/log/%{name}
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
 %attr(711,root,root) %dir %{_sysconfdir}/sssd/conf.d
+%if (0%{?use_openssl} == 1)
+%attr(711,sssd,sssd) %dir %{_sysconfdir}/sssd/pki
+%endif
 %ghost %attr(0600,root,root) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 %dir %{_sysconfdir}/logrotate.d
 %config(noreplace) %{_sysconfdir}/logrotate.d/sssd
@@ -1309,6 +1262,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Jun 11 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.2-1
+- New upstream release 1.16.2
+- https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_16_2.html
+
 * Thu May 24 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.1-9
 - Related: upstream#3742 - Change of: User may not run sudo --> a password is
                            required
