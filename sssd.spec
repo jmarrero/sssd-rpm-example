@@ -38,7 +38,7 @@
 
 Name: sssd
 Version: 1.16.2
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1262,6 +1262,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Jun 19 2018 Miro Hrončok <mhroncok@redhat.com> - 1.16.2-2
+- Rebuilt for Python 3.7
+
 * Mon Jun 11 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.2-1
 - New upstream release 1.16.2
 - https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_1_16_2.html
