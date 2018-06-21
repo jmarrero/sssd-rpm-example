@@ -38,7 +38,7 @@
 
 Name: sssd
 Version: 1.16.2
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -860,7 +860,7 @@ done
 %attr(700,root,root) %dir %{_sysconfdir}/sssd
 %attr(711,root,root) %dir %{_sysconfdir}/sssd/conf.d
 %if (0%{?use_openssl} == 1)
-%attr(711,sssd,sssd) %dir %{_sysconfdir}/sssd/pki
+%attr(711,root,root) %dir %{_sysconfdir}/sssd/pki
 %endif
 %ghost %attr(0600,root,root) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 %dir %{_sysconfdir}/logrotate.d
@@ -1262,6 +1262,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Thu Jun 21 2018 Fabiano fidêncio <fidencio@fedoraproject.org> - 1.16.2-3
+- Resolves: rhbz#1591804 - something keeps /lib/libnss_systemd.so.2 open on
+                           minimal appliance image, breaking composes
+
 * Tue Jun 19 2018 Miro Hrončok <mhroncok@redhat.com> - 1.16.2-2
 - Rebuilt for Python 3.7
 
