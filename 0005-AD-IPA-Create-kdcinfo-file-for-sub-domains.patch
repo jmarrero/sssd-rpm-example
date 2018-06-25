@@ -1,0 +1,148 @@
+From 660ef95e36ad73b4715656a4207aeb499ac96d16 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 24 May 2018 17:15:38 +0200
+Subject: [PATCH] AD/IPA: Create kdcinfo file for sub-domains
+
+With this patch kdcinfo files are created for sub-domains by the AD
+provider and by the IPA provider on the IPA servers
+(ipa_server_mode=True).
+
+Related to https://pagure.io/SSSD/sssd/issue/3652
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+
+(cherry picked from commit cc7922755dac53c69558ba060b309ac48ae82783)
+---
+ src/providers/ad/ad_common.c              |  9 +++++++++
+ src/providers/ad/ad_common.h              |  1 +
+ src/providers/ad/ad_init.c                |  1 +
+ src/providers/ad/ad_subdomains.c          | 17 ++++++++++++++---
+ src/providers/ipa/ipa_subdomains_server.c | 16 ++++++++++++++--
+ 5 files changed, 39 insertions(+), 5 deletions(-)
+
+diff --git a/src/providers/ad/ad_common.c b/src/providers/ad/ad_common.c
+index be7791e6cc2527d45d3e2ff50294f9b98106ffae..0aea985e00faa996643fd7e7630d4264fb6cf233 100644
+--- a/src/providers/ad/ad_common.c
++++ b/src/providers/ad/ad_common.c
+@@ -727,6 +727,7 @@ ad_failover_init(TALLOC_CTX *mem_ctx, struct be_ctx *bectx,
+                  const char *ad_service,
+                  const char *ad_gc_service,
+                  const char *ad_domain,
++                 bool use_kdcinfo,
+                  struct ad_service **_service)
+ {
+     errno_t ret;
+@@ -762,6 +763,14 @@ ad_failover_init(TALLOC_CTX *mem_ctx, struct be_ctx *bectx,
+         goto done;
+     }
+ 
++    /* Set flag that controls whether we want to write the
++     * kdcinfo files at all
++     */
++    service->krb5_service->write_kdcinfo = use_kdcinfo;
++    DEBUG(SSSDBG_CONF_SETTINGS, "write_kdcinfo for realm %s set to %s\n",
++                       krb5_realm,
++                       service->krb5_service->write_kdcinfo ? "true" : "false");
++
+     ret = be_fo_add_service(bectx, ad_service, ad_user_data_cmp);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Failed to create failover service!\n");
+diff --git a/src/providers/ad/ad_common.h b/src/providers/ad/ad_common.h
+index 6eb2ba7e9a7350d1924c45d33d8c332073767a34..dd440da33d48a5820c665f43908d1e1fb18171a6 100644
+--- a/src/providers/ad/ad_common.h
++++ b/src/providers/ad/ad_common.h
+@@ -144,6 +144,7 @@ ad_failover_init(TALLOC_CTX *mem_ctx, struct be_ctx *ctx,
+                  const char *ad_service,
+                  const char *ad_gc_service,
+                  const char *ad_domain,
++                 bool use_kdcinfo,
+                  struct ad_service **_service);
+ 
+ errno_t
+diff --git a/src/providers/ad/ad_init.c b/src/providers/ad/ad_init.c
+index b19624782000c5c7c65e766e3e01ff6ac3ab7adb..637efb761c1cf87b0a2c2b1c19b00ea0bbbe161f 100644
+--- a/src/providers/ad/ad_init.c
++++ b/src/providers/ad/ad_init.c
+@@ -159,6 +159,7 @@ static errno_t ad_init_options(TALLOC_CTX *mem_ctx,
+     ret = ad_failover_init(ad_options, be_ctx, ad_servers, ad_backup_servers,
+                            ad_realm, AD_SERVICE_NAME, AD_GC_SERVICE_NAME,
+                            dp_opt_get_string(ad_options->basic, AD_DOMAIN),
++                           false, /* will be set in ad_get_auth_options() */
+                            &ad_options->service);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_FATAL_FAILURE, "Failed to init AD failover service: "
+diff --git a/src/providers/ad/ad_subdomains.c b/src/providers/ad/ad_subdomains.c
+index 74b9f075174b1eaa6c5b5dcbaf609600ef197b52..84886e920b37f8803d85ce0903b74e6c809a8904 100644
+--- a/src/providers/ad/ad_subdomains.c
++++ b/src/providers/ad/ad_subdomains.c
+@@ -249,6 +249,7 @@ ad_subdom_ad_ctx_new(struct be_ctx *be_ctx,
+     const char *hostname;
+     const char *keytab;
+     char *subdom_conf_path;
++    bool use_kdcinfo = false;
+ 
+     realm = dp_opt_get_cstring(id_ctx->ad_options->basic, AD_KRB5_REALM);
+     hostname = dp_opt_get_cstring(id_ctx->ad_options->basic, AD_HOSTNAME);
+@@ -296,9 +297,19 @@ ad_subdom_ad_ctx_new(struct be_ctx *be_ctx,
+     servers = dp_opt_get_string(ad_options->basic, AD_SERVER);
+     backup_servers = dp_opt_get_string(ad_options->basic, AD_BACKUP_SERVER);
+ 
+-    ret = ad_failover_init(ad_options, be_ctx, servers, backup_servers, realm,
+-                           service_name, gc_service_name,
+-                           subdom->name, &ad_options->service);
++    if (id_ctx->ad_options->auth_ctx != NULL
++            && id_ctx->ad_options->auth_ctx->opts != NULL) {
++        use_kdcinfo = dp_opt_get_bool(id_ctx->ad_options->auth_ctx->opts,
++                                      KRB5_USE_KDCINFO);
++    }
++
++    DEBUG(SSSDBG_TRACE_ALL,
++          "Init failover for [%s][%s] with use_kdcinfo [%s].\n",
++          subdom->name, subdom->realm, use_kdcinfo ? "true" : "false");
++
++    ret = ad_failover_init(ad_options, be_ctx, servers, backup_servers,
++                           subdom->realm, service_name, gc_service_name,
++                           subdom->name, use_kdcinfo, &ad_options->service);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "Cannot initialize AD failover\n");
+         talloc_free(ad_options);
+diff --git a/src/providers/ipa/ipa_subdomains_server.c b/src/providers/ipa/ipa_subdomains_server.c
+index 1e53e7a951189120fcf3f438362e902a5a8f6d97..02577c92159d099a04cbd5cee80064309466db93 100644
+--- a/src/providers/ipa/ipa_subdomains_server.c
++++ b/src/providers/ipa/ipa_subdomains_server.c
+@@ -228,6 +228,7 @@ ipa_ad_ctx_new(struct be_ctx *be_ctx,
+     struct sdap_domain *sdom;
+     errno_t ret;
+     const char *extra_attrs;
++    bool use_kdcinfo = false;
+ 
+     ad_domain = subdom->name;
+     DEBUG(SSSDBG_TRACE_LIBS, "Setting up AD subdomain %s\n", subdom->name);
+@@ -284,12 +285,23 @@ ipa_ad_ctx_new(struct be_ctx *be_ctx,
+     ad_servers = dp_opt_get_string(ad_options->basic, AD_SERVER);
+     ad_backup_servers = dp_opt_get_string(ad_options->basic, AD_BACKUP_SERVER);
+ 
++    if (id_ctx->ipa_options != NULL && id_ctx->ipa_options->auth != NULL) {
++        use_kdcinfo = dp_opt_get_bool(id_ctx->ipa_options->auth,
++                                      KRB5_USE_KDCINFO);
++    }
++
++    DEBUG(SSSDBG_TRACE_ALL,
++          "Init failover for [%s][%s] with use_kdcinfo [%s].\n",
++          subdom->name, subdom->realm, use_kdcinfo ? "true" : "false");
++
+     /* Set KRB5 realm to same as the one of IPA when IPA
+      * is able to attach PAC. For testing, use hardcoded. */
++    /* Why? */
+     ret = ad_failover_init(ad_options, be_ctx, ad_servers, ad_backup_servers,
+-                           id_ctx->server_mode->realm,
++                           subdom->realm,
+                            service_name, gc_service_name,
+-                           subdom->name, &ad_options->service);
++                           subdom->name, use_kdcinfo,
++                           &ad_options->service);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "Cannot initialize AD failover\n");
+         talloc_free(ad_options);
+-- 
+2.17.1
+

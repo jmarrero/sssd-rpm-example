@@ -1,0 +1,62 @@
+From 2b210b10ce54f6f2595f6ab181a51bce367d43a9 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Sun, 17 Jun 2018 21:48:36 +0200
+Subject: [PATCH] TESTS: Extend the schema with sshPublicKey attribute
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This will allow to store the users with a sshPublicKey attribute
+provided that they have the right objectclass as well.
+
+Related to:
+https://pagure.io/SSSD/sssd/issue/3747
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit 1575ec97e080656f69b3f93e641c76e74ffb8182)
+
+DOWNSTREAM:
+Resolves: rhbz#1583343 - Login with sshkeys stored in ipa not working after update to RHEL-7.5
+---
+ src/tests/intg/data/ssh_schema.ldif | 11 +++++++++++
+ src/tests/intg/ds_openldap.py       |  6 ++++++
+ 2 files changed, 17 insertions(+)
+ create mode 100644 src/tests/intg/data/ssh_schema.ldif
+
+diff --git a/src/tests/intg/data/ssh_schema.ldif b/src/tests/intg/data/ssh_schema.ldif
+new file mode 100644
+index 0000000000000000000000000000000000000000..efe05706b9ded5614a7f3f5e0bab28a7eb869daa
+--- /dev/null
++++ b/src/tests/intg/data/ssh_schema.ldif
+@@ -0,0 +1,11 @@
++dn: cn=openssh-lpk,cn=schema,cn=config
++objectClass: olcSchemaConfig
++cn: openssh-lpk
++olcAttributeTypes: ( 1.3.6.1.4.1.24552.500.1.1.1.13 NAME 'sshPublicKey'
++  DESC 'MANDATORY: OpenSSH Public key'
++  EQUALITY octetStringMatch
++  SYNTAX 1.3.6.1.4.1.1466.115.121.1.40 )
++olcObjectClasses: ( 1.3.6.1.4.1.24552.500.1.1.2.0 NAME 'ldapPublicKey' SUP top AUXILIARY
++  DESC 'MANDATORY: OpenSSH LPK objectclass'
++  MAY ( sshPublicKey $ uid )
++  )
+diff --git a/src/tests/intg/ds_openldap.py b/src/tests/intg/ds_openldap.py
+index 842ff910803658834841c8f9181f3c4af29b955a..c9a4b6de8c53c6644b3de9047d657ee35ce06512 100644
+--- a/src/tests/intg/ds_openldap.py
++++ b/src/tests/intg/ds_openldap.py
+@@ -186,6 +186,12 @@ class DSOpenLDAP(DS):
+         db_config_file.write(db_config)
+         db_config_file.close()
+ 
++        # Import ad schema
++        subprocess.check_call(
++            ["slapadd", "-F", self.conf_slapd_d_dir, "-b", "cn=config",
++             "-l", "data/ssh_schema.ldif"],
++        )
++
+     def _start_daemon(self):
+         """Start the instance."""
+         if subprocess.call(["slapd", "-F", self.conf_slapd_d_dir,
+-- 
+2.17.1
+

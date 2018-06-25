@@ -38,7 +38,7 @@
 
 Name: sssd
 Version: 1.16.2
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -46,6 +46,26 @@ URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
+Patch0001: 0001-krb5-locator-add-support-for-multiple-addresses.patch
+Patch0002: 0002-krb5-locator-fix-IPv6-support.patch
+Patch0003: 0003-krb5-locator-make-plugin-more-robust.patch
+Patch0004: 0004-krb5-locator-add-unit-tests.patch
+Patch0005: 0005-AD-IPA-Create-kdcinfo-file-for-sub-domains.patch
+Patch0006: 0006-krb5-refactor-removal-of-krb5info-files.patch
+Patch0007: 0007-krb5_common-add-callback-only-once.patch
+Patch0008: 0008-data-provider-run-offline-callbacks-only-once.patch
+Patch0009: 0009-TESTS-Extend-the-schema-with-sshPublicKey-attribute.patch
+Patch0010: 0010-TESTS-Allow-adding-sshPublicKey-for-users.patch
+Patch0011: 0011-TESTS-Add-a-basic-SSH-responder-test.patch
+Patch0012: 0012-SSH-Do-not-exit-abruptly-if-SSHD-closes-its-end-of-t.patch
+Patch0013: 0013-TESTS-Add-a-helper-binary-that-can-trigger-the-SIGPI.patch
+Patch0014: 0014-TESTS-Add-a-regression-test-for-SIGHUP-handling-in-s.patch
+Patch0015: 0015-Revert-LDAP-IPA-add-local-email-address-to-aliases.patch
+Patch0016: 0016-util-Remove-the-unused-function-is_email_from_domain.patch
+Patch0017: 0017-TESTS-Allow-storing-e-mail-address-for-users.patch
+Patch0018: 0018-TESTS-Add-regression-test-for-looking-up-users-with-.patch
+Patch0019: 0019-MAN-Remove-outdated-notes-from-the-re_expression-des.patch
+Patch0020: 0020-SUDO-Create-the-socket-with-stricter-permissions.patch
 
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
@@ -1262,7 +1282,22 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
-* Thu Jun 21 2018 Fabiano fidêncio <fidencio@fedoraproject.org> - 1.16.2-3
+* Mon Jun 25 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.2-4
+- Related: upstream#941 - return multiple server addresses to the Kerberos
+                          locator plugin
+- Related: upstream#3652 - kdcinfo doesn't get populated for other domains
+- Resolves: upstream#3747 - sss_ssh_authorizedkeys exits abruptly if SSHD
+                            closes its end of the pipe before reading all the
+                            SSH keys
+- Resolves: upstream#3607 - Handle conflicting e-mail addresses more gracefully
+- Resolves: upstream#3754 - SSSD AD uses LDAP filter to detect POSIX attributes
+                            stored in AD GC also for regular AD DC queries
+- Related: upstream#3219 - [RFE] Regular expression used in sssd.conf not being
+                           able to consume an @-sign in the user/group name.
+- Resolves: upstream#3766 - CVE-2018-10852: information leak from the sssd-sudo
+                            responder
+
+* Thu Jun 21 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.2-3
 - Resolves: rhbz#1591804 - something keeps /lib/libnss_systemd.so.2 open on
                            minimal appliance image, breaking composes
 

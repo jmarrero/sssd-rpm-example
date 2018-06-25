@@ -1,0 +1,88 @@
+From 60f868ac16c4678d60f17d62fa3b47534d4d07cb Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Mon, 28 May 2018 21:41:49 +0200
+Subject: [PATCH] SSH: Do not exit abruptly if SSHD closes its end of the pipe
+ before reading all the SSH keys
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3747
+
+Before writing the keys to sshd, ignore SIGPIPE so that if the pipe
+towards the authorizedkeys helper is closed, the sss_ssh_authorizedkeys
+helper is not terminated with SIGPIPE, but instead proceeds and then the
+write(2) calls would non-terminally fail with EPIPE.
+
+Reviewed-by: Fabiano Fidêncio <fidencio@redhat.com>
+(cherry picked from commit cb138d7d060611e891d341db08477e41f9a3d17d)
+---
+ src/sss_client/ssh/sss_ssh_authorizedkeys.c | 35 ++++++++++++++++++++-
+ 1 file changed, 34 insertions(+), 1 deletion(-)
+
+diff --git a/src/sss_client/ssh/sss_ssh_authorizedkeys.c b/src/sss_client/ssh/sss_ssh_authorizedkeys.c
+index 782a9f44379bff5346c896b3e03570720632c0be..b0280fbf8b0ed0501d792973241b826fc4a7a04d 100644
+--- a/src/sss_client/ssh/sss_ssh_authorizedkeys.c
++++ b/src/sss_client/ssh/sss_ssh_authorizedkeys.c
+@@ -21,6 +21,7 @@
+ #include <stdio.h>
+ #include <talloc.h>
+ #include <popt.h>
++#include <signal.h>
+ 
+ #include "util/util.h"
+ #include "util/crypto/sss_crypto.h"
+@@ -99,8 +100,16 @@ int main(int argc, const char **argv)
+         goto fini;
+     }
+ 
++    /* if sshd closes its end of the pipe, we don't want sss_ssh_authorizedkeys
++     * to exit abruptly, but to finish gracefully instead because the valid
++     * key can be present in the data already written
++     */
++    signal(SIGPIPE, SIG_IGN);
++
+     /* print results */
+     for (i = 0; i < ent->num_pubkeys; i++) {
++        char *repr_break = NULL;
++
+         ret = sss_ssh_format_pubkey(mem_ctx, &ent->pubkeys[i], &repr);
+         if (ret != EOK) {
+             DEBUG(SSSDBG_OP_FAILURE,
+@@ -109,7 +118,31 @@ int main(int argc, const char **argv)
+             continue;
+         }
+ 
+-        printf("%s\n", repr);
++        /* OpenSSH expects a linebreak after each key */
++        repr_break = talloc_asprintf(mem_ctx, "%s\n", repr);
++        talloc_zfree(repr);
++        if (repr_break == NULL) {
++            ret = ENOMEM;
++            goto fini;
++        }
++
++        ret = sss_atomic_write_s(STDOUT_FILENO, repr_break, strlen(repr_break));
++        /* Avoid spiking memory with too many large keys */
++        talloc_zfree(repr_break);
++        if (ret < 0) {
++            ret = errno;
++            if (ret == EPIPE) {
++                DEBUG(SSSDBG_MINOR_FAILURE,
++                      "SSHD closed the pipe before all keys could be written\n");
++                /* Return 0 so that openssh doesn't abort pubkey auth */
++                ret = 0;
++                goto fini;
++            }
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "sss_atomic_write_s() failed (%d): %s\n",
++                  ret, strerror(ret));
++            goto fini;
++        }
+     }
+ 
+     ret = EXIT_SUCCESS;
+-- 
+2.17.1
+

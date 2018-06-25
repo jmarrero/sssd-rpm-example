@@ -1,0 +1,35 @@
+From 4e851d1391f56c632c271fd21dd96f29565cadfe Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 22 May 2018 18:03:05 +0200
+Subject: [PATCH] krb5 locator: make plugin more robust
+
+Although currently libkrb5 sets all parameters of the locator plugin
+calls to suitable values we should make sure that provided pointers are
+not NULL before trying to dereference them.
+
+Related to https://pagure.io/SSSD/sssd/issue/941
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+
+(cherry picked from commit c1fbc6b64ecaf51efc4379c4c8a4960de095abf0)
+---
+ src/krb5_plugin/sssd_krb5_locator_plugin.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/krb5_plugin/sssd_krb5_locator_plugin.c b/src/krb5_plugin/sssd_krb5_locator_plugin.c
+index 58cac7f4b244903347e6f1811cd8de2d61281c4f..9874fd2d1ce63b69099f057dd05f6e353a12ce75 100644
+--- a/src/krb5_plugin/sssd_krb5_locator_plugin.c
++++ b/src/krb5_plugin/sssd_krb5_locator_plugin.c
+@@ -439,6 +439,10 @@ krb5_error_code sssd_krb5_locator_lookup(void *private_data,
+     if (private_data == NULL) return KRB5_PLUGIN_NO_HANDLE;
+     ctx = (struct sssd_ctx *) private_data;
+ 
++    if (realm == NULL || cbfunc == NULL || cbdata == NULL) {
++        return KRB5_PLUGIN_NO_HANDLE;
++    }
++
+     if (ctx->disabled) {
+         PLUGIN_DEBUG(("Plugin disabled, nothing to do.\n"));
+         return KRB5_PLUGIN_NO_HANDLE;
+-- 
+2.17.1
+
