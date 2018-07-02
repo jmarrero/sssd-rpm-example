@@ -38,7 +38,7 @@
 
 Name: sssd
 Version: 1.16.2
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -1282,6 +1282,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Jul 02 2018 Miro Hrončok <mhroncok@redhat.com> - 1.16.2-5
+- Rebuilt for Python 3.7
+
 * Mon Jun 25 2018 Fabiano Fidêncio <fidencio@fedoraproject.org> - 1.16.2-4
 - Related: upstream#941 - return multiple server addresses to the Kerberos
                           locator plugin
