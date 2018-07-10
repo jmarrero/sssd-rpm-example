@@ -806,11 +806,9 @@ do
 done
 
 %files
-%defattr(-,root,root,-)
 %license COPYING
 
 %files common -f sssd.lang
-%defattr(-,root,root,-)
 %license COPYING
 %doc src/examples/sssd-example.conf
 %{_sbindir}/sssd
@@ -917,31 +915,26 @@ done
 
 
 %files ldap -f sssd_ldap.lang
-%defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/libsss_ldap.so
 %{_mandir}/man5/sssd-ldap.5*
 
 %files krb5-common
-%defattr(-,root,root,-)
 %license COPYING
 %attr(755,root,root) %dir %{pubconfpath}/krb5.include.d
 %{_libexecdir}/%{servicename}/ldap_child
 %{_libexecdir}/%{servicename}/krb5_child
 
 %files krb5 -f sssd_krb5.lang
-%defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/libsss_krb5.so
 %{_mandir}/man5/sssd-krb5.5*
 
 %files common-pac
-%defattr(-,root,root,-)
 %license COPYING
 %{_libexecdir}/%{servicename}/sssd_pac
 
 %files ipa -f sssd_ipa.lang
-%defattr(-,root,root,-)
 %license COPYING
 %attr(700,root,root) %dir %{keytabdir}
 %{_libdir}/%{name}/libsss_ipa.so
@@ -949,20 +942,17 @@ done
 %{_mandir}/man5/sssd-ipa.5*
 
 %files ad -f sssd_ad.lang
-%defattr(-,root,root,-)
 %license COPYING
 %{_libdir}/%{name}/libsss_ad.so
 %{_libexecdir}/%{servicename}/gpo_child
 %{_mandir}/man5/sssd-ad.5*
 
 %files proxy
-%defattr(-,root,root,-)
 %license COPYING
 %{_libexecdir}/%{servicename}/proxy_child
 %{_libdir}/%{name}/libsss_proxy.so
 
 %files dbus -f sssd_dbus.lang
-%defattr(-,root,root,-)
 %license COPYING
 %{_libexecdir}/%{servicename}/sssd_ifp
 %{_mandir}/man5/sssd-ifp.5*
@@ -972,11 +962,9 @@ done
 %{_datadir}/dbus-1/system-services/org.freedesktop.sssd.infopipe.service
 
 %files -n libsss_simpleifp
-%defattr(-,root,root,-)
 %{_libdir}/libsss_simpleifp.so.*
 
 %files -n libsss_simpleifp-devel
-%defattr(-,root,root,-)
 %doc sss_simpleifp_doc/html
 %{_includedir}/sss_sifp.h
 %{_includedir}/sss_sifp_dbus.h
@@ -984,7 +972,6 @@ done
 %{_libdir}/pkgconfig/sss_simpleifp.pc
 
 %files client -f sssd_client.lang
-%defattr(-,root,root,-)
 %license src/sss_client/COPYING src/sss_client/COPYING.LESSER
 %{_libdir}/libnss_sss.so.2
 %{_libdir}/security/pam_sss.so
@@ -1001,18 +988,15 @@ done
 %{_mandir}/man8/sssd_krb5_locator_plugin.8*
 
 %files -n libsss_sudo
-%defattr(-,root,root,-)
 %license src/sss_client/COPYING
 %{_libdir}/libsss_sudo.so*
 
 %files -n libsss_autofs
-%defattr(-,root,root,-)
 %license src/sss_client/COPYING src/sss_client/COPYING.LESSER
 %dir %{_libdir}/%{name}/modules
 %{_libdir}/%{name}/modules/libsss_autofs.so
 
 %files tools -f sssd_tools.lang
-%defattr(-,root,root,-)
 %license COPYING
 %{_sbindir}/sss_useradd
 %{_sbindir}/sss_userdel
@@ -1040,93 +1024,75 @@ done
 %{_mandir}/man8/sssctl.8*
 
 %files -n python2-sssdconfig -f python2_sssdconfig.lang
-%defattr(-,root,root,-)
 %dir %{python2_sitelib}/SSSDConfig
 %{python2_sitelib}/SSSDConfig/*.py*
 
 %files -n python3-sssdconfig -f python3_sssdconfig.lang
-%defattr(-,root,root,-)
 %dir %{python3_sitelib}/SSSDConfig
 %{python3_sitelib}/SSSDConfig/*.py*
 %dir %{python3_sitelib}/SSSDConfig/__pycache__
 %{python3_sitelib}/SSSDConfig/__pycache__/*.py*
 
 %files -n python2-sss
-%defattr(-,root,root,-)
 %{python2_sitearch}/pysss.so
 
 %files -n python3-sss
-%defattr(-,root,root,-)
 %{python3_sitearch}/pysss.so
 
 %files -n python2-sss-murmur
-%defattr(-,root,root,-)
 %{python2_sitearch}/pysss_murmur.so
 
 %files -n python3-sss-murmur
-%defattr(-,root,root,-)
 %{python3_sitearch}/pysss_murmur.so
 
 %files -n libsss_idmap
-%defattr(-,root,root,-)
 %license src/sss_client/COPYING src/sss_client/COPYING.LESSER
 %{_libdir}/libsss_idmap.so.*
 
 %files -n libsss_idmap-devel
-%defattr(-,root,root,-)
 %doc idmap_doc/html
 %{_includedir}/sss_idmap.h
 %{_libdir}/libsss_idmap.so
 %{_libdir}/pkgconfig/sss_idmap.pc
 
 %files -n libipa_hbac
-%defattr(-,root,root,-)
 %license src/sss_client/COPYING src/sss_client/COPYING.LESSER
 %{_libdir}/libipa_hbac.so.*
 
 %files -n libipa_hbac-devel
-%defattr(-,root,root,-)
 %doc hbac_doc/html
 %{_includedir}/ipa_hbac.h
 %{_libdir}/libipa_hbac.so
 %{_libdir}/pkgconfig/ipa_hbac.pc
 
 %files -n libsss_nss_idmap
-%defattr(-,root,root,-)
 %license src/sss_client/COPYING src/sss_client/COPYING.LESSER
 %{_libdir}/libsss_nss_idmap.so.*
 
 %files -n libsss_nss_idmap-devel
-%defattr(-,root,root,-)
 %doc nss_idmap_doc/html
 %{_includedir}/sss_nss_idmap.h
 %{_libdir}/libsss_nss_idmap.so
 %{_libdir}/pkgconfig/sss_nss_idmap.pc
 
 %files -n python2-libsss_nss_idmap
-%defattr(-,root,root,-)
 %{python2_sitearch}/pysss_nss_idmap.so
 
 %files -n python3-libsss_nss_idmap
-%defattr(-,root,root,-)
 %{python3_sitearch}/pysss_nss_idmap.so
 
 %files -n python2-libipa_hbac
-%defattr(-,root,root,-)
 %{python2_sitearch}/pyhbac.so
 
 %files -n python3-libipa_hbac
-%defattr(-,root,root,-)
 %{python3_sitearch}/pyhbac.so
 
 %files libwbclient
-%defattr(-,root,root,-)
 %dir %{_libdir}/%{name}
 %dir %{_libdir}/%{name}/modules
 %{_libdir}/%{name}/modules/libwbclient.so.*
 
 %files libwbclient-devel
-%defattr(-,root,root,-)
 %{_includedir}/wbclient_sssd.h
 %{_libdir}/%{name}/modules/libwbclient.so
 %{_libdir}/pkgconfig/wbclient_sssd.pc
@@ -1141,13 +1107,11 @@ done
 %{_libdir}/libnfsidmap/sss.so
 
 %files -n libsss_certmap -f libsss_certmap.lang
-%defattr(-,root,root,-)
 %license src/sss_client/COPYING src/sss_client/COPYING.LESSER
 %{_libdir}/libsss_certmap.so.*
 %{_mandir}/man5/sss-certmap.5*
 
 %files -n libsss_certmap-devel
-%defattr(-,root,root,-)
 %doc certmap_doc/html
 %{_includedir}/sss_certmap.h
 %{_libdir}/libsss_certmap.so
