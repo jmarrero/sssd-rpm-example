@@ -19,8 +19,6 @@
 %global enable_systemtap 1
     %global enable_systemtap_opt --enable-systemtap
 
-    %global with_secrets 1
-
     %global with_kcm 1
 
     %global with_gdm_pam_extensions 1
@@ -37,8 +35,8 @@
 %endif
 
 Name: sssd
-Version: 1.16.2
-Release: 6%{?dist}
+Version: 2.0.0
+Release: 1%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -46,29 +44,11 @@ URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
-Patch0001: 0001-krb5-locator-add-support-for-multiple-addresses.patch
-Patch0002: 0002-krb5-locator-fix-IPv6-support.patch
-Patch0003: 0003-krb5-locator-make-plugin-more-robust.patch
-Patch0004: 0004-krb5-locator-add-unit-tests.patch
-Patch0005: 0005-AD-IPA-Create-kdcinfo-file-for-sub-domains.patch
-Patch0006: 0006-krb5-refactor-removal-of-krb5info-files.patch
-Patch0007: 0007-krb5_common-add-callback-only-once.patch
-Patch0008: 0008-data-provider-run-offline-callbacks-only-once.patch
-Patch0009: 0009-TESTS-Extend-the-schema-with-sshPublicKey-attribute.patch
-Patch0010: 0010-TESTS-Allow-adding-sshPublicKey-for-users.patch
-Patch0011: 0011-TESTS-Add-a-basic-SSH-responder-test.patch
-Patch0012: 0012-SSH-Do-not-exit-abruptly-if-SSHD-closes-its-end-of-t.patch
-Patch0013: 0013-TESTS-Add-a-helper-binary-that-can-trigger-the-SIGPI.patch
-Patch0014: 0014-TESTS-Add-a-regression-test-for-SIGHUP-handling-in-s.patch
-Patch0015: 0015-Revert-LDAP-IPA-add-local-email-address-to-aliases.patch
-Patch0016: 0016-util-Remove-the-unused-function-is_email_from_domain.patch
-Patch0017: 0017-TESTS-Allow-storing-e-mail-address-for-users.patch
-Patch0018: 0018-TESTS-Add-regression-test-for-looking-up-users-with-.patch
-Patch0019: 0019-MAN-Remove-outdated-notes-from-the-re_expression-des.patch
-Patch0020: 0020-SUDO-Create-the-socket-with-stricter-permissions.patch
 
+### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
+Patch0504: 0504-sbus_generate-python-platform-python.patch
 
 ### Dependencies ###
 
@@ -826,15 +806,12 @@ done
 %{_unitdir}/sssd-ssh.service
 %{_unitdir}/sssd-sudo.socket
 %{_unitdir}/sssd-sudo.service
-%{_unitdir}/sssd-secrets.socket
-%{_unitdir}/sssd-secrets.service
 
 %dir %{_libexecdir}/%{servicename}
 %{_libexecdir}/%{servicename}/sssd_be
 %{_libexecdir}/%{servicename}/sssd_nss
 %{_libexecdir}/%{servicename}/sssd_pam
 %{_libexecdir}/%{servicename}/sssd_autofs
-%{_libexecdir}/%{servicename}/sssd_secrets
 %{_libexecdir}/%{servicename}/sssd_ssh
 %{_libexecdir}/%{servicename}/sssd_sudo
 %{_libexecdir}/%{servicename}/p11_child
@@ -854,6 +831,12 @@ done
 %{_libdir}/%{name}/libsss_ldap_common.so
 %{_libdir}/%{name}/libsss_util.so
 %{_libdir}/%{name}/libsss_semanage.so
+%{_libdir}/%{name}/libifp_iface.so
+%{_libdir}/%{name}/libifp_iface_sync.so
+%{_libdir}/%{name}/libsss_iface.so
+%{_libdir}/%{name}/libsss_iface_sync.so
+%{_libdir}/%{name}/libsss_sbus.so
+%{_libdir}/%{name}/libsss_sbus_sync.so
 
 %{ldb_modulesdir}/memberof.so
 %{_bindir}/sss_ssh_authorizedkeys
@@ -900,7 +883,6 @@ done
 %{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man5/sssd-sudo.5*
 %{_mandir}/man5/sssd-session-recording.5*
-%{_mandir}/man5/sssd-secrets.5*
 %{_mandir}/man8/sssd.8*
 %{_mandir}/man8/sss_cache.8*
 %dir %{_datadir}/sssd/systemtap
@@ -998,25 +980,11 @@ done
 
 %files tools -f sssd_tools.lang
 %license COPYING
-%{_sbindir}/sss_useradd
-%{_sbindir}/sss_userdel
-%{_sbindir}/sss_usermod
-%{_sbindir}/sss_groupadd
-%{_sbindir}/sss_groupdel
-%{_sbindir}/sss_groupmod
-%{_sbindir}/sss_groupshow
 %{_sbindir}/sss_obfuscate
 %{_sbindir}/sss_override
 %{_sbindir}/sss_debuglevel
 %{_sbindir}/sss_seed
 %{_sbindir}/sssctl
-%{_mandir}/man8/sss_groupadd.8*
-%{_mandir}/man8/sss_groupdel.8*
-%{_mandir}/man8/sss_groupmod.8*
-%{_mandir}/man8/sss_groupshow.8*
-%{_mandir}/man8/sss_useradd.8*
-%{_mandir}/man8/sss_userdel.8*
-%{_mandir}/man8/sss_usermod.8*
 %{_mandir}/man8/sss_obfuscate.8*
 %{_mandir}/man8/sss_override.8*
 %{_mandir}/man8/sss_debuglevel.8*
@@ -1125,6 +1093,7 @@ done
 %{_unitdir}/sssd-kcm.socket
 %{_unitdir}/sssd-kcm.service
 %{_mandir}/man8/sssd-kcm.8*
+%{_libdir}/%{name}/libsss_secrets.so
 
 %post common
 %systemd_post sssd.service
@@ -1133,7 +1102,6 @@ done
 %systemd_post sssd-pac.socket
 %systemd_post sssd-pam.socket
 %systemd_post sssd-pam-priv.socket
-%systemd_post sssd-secrets.socket
 %systemd_post sssd-ssh.socket
 %systemd_post sssd-sudo.socket
 
@@ -1144,7 +1112,6 @@ done
 %systemd_preun sssd-pac.socket
 %systemd_preun sssd-pam.socket
 %systemd_preun sssd-pam-priv.socket
-%systemd_preun sssd-secrets.socket
 %systemd_preun sssd-ssh.socket
 %systemd_preun sssd-sudo.socket
 
@@ -1158,8 +1125,6 @@ done
 %systemd_postun_with_restart sssd-pam.socket
 %systemd_postun_with_restart sssd-pam-priv.socket
 %systemd_postun_with_restart sssd-pam.service
-%systemd_postun_with_restart sssd-secrets.socket
-%systemd_postun_with_restart sssd-secrets.service
 %systemd_postun_with_restart sssd-ssh.socket
 %systemd_postun_with_restart sssd-ssh.service
 %systemd_postun_with_restart sssd-sudo.socket
@@ -1246,6 +1211,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Aug 14 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-1
+- New upstream release 2.0.0
+
 * Sat Jul 14 2018 Fedora Release Engineering <releng@fedoraproject.org> - 1.16.2-6
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_29_Mass_Rebuild
 
