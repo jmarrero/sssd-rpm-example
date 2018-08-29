@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.0.0
-Release: 2%{?dist}
+Release: 3%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -47,6 +47,7 @@ Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 Patch0001: 0001-BUILD-Fix-issue-with-installation-of-libsss_secrets.patch
 Patch0002: 0002-BUILD-Add-missing-deps-to-libsss_sbus-.so.patch
 Patch0003: 0003-BUILD-Reduce-compilation-of-unnecessary-files.patch
+Patch0004: 0004-KCM-Don-t-error-out-if-creating-a-new-ID-as-the-firs.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1214,6 +1215,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Aug 29 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-3
+- Resolves: rhbz#1622760 - Console login as FreeIPA domain user fails in current Fedora Rawhide / 29
+
 * Wed Aug 29 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-2
 - Fix linking issues
 
