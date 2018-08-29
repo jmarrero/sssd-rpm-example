@@ -1,0 +1,49 @@
+From 677a93372e4b7359d19d7e55467fa5ccea4a80a3 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 15 Aug 2018 22:07:40 +0200
+Subject: [PATCH 2/4] BUILD: Add missing deps to libsss_sbus*.so
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+It indirectly caused failures when linking unit test.
+
+  CCLD     test_sbus_opath
+/usr/bin/ld: ./.libs/libsss_sbus.so: undefined reference to `g_utf8_validate'
+/usr/bin/ld: ./.libs/libsss_sbus.so: undefined reference to `g_free'
+/usr/bin/ld: ./.libs/libsss_sbus.so: undefined reference to `g_malloc'
+/usr/bin/ld: ./.libs/libsss_sbus.so: undefined reference to `g_utf8_casefold'
+/usr/bin/ld: ./.libs/libsss_sbus.so: undefined reference to `g_utf8_collate'
+/usr/bin/ld: ./.libs/libsss_sbus.so: undefined reference to `g_utf8_strlen'
+/usr/bin/ld: ./.libs/libsss_sbus.so: undefined reference to `g_utf8_strdown'
+
+Merges: https://pagure.io/SSSD/sssd/pull-request/3808
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index a2d8ea4..1b4f044 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1105,6 +1105,7 @@ libsss_sbus_la_LIBADD = \
+     $(TALLOC_LIBS) \
+     $(TEVENT_LIBS) \
+     $(DBUS_LIBS) \
++    $(UNICODE_LIBS) \
+     $(NULL)
+ libsss_sbus_la_CFLAGS = \
+     $(AM_CFLAGS) \
+@@ -1146,6 +1147,7 @@ libsss_sbus_sync_la_CFLAGS = \
+     $(AM_CFLAGS) \
+     $(TALLOC_CFLAGS) \
+     $(DBUS_CFLAGS) \
++    $(UNICODE_LIBS) \
+     $(NULL)
+ libsss_sbus_sync_la_LDFLAGS = \
+     -avoid-version \
+-- 
+2.9.5
+

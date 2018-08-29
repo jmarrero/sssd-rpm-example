@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.0.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -44,6 +44,9 @@ URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
+Patch0001: 0001-BUILD-Fix-issue-with-installation-of-libsss_secrets.patch
+Patch0002: 0002-BUILD-Add-missing-deps-to-libsss_sbus-.so.patch
+Patch0003: 0003-BUILD-Reduce-compilation-of-unnecessary-files.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1211,6 +1214,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Aug 29 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-2
+- Fix linking issues
+
 * Tue Aug 14 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-1
 - New upstream release 2.0.0
 
