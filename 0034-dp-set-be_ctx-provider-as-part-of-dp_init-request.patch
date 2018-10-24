@@ -1,0 +1,144 @@
+From 4c5a1afa0df41aac05d34455c6e54a6f52a8dd28 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 5 Sep 2018 13:51:55 +0200
+Subject: [PATCH 40/83] dp: set be_ctx->provider as part of dp_init request
+
+Backend context is overused inside sssd code even during its initialization.
+Some parts of initialization code requires access to be_ctx->provider so we
+must make it available as soon as possible.
+
+Better solution would be to always use 'provider' directly in initialization
+but this makes it safer for any future changes as one does not have to keep
+in mind when it is safe to use be_ctx->provider and when not. Now it is
+always safe.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3812
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/data_provider/dp.c | 21 +++++++++++++--------
+ src/providers/data_provider/dp.h |  1 -
+ src/providers/data_provider_be.c |  2 +-
+ src/providers/proxy/proxy_init.c |  2 +-
+ 4 files changed, 15 insertions(+), 11 deletions(-)
+
+diff --git a/src/providers/data_provider/dp.c b/src/providers/data_provider/dp.c
+index fd19d28..bd003c8 100644
+--- a/src/providers/data_provider/dp.c
++++ b/src/providers/data_provider/dp.c
+@@ -120,6 +120,7 @@ static int dp_destructor(struct data_provider *provider)
+ }
+ 
+ struct dp_init_state {
++    struct be_ctx *be_ctx;
+     struct data_provider *provider;
+     char *sbus_name;
+ };
+@@ -158,6 +159,7 @@ dp_init_send(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
++    state->be_ctx = be_ctx;
+     state->provider->ev = ev;
+     state->provider->uid = uid;
+     state->provider->gid = gid;
+@@ -224,12 +226,14 @@ static void dp_init_done(struct tevent_req *subreq)
+     sbus_server_set_on_connection(state->provider->sbus_server,
+                                   dp_client_init, state->provider);
+ 
++    /* be_ctx->provider must be accessible from modules and targets */
++    state->be_ctx->provider = talloc_steal(state->be_ctx, state->provider);
++
+     ret = dp_init_modules(state->provider, &state->provider->modules);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to initialize DP modules "
+               "[%d]: %s\n", ret, sss_strerror(ret));
+-        tevent_req_error(req, ret);
+-        return;
++        goto done;
+     }
+ 
+     ret = dp_init_targets(state->provider, state->provider->be_ctx,
+@@ -237,25 +241,27 @@ static void dp_init_done(struct tevent_req *subreq)
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to initialize DP targets "
+               "[%d]: %s\n", ret, sss_strerror(ret));
+-        tevent_req_error(req, ret);
+-        return;
++        goto done;
+     }
+ 
+     ret = dp_init_interface(state->provider);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to initialize DP interface "
+               "[%d]: %s\n", ret, sss_strerror(ret));
++        goto done;
++    }
++
++done:
++    if (ret != EOK) {
++        talloc_zfree(state->be_ctx->provider);
+         tevent_req_error(req, ret);
+-        return;
+     }
+ 
+     tevent_req_done(req);
+-    return;
+ }
+ 
+ errno_t dp_init_recv(TALLOC_CTX *mem_ctx,
+                      struct tevent_req *req,
+-                     struct data_provider **_provider,
+                      const char **_sbus_name)
+ {
+     struct dp_init_state *state;
+@@ -263,7 +269,6 @@ errno_t dp_init_recv(TALLOC_CTX *mem_ctx,
+ 
+     TEVENT_REQ_RETURN_ON_ERROR(req);
+ 
+-    *_provider = talloc_steal(mem_ctx, state->provider);
+     *_sbus_name = talloc_steal(mem_ctx, state->sbus_name);
+ 
+     return EOK;
+diff --git a/src/providers/data_provider/dp.h b/src/providers/data_provider/dp.h
+index 33e6e65..0028eb1 100644
+--- a/src/providers/data_provider/dp.h
++++ b/src/providers/data_provider/dp.h
+@@ -117,7 +117,6 @@ dp_init_send(TALLOC_CTX *mem_ctx,
+ 
+ errno_t dp_init_recv(TALLOC_CTX *mem_ctx,
+                      struct tevent_req *req,
+-                     struct data_provider **_provider,
+                      const char **_sbus_name);
+ 
+ bool _dp_target_enabled(struct data_provider *provider,
+diff --git a/src/providers/data_provider_be.c b/src/providers/data_provider_be.c
+index 670ddb4..6d2477e 100644
+--- a/src/providers/data_provider_be.c
++++ b/src/providers/data_provider_be.c
+@@ -541,7 +541,7 @@ static void dp_initialized(struct tevent_req *req)
+ 
+     be_ctx = tevent_req_callback_data(req, struct be_ctx);
+ 
+-    ret = dp_init_recv(be_ctx, req, &be_ctx->provider, &be_ctx->sbus_name);
++    ret = dp_init_recv(be_ctx, req, &be_ctx->sbus_name);
+     talloc_zfree(req);
+     if (ret !=  EOK) {
+         goto done;
+diff --git a/src/providers/proxy/proxy_init.c b/src/providers/proxy/proxy_init.c
+index 98c6dd1..32343a3 100644
+--- a/src/providers/proxy/proxy_init.c
++++ b/src/providers/proxy/proxy_init.c
+@@ -214,7 +214,7 @@ static errno_t proxy_init_auth_ctx(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    ret = proxy_client_init(dp_sbus_conn(provider), auth_ctx);
++    ret = proxy_client_init(dp_sbus_conn(be_ctx->provider), auth_ctx);
+     if (ret != EOK) {
+         goto done;
+     }
+-- 
+2.9.5
+

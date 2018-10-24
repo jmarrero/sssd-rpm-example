@@ -1,0 +1,147 @@
+From dbd717fe5b7d8dd640b6ade435b49edb3db5280a Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Tue, 9 Oct 2018 13:25:35 +0200
+Subject: [PATCH 70/83] PAM: return short name for files provider users
+
+If the 'allow_missing_name' option is used with pam_sss and the user
+name will be determined based on the certificate content and the mapping
+rules the PAM responder will by default return the fully-qualified name
+of the user which is then later used by other PAM modules as well.
+
+For local users which are configured to use SSSD for Smartcard
+authentication this might cause issues in other PAM modules because they
+are not aware of the fully-qualified name and will treat the user as
+unknown.
+
+With this patch the PAM responder will return the short name for all
+users handled by the files provider.
+
+Related to https://pagure.io/SSSD/sssd/issue/3848
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/pam/pamsrv.h     |  3 ++-
+ src/responder/pam/pamsrv_cmd.c | 13 +++++++++----
+ src/responder/pam/pamsrv_p11.c | 32 +++++++++++++++++++++++++++++---
+ 3 files changed, 40 insertions(+), 8 deletions(-)
+
+diff --git a/src/responder/pam/pamsrv.h b/src/responder/pam/pamsrv.h
+index 60aa979..3a927bb 100644
+--- a/src/responder/pam/pamsrv.h
++++ b/src/responder/pam/pamsrv.h
+@@ -108,7 +108,8 @@ struct tevent_req *pam_check_cert_send(TALLOC_CTX *mem_ctx,
+ errno_t pam_check_cert_recv(struct tevent_req *req, TALLOC_CTX *mem_ctx,
+                             struct cert_auth_info **cert_list);
+ 
+-errno_t add_pam_cert_response(struct pam_data *pd, const char *sysdb_username,
++errno_t add_pam_cert_response(struct pam_data *pd, struct sss_domain_info *dom,
++                              const char *sysdb_username,
+                               struct cert_auth_info *cert_info,
+                               enum response_type type);
+ 
+diff --git a/src/responder/pam/pamsrv_cmd.c b/src/responder/pam/pamsrv_cmd.c
+index a22afd2..553bf8f 100644
+--- a/src/responder/pam/pamsrv_cmd.c
++++ b/src/responder/pam/pamsrv_cmd.c
+@@ -1645,7 +1645,8 @@ static void pam_forwarder_lookup_by_cert_done(struct tevent_req *req)
+                      preq->current_cert != NULL;
+                      preq->current_cert = sss_cai_get_next(preq->current_cert)) {
+ 
+-                    ret = add_pam_cert_response(preq->pd, "",
++                    ret = add_pam_cert_response(preq->pd,
++                                       preq->cctx->rctx->domains, "",
+                                        preq->current_cert,
+                                        preq->cctx->rctx->domains->user_name_hint
+                                             ? SSS_PAM_CERT_INFO_WITH_HINT
+@@ -1699,7 +1700,8 @@ static void pam_forwarder_lookup_by_cert_done(struct tevent_req *req)
+ 
+             if (preq->cctx->rctx->domains->user_name_hint
+                     && preq->pd->cmd == SSS_PAM_PREAUTH) {
+-                ret = add_pam_cert_response(preq->pd, cert_user,
++                ret = add_pam_cert_response(preq->pd,
++                                            preq->cctx->rctx->domains, cert_user,
+                                             preq->cert_list,
+                                             SSS_PAM_CERT_INFO_WITH_HINT);
+                 preq->pd->pam_status = PAM_SUCCESS;
+@@ -1725,7 +1727,8 @@ static void pam_forwarder_lookup_by_cert_done(struct tevent_req *req)
+              * SSS_PAM_CERT_INFO message to send the name to the caller. */
+             if (preq->pd->cmd == SSS_PAM_AUTHENTICATE
+                     && preq->pd->logon_name == NULL) {
+-                ret = add_pam_cert_response(preq->pd, cert_user,
++                ret = add_pam_cert_response(preq->pd,
++                                            preq->cctx->rctx->domains, cert_user,
+                                             preq->cert_list,
+                                             SSS_PAM_CERT_INFO);
+                 if (ret != EOK) {
+@@ -2117,7 +2120,9 @@ static void pam_dom_forwarder(struct pam_auth_req *preq)
+                                   "the backend.\n");
+                         }
+ 
+-                        ret = add_pam_cert_response(preq->pd, cert_user,
++                        ret = add_pam_cert_response(preq->pd,
++                                                    preq->cctx->rctx->domains,
++                                                    cert_user,
+                                                     preq->current_cert,
+                                                     SSS_PAM_CERT_INFO);
+                         if (ret != EOK) {
+diff --git a/src/responder/pam/pamsrv_p11.c b/src/responder/pam/pamsrv_p11.c
+index 491bd2b..785b29c 100644
+--- a/src/responder/pam/pamsrv_p11.c
++++ b/src/responder/pam/pamsrv_p11.c
+@@ -1145,7 +1145,8 @@ static errno_t pack_cert_data(TALLOC_CTX *mem_ctx, const char *sysdb_username,
+  * used when running gdm-password. */
+ #define PKCS11_LOGIN_TOKEN_ENV_NAME "PKCS11_LOGIN_TOKEN_NAME"
+ 
+-errno_t add_pam_cert_response(struct pam_data *pd, const char *sysdb_username,
++errno_t add_pam_cert_response(struct pam_data *pd, struct sss_domain_info *dom,
++                              const char *sysdb_username,
+                               struct cert_auth_info *cert_info,
+                               enum response_type type)
+ {
+@@ -1153,6 +1154,10 @@ errno_t add_pam_cert_response(struct pam_data *pd, const char *sysdb_username,
+     char *env = NULL;
+     size_t msg_len;
+     int ret;
++    char *short_name = NULL;
++    char *domain_name = NULL;
++    const char *cert_info_name = sysdb_username;
++
+ 
+     if (type != SSS_PAM_CERT_INFO && type != SSS_PAM_CERT_INFO_WITH_HINT) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Invalid response type [%d].\n", type);
+@@ -1174,9 +1179,30 @@ errno_t add_pam_cert_response(struct pam_data *pd, const char *sysdb_username,
+      * Smartcard. If this type of name is irritating at the PIN prompt or the
+      * re_expression config option was set in a way that user@domain cannot be
+      * handled anymore some more logic has to be added here. But for the time
+-     * being I think using sysdb_username is fine. */
++     * being I think using sysdb_username is fine.
++     * As special case is the files provider which handles local users which
++     * by definition only have a short name. To avoid confusion by other
++     * modules on the PAM stack the short name is returned in this case. */
++
++    if (sysdb_username != NULL) {
++        ret = sss_parse_internal_fqname(pd, sysdb_username,
++                                        &short_name, &domain_name);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to parse name '%s' [%d]: %s, "
++                                       "using full name.\n",
++                                        sysdb_username, ret, sss_strerror(ret));
++        } else {
++            if (domain_name != NULL
++                    &&  is_files_provider(find_domain_by_name(dom, domain_name,
++                                                              false))) {
++                cert_info_name = short_name;
++            }
++        }
++    }
+ 
+-    ret = pack_cert_data(pd, sysdb_username, cert_info, &msg, &msg_len);
++    ret = pack_cert_data(pd, cert_info_name, cert_info, &msg, &msg_len);
++    talloc_free(short_name);
++    talloc_free(domain_name);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "pack_cert_data failed.\n");
+         return ret;
+-- 
+2.9.5
+

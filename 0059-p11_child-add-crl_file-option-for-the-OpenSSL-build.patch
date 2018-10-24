@@ -1,0 +1,279 @@
+From 3c096c9ad6dad911d035cfdd802b5dda4710fc68 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 11 Oct 2018 17:35:24 +0200
+Subject: [PATCH 75/83] p11_child: add crl_file option for the OpenSSL build
+
+In the NSS build a Certificate Revocation List (CRL) can just be added
+to the NSS database. For OpenSSL a separate file is needed.
+
+Related to https://pagure.io/SSSD/sssd/issue/3489
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/man/sssd.conf.5.xml           | 24 ++++++++++++++++++++++++
+ src/p11_child/p11_child_common.c  | 12 ++++++------
+ src/p11_child/p11_child_openssl.c | 26 +++++++++++++++++++++++++-
+ src/tests/cmocka/test_utils.c     | 16 ++++++++++++++++
+ src/util/util.c                   | 13 +++++++++++++
+ src/util/util.h                   |  1 +
+ 6 files changed, 85 insertions(+), 7 deletions(-)
+
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index 5e3ae48..bea25c6 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -503,6 +503,30 @@
+                                         pam_cert_db_path.</para>
+                                     </listitem>
+                                 </varlistentry>
++                                <varlistentry>
++                                    <term>crl_file=/PATH/TO/CRL/FILE</term>
++                                    <listitem>
++                                        <para>(NSS Version) This option is
++                                        ignored, please see
++                                            <citerefentry>
++                                                <refentrytitle>crlutil</refentrytitle>
++                                                <manvolnum>1</manvolnum>
++                                            </citerefentry>
++                                        how to import a Certificate Revocation
++                                        List (CRL) into a NSS database.</para>
++
++                                        <para>(OpenSSL Version) Use the
++                                        Certificate Revocation List (CRL) from
++                                        the given file during the verification
++                                        of the certificate. The CRL must be
++                                        given in PEM format, see
++                                            <citerefentry>
++                                                <refentrytitle>crl</refentrytitle>
++                                                <manvolnum>1ssl</manvolnum>
++                                            </citerefentry>
++                                        for details.</para>
++                                    </listitem>
++                                </varlistentry>
+                                 </variablelist>
+                             </para>
+                             <para condition="with_nss">
+diff --git a/src/p11_child/p11_child_common.c b/src/p11_child/p11_child_common.c
+index 097e7fa..b992aeb 100644
+--- a/src/p11_child/p11_child_common.c
++++ b/src/p11_child/p11_child_common.c
+@@ -48,7 +48,7 @@ static const char *op_mode_str(enum op_mode mode)
+         return "pre-auth";
+         break;
+     case OP_VERIFIY:
+-        return "verifiy";
++        return "verify";
+         break;
+     default:
+         return "unknown";
+@@ -219,7 +219,7 @@ int main(int argc, const char *argv[])
+         case 'a':
+             if (mode != OP_NONE) {
+                 fprintf(stderr,
+-                        "\n--verifiy, --auth and --pre are mutually " \
++                        "\n--verify, --auth and --pre are mutually " \
+                         "exclusive and should be only used once.\n\n");
+                 poptPrintUsage(pc, stderr, 0);
+                 _exit(-1);
+@@ -229,7 +229,7 @@ int main(int argc, const char *argv[])
+         case 'p':
+             if (mode != OP_NONE) {
+                 fprintf(stderr,
+-                        "\n--verifiy, --auth and --pre are mutually " \
++                        "\n--verify, --auth and --pre are mutually " \
+                         "exclusive and should be only used once.\n\n");
+                 poptPrintUsage(pc, stderr, 0);
+                 _exit(-1);
+@@ -239,7 +239,7 @@ int main(int argc, const char *argv[])
+         case 'v':
+             if (mode != OP_NONE) {
+                 fprintf(stderr,
+-                        "\n--verifiy, --auth and --pre are mutually " \
++                        "\n--verify, --auth and --pre are mutually " \
+                         "exclusive and should be only used once.\n\n");
+                 poptPrintUsage(pc, stderr, 0);
+                 _exit(-1);
+@@ -283,7 +283,7 @@ int main(int argc, const char *argv[])
+ 
+     if (mode == OP_NONE) {
+         fprintf(stderr, "\nMissing operation mode, either " \
+-                        "--verifiy, --auth or --pre must be specified.\n\n");
++                        "--verify, --auth or --pre must be specified.\n\n");
+         poptPrintUsage(pc, stderr, 0);
+         _exit(-1);
+     } else if (mode == OP_AUTH && pin_mode == PIN_NONE) {
+@@ -350,7 +350,7 @@ int main(int argc, const char *argv[])
+ 
+     ret = parse_cert_verify_opts(main_ctx, verify_opts, &cert_verify_opts);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_FATAL_FAILURE, "Failed to parse verifiy option.\n");
++        DEBUG(SSSDBG_FATAL_FAILURE, "Failed to parse verify option.\n");
+         goto fail;
+     }
+ 
+diff --git a/src/p11_child/p11_child_openssl.c b/src/p11_child/p11_child_openssl.c
+index d66a2f8..9defdfc 100644
+--- a/src/p11_child/p11_child_openssl.c
++++ b/src/p11_child/p11_child_openssl.c
+@@ -501,6 +501,7 @@ errno_t init_verification(struct p11_ctx *p11_ctx,
+     X509_STORE *store = NULL;
+     unsigned long err;
+     X509_LOOKUP *lookup = NULL;
++    X509_VERIFY_PARAM *verify_param = NULL;
+ 
+     store = X509_STORE_new();
+     if (store == NULL) {
+@@ -527,6 +528,30 @@ errno_t init_verification(struct p11_ctx *p11_ctx,
+         goto done;
+     }
+ 
++    if (cert_verify_opts->crl_file != NULL) {
++        verify_param = X509_VERIFY_PARAM_new();
++        if (verify_param == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, "X509_VERIFY_PARAM_new failed.\n");
++            ret = ENOMEM;
++            goto done;
++        }
++
++        X509_VERIFY_PARAM_set_flags(verify_param, (X509_V_FLAG_CRL_CHECK
++                                                  | X509_V_FLAG_CRL_CHECK_ALL));
++
++        X509_STORE_set1_param(store, verify_param);
++
++        ret = X509_load_crl_file(lookup, cert_verify_opts->crl_file,
++                                 X509_FILETYPE_PEM);
++        if (ret == 0) {
++            err = ERR_get_error();
++            DEBUG(SSSDBG_OP_FAILURE, "X509_load_crl_file failed [%lu][%s].\n",
++                                     err, ERR_error_string(err, NULL));
++            ret = EIO;
++            goto done;
++        }
++    }
++
+     p11_ctx->x509_store = store;
+     p11_ctx->cert_verify_opts = cert_verify_opts;
+     talloc_set_destructor(p11_ctx, talloc_free_x509_store);
+@@ -536,7 +561,6 @@ errno_t init_verification(struct p11_ctx *p11_ctx,
+ done:
+     if (ret != EOK) {
+         X509_STORE_free(store);
+-        X509_LOOKUP_free(lookup);
+     }
+ 
+     return ret;
+diff --git a/src/tests/cmocka/test_utils.c b/src/tests/cmocka/test_utils.c
+index c86e526..cf1c2ae 100644
+--- a/src/tests/cmocka/test_utils.c
++++ b/src/tests/cmocka/test_utils.c
+@@ -1567,6 +1567,7 @@ static void test_parse_cert_verify_opts(void **state)
+     assert_true(cv_opts->do_ocsp);
+     assert_null(cv_opts->ocsp_default_responder);
+     assert_null(cv_opts->ocsp_default_responder_signing_cert);
++    assert_null(cv_opts->crl_file);
+     talloc_free(cv_opts);
+ 
+     ret = parse_cert_verify_opts(global_talloc_context, "wedfkwefjk", &cv_opts);
+@@ -1575,6 +1576,7 @@ static void test_parse_cert_verify_opts(void **state)
+     assert_true(cv_opts->do_ocsp);
+     assert_null(cv_opts->ocsp_default_responder);
+     assert_null(cv_opts->ocsp_default_responder_signing_cert);
++    assert_null(cv_opts->crl_file);
+     talloc_free(cv_opts);
+ 
+     ret = parse_cert_verify_opts(global_talloc_context, "no_ocsp", &cv_opts);
+@@ -1583,6 +1585,7 @@ static void test_parse_cert_verify_opts(void **state)
+     assert_false(cv_opts->do_ocsp);
+     assert_null(cv_opts->ocsp_default_responder);
+     assert_null(cv_opts->ocsp_default_responder_signing_cert);
++    assert_null(cv_opts->crl_file);
+     talloc_free(cv_opts);
+ 
+     ret = parse_cert_verify_opts(global_talloc_context, "no_verification",
+@@ -1592,6 +1595,7 @@ static void test_parse_cert_verify_opts(void **state)
+     assert_true(cv_opts->do_ocsp);
+     assert_null(cv_opts->ocsp_default_responder);
+     assert_null(cv_opts->ocsp_default_responder_signing_cert);
++    assert_null(cv_opts->crl_file);
+     talloc_free(cv_opts);
+ 
+     ret = parse_cert_verify_opts(global_talloc_context,
+@@ -1601,6 +1605,7 @@ static void test_parse_cert_verify_opts(void **state)
+     assert_false(cv_opts->do_ocsp);
+     assert_null(cv_opts->ocsp_default_responder);
+     assert_null(cv_opts->ocsp_default_responder_signing_cert);
++    assert_null(cv_opts->crl_file);
+     talloc_free(cv_opts);
+ 
+     ret = parse_cert_verify_opts(global_talloc_context,
+@@ -1633,6 +1638,17 @@ static void test_parse_cert_verify_opts(void **state)
+     assert_true(cv_opts->do_ocsp);
+     assert_string_equal(cv_opts->ocsp_default_responder, "abc");
+     assert_string_equal(cv_opts->ocsp_default_responder_signing_cert, "def");
++    assert_null(cv_opts->crl_file);
++    talloc_free(cv_opts);
++
++    ret = parse_cert_verify_opts(global_talloc_context, "crl_file=hij",
++                                 &cv_opts);
++    assert_int_equal(ret, EOK);
++    assert_true(cv_opts->do_verification);
++    assert_true(cv_opts->do_ocsp);
++    assert_null(cv_opts->ocsp_default_responder);
++    assert_null(cv_opts->ocsp_default_responder_signing_cert);
++    assert_string_equal(cv_opts->crl_file, "hij");
+     talloc_free(cv_opts);
+ }
+ 
+diff --git a/src/util/util.c b/src/util/util.c
+index 7f475fa..cbe6a28 100644
+--- a/src/util/util.c
++++ b/src/util/util.c
+@@ -1024,6 +1024,7 @@ static struct cert_verify_opts *init_cert_verify_opts(TALLOC_CTX *mem_ctx)
+     cert_verify_opts->do_verification = true;
+     cert_verify_opts->ocsp_default_responder = NULL;
+     cert_verify_opts->ocsp_default_responder_signing_cert = NULL;
++    cert_verify_opts->crl_file = NULL;
+ 
+     return cert_verify_opts;
+ }
+@@ -1035,6 +1036,8 @@ static struct cert_verify_opts *init_cert_verify_opts(TALLOC_CTX *mem_ctx)
+                                           "ocsp_default_responder_signing_cert="
+ #define OCSP_DEFAUL_RESPONDER_SIGNING_CERT_LEN \
+                                 (sizeof(OCSP_DEFAUL_RESPONDER_SIGNING_CERT) - 1)
++#define CRL_FILE "crl_file="
++#define CRL_FILE_LEN (sizeof(CRL_FILE) -1)
+ 
+ errno_t parse_cert_verify_opts(TALLOC_CTX *mem_ctx, const char *verify_opts,
+                                struct cert_verify_opts **_cert_verify_opts)
+@@ -1116,6 +1119,16 @@ errno_t parse_cert_verify_opts(TALLOC_CTX *mem_ctx, const char *verify_opts,
+             DEBUG(SSSDBG_TRACE_ALL,
+                   "Using OCSP default responder signing cert nickname [%s]\n",
+                   cert_verify_opts->ocsp_default_responder_signing_cert);
++        } else if (strncasecmp(opts[c], CRL_FILE, CRL_FILE_LEN) == 0) {
++            cert_verify_opts->crl_file = talloc_strdup(cert_verify_opts,
++                                                       &opts[c][CRL_FILE_LEN]);
++            if (cert_verify_opts->crl_file == NULL
++                    || *cert_verify_opts->crl_file == '\0') {
++                DEBUG(SSSDBG_CRIT_FAILURE,
++                      "Failed to parse crl_file option [%s].\n", opts[c]);
++                ret = EINVAL;
++                goto done;
++            }
+         } else {
+             DEBUG(SSSDBG_CRIT_FAILURE,
+                   "Unsupported certificate verification option [%s], " \
+diff --git a/src/util/util.h b/src/util/util.h
+index e3e9100..7e9b3d6 100644
+--- a/src/util/util.h
++++ b/src/util/util.h
+@@ -371,6 +371,7 @@ struct cert_verify_opts {
+     bool do_verification;
+     char *ocsp_default_responder;
+     char *ocsp_default_responder_signing_cert;
++    char *crl_file;
+ };
+ 
+ errno_t parse_cert_verify_opts(TALLOC_CTX *mem_ctx, const char *verify_opts,
+-- 
+2.9.5
+

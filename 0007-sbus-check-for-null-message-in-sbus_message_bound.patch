@@ -1,0 +1,41 @@
+From 30f4adf874aff174734ad77902a79fc5727ab495 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 16 Aug 2018 12:57:47 +0200
+Subject: [PATCH 10/83] sbus: check for null message in sbus_message_bound
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/sbus/request/sbus_message.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+diff --git a/src/sbus/request/sbus_message.c b/src/sbus/request/sbus_message.c
+index 950be91..7314fd7 100644
+--- a/src/sbus/request/sbus_message.c
++++ b/src/sbus/request/sbus_message.c
+@@ -83,6 +83,11 @@ sbus_message_bound(TALLOC_CTX *mem_ctx, DBusMessage *msg)
+         return EINVAL;
+     }
+ 
++    if (msg == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Message can not be NULL!\n");
++        return EINVAL;
++    }
++
+     /* Create a talloc context that will unreference this message when
+      * the parent context is freed. */
+     talloc_msg = talloc(mem_ctx, struct sbus_talloc_msg);
+@@ -122,6 +127,11 @@ sbus_message_bound(TALLOC_CTX *mem_ctx, DBusMessage *msg)
+ errno_t
+ sbus_message_bound_ref(TALLOC_CTX *mem_ctx, DBusMessage *msg)
+ {
++    if (msg == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Message can not be NULL!\n");
++        return EINVAL;
++    }
++
+     dbus_message_ref(msg);
+     return sbus_message_bound(mem_ctx, msg);
+ }
+-- 
+2.9.5
+

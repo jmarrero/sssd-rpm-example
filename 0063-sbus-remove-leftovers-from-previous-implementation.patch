@@ -1,0 +1,64 @@
+From c74b430ba95d99b245b6347328024e4b4815b35e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Mon, 15 Oct 2018 12:48:41 +0200
+Subject: [PATCH 79/83] sbus: remove leftovers from previous implementation
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/providers/data_provider/dp_iface.h   |  8 +--
+ src/providers/data_provider_be.c         |  2 +-
+ 5 files changed, 5 insertions(+), 26 deletions(-)
+
+diff --git a/src/providers/data_provider/dp_iface.h b/src/providers/data_provider/dp_iface.h
+index 0b0855d..d1382cd 100644
+--- a/src/providers/data_provider/dp_iface.h
++++ b/src/providers/data_provider/dp_iface.h
+@@ -141,21 +141,21 @@ dp_get_account_domain_recv(TALLOC_CTX *mem_ctx,
+                            uint32_t *_error,
+                            const char **_err_msg);
+ 
+-/* org.freedesktop.sssd.DataProvider.Client */
++/* sssd.DataProvider.Client */
+ errno_t
+ dp_client_register(TALLOC_CTX *mem_ctx,
+                    struct sbus_request *sbus_req,
+                    struct data_provider *provider,
+                    const char *name);
+ 
+-/* org.freedesktop.sssd.DataProvider.Backend */
++/* sssd.DataProvider.Backend */
+ errno_t dp_backend_is_online(TALLOC_CTX *mem_ctx,
+                              struct sbus_request *sbus_req,
+                              struct be_ctx *be_ctx,
+                              const char *domname,
+                              bool *_is_online);
+ 
+-/* org.freedesktop.sssd.DataProvider.Failover */
++/* sssd.DataProvider.Failover */
+ errno_t
+ dp_failover_list_services(TALLOC_CTX *mem_ctx,
+                           struct sbus_request *sbus_req,
+@@ -177,7 +177,7 @@ dp_failover_list_servers(TALLOC_CTX *mem_ctx,
+                          const char *service_name,
+                          const char ***_servers);
+ 
+-/* org.freedesktop.sssd.DataProvider.AccessControl */
++/* sssd.DataProvider.AccessControl */
+ struct tevent_req *
+ dp_access_control_refresh_rules_send(TALLOC_CTX *mem_ctx,
+                                      struct tevent_context *ev,
+diff --git a/src/providers/data_provider_be.c b/src/providers/data_provider_be.c
+index 6d2477e..7043e7a 100644
+--- a/src/providers/data_provider_be.c
++++ b/src/providers/data_provider_be.c
+@@ -48,7 +48,7 @@
+ #include "resolv/async_resolv.h"
+ #include "sss_iface/sss_iface_async.h"
+ 
+-/* org.freedesktop.sssd.service */
++/* sssd.service */
+ static errno_t
+ data_provider_res_init(TALLOC_CTX *mem_ctx,
+                        struct sbus_request *sbus_req,
+2.9.5
+

@@ -1,0 +1,336 @@
+From ca50c40511f08c0f7c786598e5793a06789c6cce Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 16 Aug 2018 13:17:13 +0200
+Subject: [PATCH 11/83] sbus: replace sbus_message_bound_ref with
+ sbus_message_bound_steal
+
+The memory context used to new message reference accidentally overwrote
+the one use by the initial sbus_message_bound call. This caused a memory
+leak of message as its reference counter got increased but number of
+talloc contexts bound this this message decreased at the same time.
+
+Fixing this is non-trival and it would require separate data slot for
+each reference. Because we do not have any existing use case for this
+and we use it only as an equivalent of talloc_steal it is better to
+provide a real equivalent for this talloc function.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3810
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/ifp/ifp_iface/sbus_ifp_client_sync.c |  4 +-
+ src/sbus/codegen/templates/client_async.c.tpl      |  4 +-
+ src/sbus/codegen/templates/client_sync.c.tpl       |  4 +-
+ src/sbus/interface_dbus/sbus_dbus_client_async.c   |  8 ++--
+ src/sbus/interface_dbus/sbus_dbus_client_sync.c    |  8 ++--
+ src/sbus/request/sbus_message.c                    | 51 +++++++++++++++++-----
+ src/sbus/request/sbus_request.c                    | 10 ++---
+ src/sbus/request/sbus_request_call.c               |  5 +--
+ src/sbus/sbus_message.h                            |  8 +---
+ src/sbus/sync/sbus_sync_call.c                     |  5 +--
+ 10 files changed, 65 insertions(+), 42 deletions(-)
+
+diff --git a/src/responder/ifp/ifp_iface/sbus_ifp_client_sync.c b/src/responder/ifp/ifp_iface/sbus_ifp_client_sync.c
+index 4859b93..1f0a8e3 100644
+--- a/src/responder/ifp/ifp_iface/sbus_ifp_client_sync.c
++++ b/src/responder/ifp/ifp_iface/sbus_ifp_client_sync.c
+@@ -526,9 +526,9 @@ sbus_method_in_sas_out_raw
+         goto done;
+     }
+ 
+-    ret = sbus_message_bound_ref(mem_ctx, reply);
++    ret = sbus_message_bound_steal(mem_ctx, reply);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+               ret, sss_strerror(ret));
+         goto done;
+     }
+diff --git a/src/sbus/codegen/templates/client_async.c.tpl b/src/sbus/codegen/templates/client_async.c.tpl
+index 6ffb4f8..e16ce42 100644
+--- a/src/sbus/codegen/templates/client_async.c.tpl
++++ b/src/sbus/codegen/templates/client_async.c.tpl
+@@ -193,9 +193,9 @@
+             return EINVAL;
+         }
+ 
+-        ret = sbus_message_bound_ref(mem_ctx, state->reply);
++        ret = sbus_message_bound_steal(mem_ctx, state->reply);
+         if (ret != EOK) {
+-            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+                   ret, sss_strerror(ret));
+             return ret;
+         }
+diff --git a/src/sbus/codegen/templates/client_sync.c.tpl b/src/sbus/codegen/templates/client_sync.c.tpl
+index 30fa009..fe9a3a4 100644
+--- a/src/sbus/codegen/templates/client_sync.c.tpl
++++ b/src/sbus/codegen/templates/client_sync.c.tpl
+@@ -110,9 +110,9 @@
+             goto done;
+         }
+ 
+-        ret = sbus_message_bound_ref(mem_ctx, reply);
++        ret = sbus_message_bound_steal(mem_ctx, reply);
+         if (ret != EOK) {
+-            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++            DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+                   ret, sss_strerror(ret));
+             goto done;
+         }
+diff --git a/src/sbus/interface_dbus/sbus_dbus_client_async.c b/src/sbus/interface_dbus/sbus_dbus_client_async.c
+index 9dbd72c..0060e8b 100644
+--- a/src/sbus/interface_dbus/sbus_dbus_client_async.c
++++ b/src/sbus/interface_dbus/sbus_dbus_client_async.c
+@@ -301,9 +301,9 @@ sbus_method_in_s_out_raw_recv
+         return EINVAL;
+     }
+ 
+-    ret = sbus_message_bound_ref(mem_ctx, state->reply);
++    ret = sbus_message_bound_steal(mem_ctx, state->reply);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+               ret, sss_strerror(ret));
+         return ret;
+     }
+@@ -513,9 +513,9 @@ sbus_method_in_ss_out_raw_recv
+         return EINVAL;
+     }
+ 
+-    ret = sbus_message_bound_ref(mem_ctx, state->reply);
++    ret = sbus_message_bound_steal(mem_ctx, state->reply);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+               ret, sss_strerror(ret));
+         return ret;
+     }
+diff --git a/src/sbus/interface_dbus/sbus_dbus_client_sync.c b/src/sbus/interface_dbus/sbus_dbus_client_sync.c
+index a0473cd..3ab0aab 100644
+--- a/src/sbus/interface_dbus/sbus_dbus_client_sync.c
++++ b/src/sbus/interface_dbus/sbus_dbus_client_sync.c
+@@ -101,9 +101,9 @@ sbus_method_in_s_out_raw
+         goto done;
+     }
+ 
+-    ret = sbus_message_bound_ref(mem_ctx, reply);
++    ret = sbus_message_bound_steal(mem_ctx, reply);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+               ret, sss_strerror(ret));
+         goto done;
+     }
+@@ -159,9 +159,9 @@ sbus_method_in_ss_out_raw
+         goto done;
+     }
+ 
+-    ret = sbus_message_bound_ref(mem_ctx, reply);
++    ret = sbus_message_bound_steal(mem_ctx, reply);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+               ret, sss_strerror(ret));
+         goto done;
+     }
+diff --git a/src/sbus/request/sbus_message.c b/src/sbus/request/sbus_message.c
+index 7314fd7..90c6df4 100644
+--- a/src/sbus/request/sbus_message.c
++++ b/src/sbus/request/sbus_message.c
+@@ -29,8 +29,9 @@
+ #include "sbus/interface/sbus_iterator_writers.h"
+ 
+ /* Data slot that is used for message data. The slot is shared for all
+- * messages. */
+-dbus_int32_t data_slot = -1;
++ * messages, i.e. when a data slot is allocated all messages have the
++ * slot available. */
++dbus_int32_t global_data_slot = -1;
+ 
+ struct sbus_talloc_msg {
+     DBusMessage *msg;
+@@ -48,7 +49,7 @@ static int sbus_talloc_msg_destructor(struct sbus_talloc_msg *talloc_msg)
+     /* There may exist more references to this message but this talloc
+      * context is no longer valid. We remove dbus message data to invoke
+      * dbus destructor now. */
+-    dbus_message_set_data(talloc_msg->msg, data_slot, NULL, NULL);
++    dbus_message_set_data(talloc_msg->msg, global_data_slot, NULL, NULL);
+     dbus_message_unref(talloc_msg->msg);
+     return 0;
+ }
+@@ -60,7 +61,7 @@ static void sbus_msg_data_destructor(void *ctx)
+     talloc_msg = talloc_get_type(ctx, struct sbus_talloc_msg);
+ 
+     /* Decrement ref counter on data slot. */
+-    dbus_message_free_data_slot(&data_slot);
++    dbus_message_free_data_slot(&global_data_slot);
+ 
+     if (!talloc_msg->in_talloc_destructor) {
+         /* References to this message dropped to zero but through
+@@ -100,7 +101,8 @@ sbus_message_bound(TALLOC_CTX *mem_ctx, DBusMessage *msg)
+     /* Allocate a dbus message data slot that will contain pointer to the
+      * talloc context so we can pick up cases when the dbus message is
+      * freed through dbus api. */
+-    bret = dbus_message_allocate_data_slot(&data_slot);
++
++    bret = dbus_message_allocate_data_slot(&global_data_slot);
+     if (!bret) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to allocate data slot!\n");
+         talloc_free(talloc_msg);
+@@ -108,11 +110,11 @@ sbus_message_bound(TALLOC_CTX *mem_ctx, DBusMessage *msg)
+     }
+ 
+     free_fn = sbus_msg_data_destructor;
+-    bret = dbus_message_set_data(msg, data_slot, talloc_msg, free_fn);
++    bret = dbus_message_set_data(msg, global_data_slot, talloc_msg, free_fn);
+     if (!bret) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to set message data!\n");
+         talloc_free(talloc_msg);
+-        dbus_message_free_data_slot(&data_slot);
++        dbus_message_free_data_slot(&global_data_slot);
+         return ENOMEM;
+     }
+ 
+@@ -125,15 +127,44 @@ sbus_message_bound(TALLOC_CTX *mem_ctx, DBusMessage *msg)
+ }
+ 
+ errno_t
+-sbus_message_bound_ref(TALLOC_CTX *mem_ctx, DBusMessage *msg)
++sbus_message_bound_steal(TALLOC_CTX *mem_ctx, DBusMessage *msg)
+ {
++    struct sbus_talloc_msg *talloc_msg;
++    void *data;
++
++    if (mem_ctx == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Warning: bounding to NULL context!\n");
++        return EINVAL;
++    }
++
+     if (msg == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Message can not be NULL!\n");
+         return EINVAL;
+     }
+ 
+-    dbus_message_ref(msg);
+-    return sbus_message_bound(mem_ctx, msg);
++    if (global_data_slot < 0) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "This message is not talloc-bound! "
++              "(data slot < 0)\n");
++        return ERR_INTERNAL;
++    }
++
++    data = dbus_message_get_data(msg, global_data_slot);
++    if (data == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "This message is not talloc-bound! "
++              "(returned data is NULL)\n");
++        return ERR_INTERNAL;
++    }
++
++    talloc_msg = talloc_get_type(data, struct sbus_talloc_msg);
++    if (talloc_msg == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "This message is not talloc-bound! "
++              "(invalid data)\n");
++        return ERR_INTERNAL;
++    }
++
++    talloc_steal(mem_ctx, talloc_msg);
++
++    return EOK;
+ }
+ 
+ DBusMessage *
+diff --git a/src/sbus/request/sbus_request.c b/src/sbus/request/sbus_request.c
+index 3d0e2f9..1ccd01e 100644
+--- a/src/sbus/request/sbus_request.c
++++ b/src/sbus/request/sbus_request.c
+@@ -564,10 +564,9 @@ sbus_incoming_request_recv(TALLOC_CTX *mem_ctx,
+         return EOK;
+     }
+ 
+-    /* Create new reference to the reply and bound it with caller mem_ctx. */
+-    ret = sbus_message_bound_ref(mem_ctx, state->reply);
++    ret = sbus_message_bound_steal(mem_ctx, state->reply);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+               ret, sss_strerror(ret));
+         return ret;
+     }
+@@ -709,10 +708,9 @@ sbus_outgoing_request_recv(TALLOC_CTX *mem_ctx,
+ 
+     TEVENT_REQ_RETURN_ON_ERROR(req);
+ 
+-    /* Create new reference to the reply and bound it with caller mem_ctx. */
+-    ret = sbus_message_bound_ref(mem_ctx, state->reply);
++    ret = sbus_message_bound_steal(mem_ctx, state->reply);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+               ret, sss_strerror(ret));
+         return ret;
+     }
+diff --git a/src/sbus/request/sbus_request_call.c b/src/sbus/request/sbus_request_call.c
+index 1cf58bd..cf2a6e5 100644
+--- a/src/sbus/request/sbus_request_call.c
++++ b/src/sbus/request/sbus_request_call.c
+@@ -126,10 +126,9 @@ sbus_call_method_recv(TALLOC_CTX *mem_ctx,
+ 
+     TEVENT_REQ_RETURN_ON_ERROR(req);
+ 
+-    /* Create new reference to the reply and bound it with caller mem_ctx. */
+-    ret = sbus_message_bound_ref(mem_ctx, state->reply);
++    ret = sbus_message_bound_steal(mem_ctx, state->reply);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+               ret, sss_strerror(ret));
+         return ret;
+     }
+diff --git a/src/sbus/sbus_message.h b/src/sbus/sbus_message.h
+index 92d5cea..e7b8fe5 100644
+--- a/src/sbus/sbus_message.h
++++ b/src/sbus/sbus_message.h
+@@ -45,11 +45,7 @@ errno_t
+ sbus_message_bound(TALLOC_CTX *mem_ctx, DBusMessage *msg);
+ 
+ /**
+- * Reference the message and bound it with talloc context.
+- *
+- * DO NOT USE dbus_message_unref() on such message anymore since it would not
+- * release internal data about the bound. The message will be automatically
+- * unreferenced when the talloc context is freed.
++ * Steal previously bound D-Bus message to a new talloc parent.
+  *
+  * @param mem_ctx Memory context to bound the message with. It can not be NULL.
+  * @param msg     Message to be bound with memory context.
+@@ -57,7 +53,7 @@ sbus_message_bound(TALLOC_CTX *mem_ctx, DBusMessage *msg);
+  * @return EOK on success, other errno code on error.
+  */
+ errno_t
+-sbus_message_bound_ref(TALLOC_CTX *mem_ctx, DBusMessage *msg);
++sbus_message_bound_steal(TALLOC_CTX *mem_ctx, DBusMessage *msg);
+ 
+ /**
+  * Create an empty D-Bus method call.
+diff --git a/src/sbus/sync/sbus_sync_call.c b/src/sbus/sync/sbus_sync_call.c
+index 8549e58..a4f8a5c 100644
+--- a/src/sbus/sync/sbus_sync_call.c
++++ b/src/sbus/sync/sbus_sync_call.c
+@@ -63,10 +63,9 @@ sbus_sync_call_method(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    /* Create new reference to the reply and bound it with caller mem_ctx. */
+-    ret = sbus_message_bound_ref(mem_ctx, reply);
++    ret = sbus_message_bound_steal(mem_ctx, reply);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to bound message [%d]: %s\n",
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to steal message [%d]: %s\n",
+               ret, sss_strerror(ret));
+         goto done;
+     }
+-- 
+2.9.5
+

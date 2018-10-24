@@ -1,0 +1,414 @@
+From 275eeed24adc31f3df51cf278f509a4be76a3a3c Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 9 Jul 2018 18:37:46 +0200
+Subject: [PATCH 28/83] files: add support for Smartcard authentication
+
+To support certificate based authentication the files provider must be
+able to map a certificate to a user during a BE_REQ_BY_CERT request.
+
+Additionally the authentication request should be handled by the PAM
+responder code which is responsible for the local Smartcard
+authentication. To be consistent with the other backend an authentication
+handler is added to the files provider which unconditionally returns the
+offline error code telling the PAM responder to handle the
+authentication if it has access to the needed credentials.
+
+Related to https://pagure.io/SSSD/sssd/issue/3500
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ Makefile.am                         |   2 +
+ src/providers/files/files_auth.c    |  69 +++++++++++++
+ src/providers/files/files_certmap.c | 186 ++++++++++++++++++++++++++++++++++++
+ src/providers/files/files_id.c      |  20 ++++
+ src/providers/files/files_init.c    |  21 +++-
+ src/providers/files/files_private.h |  17 ++++
+ 6 files changed, 314 insertions(+), 1 deletion(-)
+ create mode 100644 src/providers/files/files_auth.c
+ create mode 100644 src/providers/files/files_certmap.c
+
+diff --git a/Makefile.am b/Makefile.am
+index deb9ce3..3667856 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -4285,6 +4285,8 @@ libsss_proxy_la_LDFLAGS = \
+ libsss_files_la_SOURCES = \
+     src/providers/files/files_init.c \
+     src/providers/files/files_id.c \
++    src/providers/files/files_auth.c \
++    src/providers/files/files_certmap.c \
+     src/providers/files/files_ops.c \
+     src/util/inotify.c \
+     $(NULL)
+diff --git a/src/providers/files/files_auth.c b/src/providers/files/files_auth.c
+new file mode 100644
+index 0000000..b71de69
+--- /dev/null
++++ b/src/providers/files/files_auth.c
+@@ -0,0 +1,69 @@
++/*
++    SSSD
++
++    files_auth.c - PAM operations on the files provider
++
++    Copyright (C) 2018 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <security/pam_modules.h>
++
++#include "providers/data_provider/dp.h"
++#include "providers/data_provider.h"
++#include "providers/files/files_private.h"
++#include "util/cert.h"
++
++struct files_auth_ctx {
++    struct pam_data *pd;
++};
++
++struct tevent_req *
++files_auth_handler_send(TALLOC_CTX *mem_ctx,
++                        void *unused,
++                        struct pam_data *pd,
++                        struct dp_req_params *params)
++{
++    struct files_auth_ctx *state;
++    struct tevent_req *req;
++
++    req = tevent_req_create(mem_ctx, &state, struct files_auth_ctx);
++    if (req == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "tevent_req_create() failed\n");
++        return NULL;
++    }
++
++    state->pd = pd;
++    state->pd->pam_status = PAM_AUTHINFO_UNAVAIL;
++
++    tevent_req_done(req);
++    tevent_req_post(req, params->ev);
++    return req;
++}
++
++errno_t files_auth_handler_recv(TALLOC_CTX *mem_ctx,
++                                struct tevent_req *req,
++                                struct pam_data **_data)
++{
++    struct files_auth_ctx *state = NULL;
++
++    state = tevent_req_data(req, struct files_auth_ctx);
++
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    *_data = talloc_steal(mem_ctx, state->pd);
++
++    return EOK;
++}
+diff --git a/src/providers/files/files_certmap.c b/src/providers/files/files_certmap.c
+new file mode 100644
+index 0000000..7d90a1f
+--- /dev/null
++++ b/src/providers/files/files_certmap.c
+@@ -0,0 +1,186 @@
++/*
++    SSSD
++
++    files_init.c - Initialization of the files provider
++
++    Copyright (C) 2018 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "providers/files/files_private.h"
++#include "util/util.h"
++#include "util/cert.h"
++#include "lib/certmap/sss_certmap.h"
++
++struct priv_sss_debug {
++    int level;
++};
++
++static void ext_debug(void *private, const char *file, long line,
++                      const char *function, const char *format, ...)
++{
++    va_list ap;
++    struct priv_sss_debug *data = private;
++    int level = SSSDBG_OP_FAILURE;
++
++    if (data != NULL) {
++        level = data->level;
++    }
++
++    if (DEBUG_IS_SET(level)) {
++        va_start(ap, format);
++        sss_vdebug_fn(file, line, function, level, APPEND_LINE_FEED,
++                      format, ap);
++        va_end(ap);
++    }
++}
++
++errno_t files_init_certmap(TALLOC_CTX *mem_ctx, struct files_id_ctx *id_ctx)
++{
++    int ret;
++    bool hint;
++    struct certmap_info **certmap_list = NULL;
++    size_t c;
++
++    ret = sysdb_get_certmap(mem_ctx, id_ctx->be->domain->sysdb,
++                            &certmap_list, &hint);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "sysdb_get_certmap failed.\n");
++        goto done;
++    }
++
++    if (certmap_list == NULL || *certmap_list == NULL) {
++        DEBUG(SSSDBG_TRACE_ALL, "No certmap data, nothing to do.\n");
++        ret = EOK;
++        goto done;
++    }
++
++    ret = sss_certmap_init(mem_ctx, ext_debug, NULL, &id_ctx->sss_certmap_ctx);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "sss_certmap_init failed.\n");
++        goto done;
++    }
++
++    for (c = 0; certmap_list[c] != NULL; c++) {
++        DEBUG(SSSDBG_TRACE_ALL, "Trying to add rule [%s][%d][%s][%s].\n",
++                                certmap_list[c]->name,
++                                certmap_list[c]->priority,
++                                certmap_list[c]->match_rule,
++                                certmap_list[c]->map_rule);
++
++        ret = sss_certmap_add_rule(id_ctx->sss_certmap_ctx,
++                                   certmap_list[c]->priority,
++                                   certmap_list[c]->match_rule,
++                                   certmap_list[c]->map_rule,
++                                   certmap_list[c]->domains);
++        if (ret != 0) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "sss_certmap_add_rule failed for rule [%s] "
++                  "with error [%d][%s], skipping. "
++                  "Please check for typos and if rule syntax is supported.\n",
++                  certmap_list[c]->name, ret, sss_strerror(ret));
++            continue;
++        }
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(certmap_list);
++
++    return ret;
++}
++
++errno_t files_map_cert_to_user(struct files_id_ctx *id_ctx,
++                               struct dp_id_data *data)
++{
++    errno_t ret;
++    char *filter;
++    char *user;
++    struct ldb_message *msg = NULL;
++    struct sysdb_attrs *attrs = NULL;
++    TALLOC_CTX *tmp_ctx;
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, "talloc_new failed.\n");
++        return ENOMEM;
++    }
++
++    ret = sss_cert_derb64_to_ldap_filter(tmp_ctx, data->filter_value, "",
++                                         id_ctx->sss_certmap_ctx,
++                                         id_ctx->domain, &filter);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "sss_cert_derb64_to_ldap_filter failed.\n");
++        goto done;
++    }
++    if (filter == NULL || filter[0] != '('
++                       || filter[strlen(filter) - 1] != ')') {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "sss_cert_derb64_to_ldap_filter returned bad filter [%s].\n",
++              filter);
++        ret = EINVAL;
++        goto done;
++    }
++
++    filter[strlen(filter) - 1] = '\0';
++    user = sss_create_internal_fqname(tmp_ctx, &filter[1],
++                                      id_ctx->domain->name);
++    if (user == NULL) {
++        DEBUG(SSSDBG_OP_FAILURE, "sss_create_internal_fqname failed.\n");
++        ret = ENOMEM;
++        goto done;
++    }
++    DEBUG(SSSDBG_TRACE_ALL, "Certificate mapped to user: [%s].\n", user);
++
++    ret = sysdb_search_user_by_name(tmp_ctx, id_ctx->domain, user, NULL, &msg);
++    if (ret == EOK) {
++        attrs = sysdb_new_attrs(tmp_ctx);
++        if (attrs == NULL) {
++            DEBUG(SSSDBG_OP_FAILURE, "sysdb_new_attrs failed.\n");
++            ret = ENOMEM;
++            goto done;
++        }
++
++        ret = sysdb_attrs_add_base64_blob(attrs, SYSDB_USER_MAPPED_CERT,
++                                          data->filter_value);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "sysdb_attrs_add_base64_blob failed.\n");
++            goto done;
++        }
++
++        ret = sysdb_set_entry_attr(id_ctx->domain->sysdb, msg->dn, attrs,
++                                   SYSDB_MOD_ADD);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "sysdb_set_entry_attr failed.\n");
++            goto done;
++        }
++    } else if (ret == ENOENT) {
++        DEBUG(SSSDBG_TRACE_ALL, "Mapped user [%s] not found.\n", user);
++        ret = EOK;
++        goto done;
++    } else {
++        DEBUG(SSSDBG_OP_FAILURE, "sysdb_search_user_by_name failed.\n");
++        goto done;
++    }
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++
++    return ret;
++}
+diff --git a/src/providers/files/files_id.c b/src/providers/files/files_id.c
+index 41314c6..f6f8c73 100644
+--- a/src/providers/files/files_id.c
++++ b/src/providers/files/files_id.c
+@@ -87,6 +87,26 @@ files_account_info_handler_send(TALLOC_CTX *mem_ctx,
+                        ? true \
+                        : false;
+         break;
++    case BE_REQ_BY_CERT:
++        if (data->filter_type != BE_FILTER_CERT) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "Unexpected filter type for lookup by cert: %d\n",
++                  data->filter_type);
++            ret = EINVAL;
++            goto immediate;
++        }
++        if (id_ctx->sss_certmap_ctx == NULL) {
++            DEBUG(SSSDBG_TRACE_ALL, "Certificate mapping not configured.\n");
++            ret = EOK;
++            goto immediate;
++        }
++
++        ret = files_map_cert_to_user(id_ctx, data);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_OP_FAILURE, "files_map_cert_to_user failed");
++        }
++        goto immediate;
++        break;
+     default:
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "Unexpected entry type: %d\n", data->entry_type & BE_REQ_TYPE_MASK);
+diff --git a/src/providers/files/files_init.c b/src/providers/files/files_init.c
+index c793bed..1ce4bcf 100644
+--- a/src/providers/files/files_init.c
++++ b/src/providers/files/files_init.c
+@@ -196,9 +196,16 @@ int sssm_files_init(TALLOC_CTX *mem_ctx,
+               "Authentication with certificates/Smartcards might not work "
+               "as expected.\n");
+         /* not fatal, ignored */
++    } else {
++        ret = files_init_certmap(ctx, ctx);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "files_init_certmap failed. "
++                  "Authentication with certificates/Smartcards might not work "
++                  "as expected.\n");
++            /* not fatal, ignored */
++        }
+     }
+ 
+-
+     *_module_data = ctx;
+     ret = EOK;
+ done:
+@@ -234,3 +241,15 @@ int sssm_files_id_init(TALLOC_CTX *mem_ctx,
+ 
+     return EOK;
+ }
++
++int sssm_files_auth_init(TALLOC_CTX *mem_ctx,
++                         struct be_ctx *be_ctx,
++                         void *module_data,
++                         struct dp_method *dp_methods)
++{
++    dp_set_method(dp_methods, DPM_AUTH_HANDLER,
++                  files_auth_handler_send, files_auth_handler_recv, NULL, void,
++                  struct pam_data, struct pam_data *);
++
++    return EOK;
++}
+diff --git a/src/providers/files/files_private.h b/src/providers/files/files_private.h
+index f44e6d4..fd17819 100644
+--- a/src/providers/files/files_private.h
++++ b/src/providers/files/files_private.h
+@@ -38,6 +38,7 @@ struct files_id_ctx {
+     struct be_ctx *be;
+     struct sss_domain_info *domain;
+     struct files_ctx *fctx;
++    struct sss_certmap_ctx *sss_certmap_ctx;
+ 
+     const char **passwd_files;
+     const char **group_files;
+@@ -71,4 +72,20 @@ errno_t files_account_info_handler_recv(TALLOC_CTX *mem_ctx,
+ void files_account_info_finished(struct files_id_ctx *id_ctx,
+                                  int req_type,
+                                  errno_t ret);
++
++/* files_auth.c */
++struct tevent_req *files_auth_handler_send(TALLOC_CTX *mem_ctx,
++                                           void *unused,
++                                           struct pam_data *pd,
++                                           struct dp_req_params *params);
++
++errno_t files_auth_handler_recv(TALLOC_CTX *mem_ctx,
++                                struct tevent_req *req,
++                                struct pam_data **_data);
++
++/* files_certmap.c */
++errno_t files_init_certmap(TALLOC_CTX *mem_ctx, struct files_id_ctx *id_ctx);
++
++errno_t files_map_cert_to_user(struct files_id_ctx *id_ctx,
++                               struct dp_id_data *data);
+ #endif /* __FILES_PRIVATE_H_ */
+-- 
+2.9.5
+

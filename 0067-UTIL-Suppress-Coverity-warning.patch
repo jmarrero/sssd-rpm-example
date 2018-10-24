@@ -1,0 +1,43 @@
+From fc29c3eb9750c5e7def4e1ab6eb18f4f5024f567 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Tue, 16 Oct 2018 10:42:43 +0200
+Subject: [PATCH 83/83] UTIL: Suppress Coverity warning
+
+We recently added this code:
+         if (domain_name != NULL
+                &&  is_files_provider(find_domain_by_name(dom,
+                                                          domain_name,
+                                                          false)))
+
+find_domain_by_name returns NULL if the domain_name can't be found. This
+of course makes mostly sense for trusted domains that can appear and
+disappear. And is_files_provider() didn't handle the situation where the
+domain pointer was NULL and would directly dereference it.
+
+This commit just adds a NULL check for the domain pointer so that
+is_files_provider() returns 'false' if the domain pointer was NULL.
+
+Another alternative might be to check the return value of
+find_domain_by_name(), but I don't think it's worth the trouble.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/util/domain_info_utils.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/util/domain_info_utils.c b/src/util/domain_info_utils.c
+index 8bef6c9..ffb8cdf 100644
+--- a/src/util/domain_info_utils.c
++++ b/src/util/domain_info_utils.c
+@@ -931,6 +931,7 @@ bool sss_domain_info_get_output_fqnames(struct sss_domain_info *domain)
+ 
+ bool is_files_provider(struct sss_domain_info *domain)
+ {
+-    return domain->provider != NULL &&
++    return domain != NULL &&
++           domain->provider != NULL &&
+            strcasecmp(domain->provider, "files") == 0;
+ }
+-- 
+2.9.5
+

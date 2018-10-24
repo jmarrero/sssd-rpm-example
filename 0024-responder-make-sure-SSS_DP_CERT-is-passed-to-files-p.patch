@@ -1,0 +1,68 @@
+From 9fdc5f1d87a133885e6a22810a7eb980c60dcb55 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Mon, 9 Jul 2018 18:45:21 +0200
+Subject: [PATCH 29/83] responder: make sure SSS_DP_CERT is passed to files
+ provider
+
+Currently the files provider is only contacted once in a while to update
+the full cache with fresh data from the passwd file. To allow rule based
+certificate mapping the lookup by certificate request must be always
+send to the file provider so that it can evaluate the rules and add the
+certificate to cached entry of the matching user.
+
+Related to https://pagure.io/SSSD/sssd/issue/3500
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/common/responder_dp.c | 20 +++++++++++++-------
+ 1 file changed, 13 insertions(+), 7 deletions(-)
+
+diff --git a/src/responder/common/responder_dp.c b/src/responder/common/responder_dp.c
+index 878aa1d..39f0f20 100644
+--- a/src/responder/common/responder_dp.c
++++ b/src/responder/common/responder_dp.c
+@@ -34,15 +34,17 @@ sss_dp_account_files_params(struct sss_domain_info *dom,
+                             enum sss_dp_acct_type *_type_out,
+                             const char **_opt_name_out)
+ {
+-    if (sss_domain_get_state(dom) != DOM_INCONSISTENT) {
++    if (type_in != SSS_DP_CERT) {
++        if (sss_domain_get_state(dom) != DOM_INCONSISTENT) {
++            DEBUG(SSSDBG_TRACE_INTERNAL,
++                  "The entries in the files domain are up-to-date\n");
++            return EOK;
++        }
++
+         DEBUG(SSSDBG_TRACE_INTERNAL,
+-              "The entries in the files domain are up-to-date\n");
+-        return EOK;
++              "Domain files is not consistent, issuing update\n");
+     }
+ 
+-    DEBUG(SSSDBG_TRACE_INTERNAL,
+-          "Domain files is not consistent, issuing update\n");
+-
+     switch(type_in) {
+     case SSS_DP_USER:
+     case SSS_DP_GROUP:
+@@ -56,12 +58,16 @@ sss_dp_account_files_params(struct sss_domain_info *dom,
+         *_type_out = type_in;
+         *_opt_name_out = DP_REQ_OPT_FILES_INITGR;
+         return EAGAIN;
++    case SSS_DP_CERT:
++        /* Let the backend handle certificate mapping for local users */
++        *_type_out = type_in;
++        *_opt_name_out = opt_name_in;
++        return EAGAIN;
+     /* These are not handled by the files provider, just fall back */
+     case SSS_DP_NETGR:
+     case SSS_DP_SERVICES:
+     case SSS_DP_SECID:
+     case SSS_DP_USER_AND_GROUP:
+-    case SSS_DP_CERT:
+     case SSS_DP_WILDCARD_USER:
+     case SSS_DP_WILDCARD_GROUP:
+         return EOK;
+-- 
+2.9.5
+

@@ -1,0 +1,47 @@
+From 081b18e75c746f9a2ad1fb412c825293090311f8 Mon Sep 17 00:00:00 2001
+From: Tomas Halman <thalman@redhat.com>
+Date: Mon, 1 Oct 2018 15:49:06 +0200
+Subject: [PATCH 54/83] confdb: log an error when domain is misconfigured
+
+We need to inform user that there is misconfiguration
+and particular domain will not be started.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3827
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/confdb/confdb.c | 9 ++++++++-
+ 1 file changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/src/confdb/confdb.c b/src/confdb/confdb.c
+index 954c3ba..2f3d900 100644
+--- a/src/confdb/confdb.c
++++ b/src/confdb/confdb.c
+@@ -39,6 +39,9 @@
+ #define SAME_DOMAINS_ERROR_MSG "Domain '%s' is the same as or differs only "\
+                                "in case from domain '%s'.\n"
+ 
++#define RETRIEVE_DOMAIN_ERROR_MSG "Error (%d [%s]) retrieving domain [%s], "\
++                                  "skipping!\n"
++
+ static char *prepend_cn(char *str, int *slen, const char *comp, int clen)
+ {
+     char *ret;
+@@ -1522,8 +1525,12 @@ int confdb_get_domains(struct confdb_ctx *cdb,
+         ret = confdb_get_domain_internal(cdb, cdb, domlist[i], &domain);
+         if (ret) {
+             DEBUG(SSSDBG_FATAL_FAILURE,
+-                  "Error (%d [%s]) retrieving domain [%s], skipping!\n",
++                  RETRIEVE_DOMAIN_ERROR_MSG,
+                   ret, sss_strerror(ret), domlist[i]);
++            sss_log(SSS_LOG_CRIT,
++                    RETRIEVE_DOMAIN_ERROR_MSG,
++                    ret, sss_strerror(ret), domlist[i]);
++
+             continue;
+         }
+ 
+-- 
+2.9.5
+

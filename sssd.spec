@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.0.0
-Release: 3%{?dist}
+Release: 4%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -48,11 +48,74 @@ Patch0001: 0001-BUILD-Fix-issue-with-installation-of-libsss_secrets.patch
 Patch0002: 0002-BUILD-Add-missing-deps-to-libsss_sbus-.so.patch
 Patch0003: 0003-BUILD-Reduce-compilation-of-unnecessary-files.patch
 Patch0004: 0004-KCM-Don-t-error-out-if-creating-a-new-ID-as-the-firs.patch
+Patch0005: 0005-sbus-register-filter-on-new-connection.patch
+Patch0006: 0006-sbus-fix-typo.patch
+Patch0007: 0007-sbus-check-for-null-message-in-sbus_message_bound.patch
+Patch0008: 0008-sbus-replace-sbus_message_bound_ref-with-sbus_messag.patch
+Patch0009: 0009-sbus-add-unit-tests-for-public-sbus_message-module.patch
+Patch0010: 0010-SELINUX-Always-add-SELinux-user-to-the-semanage-data.patch
+Patch0011: 0011-intg-flush-the-SSSD-caches-to-sync-with-files.patch
+Patch0012: 0012-sbus-dectect-python-binary-for-sbus_generate.sh.patch
+Patch0013: 0013-sudo-respect-case-sensitivity-in-sudo-responder.patch
+Patch0014: 0014-GPO-Add-gpo_implicit_deny-option.patch
+Patch0015: 0015-Skip-local-domain-if-not-supported.patch
+Patch0016: 0016-sysdb-extract-sysdb_ldb_msg_attr_to_certmap_info-cal.patch
+Patch0017: 0017-sysdb_ldb_msg_attr_to_certmap_info-set-SSS_CERTMAP_M.patch
+Patch0018: 0018-sysdb-add-attr_map-attribute-to-sysdb_ldb_msg_attr_t.patch
+Patch0019: 0019-confdb-add-confdb_certmap_to_sysdb.patch
+Patch0020: 0020-AD-LDAP-read-certificate-mapping-rules-from-config-f.patch
+Patch0021: 0021-sysdb-sysdb_certmap_add-handle-domains-more-flexible.patch
+Patch0022: 0022-confdb-add-special-handling-for-rules-for-the-files-.patch
+Patch0023: 0023-files-add-support-for-Smartcard-authentication.patch
+Patch0024: 0024-responder-make-sure-SSS_DP_CERT-is-passed-to-files-p.patch
+Patch0025: 0025-PAM-add-certificate-matching-rules-from-all-domains.patch
+Patch0026: 0026-doc-add-certificate-mapping-section-to-man-page.patch
+Patch0027: 0027-intg-user-default-locale.patch
+Patch0028: 0028-PAM-use-better-PAM-error-code-for-failed-Smartcard-a.patch
+Patch0029: 0029-test_ca-test-library-only-for-readable.patch
+Patch0030: 0030-test_ca-set-a-password-PIN-to-nss-databases.patch
+Patch0031: 0031-getsockopt_wrapper-add-support-for-PAM-clients.patch
+Patch0032: 0032-intg-add-Smartcard-authentication-tests.patch
+Patch0033: 0033-proxy-access-provider-directly-not-through-be_ctx.patch
+Patch0034: 0034-dp-set-be_ctx-provider-as-part-of-dp_init-request.patch
+Patch0035: 0035-sbus-read-destination-after-sender-is-set.patch
+Patch0036: 0036-sbus-do-not-try-to-remove-signal-listeners-when-disc.patch
+Patch0037: 0037-sbus-free-watch_fd-fdevent-explicitly.patch
+Patch0038: 0038-doc-remove-local-provider-reference-from-manpages.patch
+Patch0039: 0039-confdb-log-an-error-when-domain-is-misconfigured.patch
+Patch0040: 0040-be-use-be_is_offline-for-the-main-domain-when-asking.patch
+Patch0041: 0041-p11-handle-multiple-certs-during-auth-with-OpenSSL.patch
+Patch0042: 0042-doc-Add-nsswitch.conf-note-to-manpage.patch
+Patch0043: 0043-MAN-Fix-typo-in-ad_gpo_implicit_deny-default-value.patch
+Patch0044: 0044-p11_child-add-wait_for_card-option.patch
+Patch0045: 0045-PAM-add-p11_wait_for_card_timeout-option.patch
+Patch0046: 0046-pam_sss-make-flags-public.patch
+Patch0047: 0047-pam_sss-add-try_cert_auth-option.patch
+Patch0048: 0048-pam_sss-add-option-require_cert_auth.patch
+Patch0049: 0049-intg-require-SC-tests.patch
+Patch0050: 0050-p11_child-show-PKCS-11-URI-in-debug-output.patch
+Patch0051: 0051-p11_child-add-PKCS-11-uri-to-restrict-selection.patch
+Patch0052: 0052-PAM-add-p11_uri-option.patch
+Patch0053: 0053-tests-add-PKCS-11-URI-tests.patch
+Patch0054: 0054-test_config-Test-for-invalid-characker-in-domain.patch
+Patch0055: 0055-PAM-return-short-name-for-files-provider-users.patch
+Patch0056: 0056-TESTS-Add-a-test-for-whitespace-trimming-in-netgroup.patch
+Patch0057: 0057-FILES-The-files-provider-should-not-enumerate.patch
+Patch0058: 0058-p11_child-add-OCSP-check-ot-the-OpenSSL-version.patch
+Patch0059: 0059-p11_child-add-crl_file-option-for-the-OpenSSL-build.patch
+Patch0060: 0060-p11-Fix-two-instances-of-Wmaybe-uninitialized-in-p11.patch
+Patch0061: 0061-sudo-use-correct-sbus-interface.patch
+Patch0062: 0062-sudo-fix-error-handling-in-sudosrv_refresh_rules_don.patch
+Patch0063: 0063-sbus-remove-leftovers-from-previous-implementation.patch
+Patch0064: 0064-CONFIGURE-Add-minimal-required-version-for-p11-kit.patch
+Patch0065: 0065-SBUS-Silence-warning-maybe-uninitialized.patch
+Patch0066: 0066-files-add-session-recording-flag.patch
+Patch0067: 0067-UTIL-Suppress-Coverity-warning.patch
+Patch0068: 0068-UTIL-move-and-rename-sysdb_error_to_errno-to-utils.patch
+Patch0069: 0069-PYSSS-Re-add-the-pysss.getgrouplist-interface.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
-Patch0503: 0503-Disable-stopping-idle-socket-activated-responders.patch
-Patch0504: 0504-sbus_generate-python-platform-python.patch
 
 ### Dependencies ###
 
@@ -1215,8 +1278,47 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+
+* Wed Aug 29 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-4
+- Resolves: upstream#3821 - crash related to sbus_router_destructor()
+- Resolves: upstream#3810 - sbus2: fix memory leak in sbus_message_bound_ref
+- Resolves: upstream#3819 - sssd only sets the SELinux login context if it
+                            differs from the default
+- Resolves: upstream#3807 - The sbus codegen script relies on "python" which
+                            might not be available on all distributions
+- Resolves: upstream#3820 - sudo: search with lower cased name for case
+                            insensitive domains
+- Resolves: upstream#3701 - [RFE] Allow changing default behavior of SSSD from
+                            an allow-any default to a deny-any default when it
+                            can't find any GPOs to apply to a user login.
+- Resolves: upstream#3828 - Invalid domain provider causes SSSD to abort
+                            startup
+- Resolves: upstream#3500 - Make sure sssd is a replacement for pam_pkcs11
+                            also for local account authentication
+- Resolves: upstream#3812 - sssd 2.0.0 segfaults on startup
+- Resolves: upstream#3826 - Remove references of sss_user/group/add/del
+                            commands in man pages since local provider is
+                            deprecated
+- Resolves: upstream#3827 - SSSD should log to syslog if a domain is not
+                            started due to a misconfiguration
+- Resolves: upstream#3830 - Printing incorrect information about domain with
+                            sssctl utility
+- Resolves: upstream#3489 - p11_child should work wit openssl1.0+
+- Resolves: upstream#3750 - [RFE] man 5 sssd-files should mention necessary
+                            changes in nsswitch.conf
+- Resovles: upstream#3650 - RFE: Require smartcard authentication
+- Resolves: upstream#3334 - sssctl config-check does not check any special
+                            characters in domain name of domain section
+- Resolves: upstream#3849 - Files: The files provider always enumerates
+                            which causes duplicate when running getent passwd
+- Related: upstream#3855 - session not recording for local user when groups
+                           defined
+- Resolves: upstream#3802 - Reuse sysdb_error_to_errno() outside sysdb
+- Related: upstream#3493 - Remove the pysss.local interface
+
 * Wed Aug 29 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-3
-- Resolves: rhbz#1622760 - Console login as FreeIPA domain user fails in current Fedora Rawhide / 29
+- Resolves: rhbz#1622760 - Console login as FreeIPA domain user fails in
+                           current Fedora Rawhide / 29
 
 * Wed Aug 29 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-2
 - Fix linking issues

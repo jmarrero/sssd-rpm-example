@@ -1,0 +1,40 @@
+From 8fbaf224193b9ca8b82a290bd52265c2f9b40315 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Mon, 15 Oct 2018 13:01:34 +0200
+Subject: [PATCH 78/83] sudo: fix error handling in sudosrv_refresh_rules_done
+
+If sbus returns non-zero code then the output variables are not set and
+therefore we access uninitialized memory.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3854
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/responder/sudo/sudosrv_get_sudorules.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/src/responder/sudo/sudosrv_get_sudorules.c b/src/responder/sudo/sudosrv_get_sudorules.c
+index 14bd824..76faef0 100644
+--- a/src/responder/sudo/sudosrv_get_sudorules.c
++++ b/src/responder/sudo/sudosrv_get_sudorules.c
+@@ -576,10 +576,15 @@ static void sudosrv_refresh_rules_done(struct tevent_req *subreq)
+     ret = sss_dp_get_sudoers_recv(state, subreq, &err_maj, &err_min, &err_msg);
+     talloc_zfree(subreq);
+     if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to refresh rules [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    } else if (err_maj != 0 || err_min != 0) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "Unable to get information from Data Provider, "
+               "Error: %u, %u, %s\n",
+-              (unsigned int)err_maj, (unsigned int)err_min, err_msg);
++              (unsigned int)err_maj, (unsigned int)err_min,
++              (err_msg == NULL ? "(null)" : err_msg));
+         goto done;
+     }
+ 
+-- 
+2.9.5
+

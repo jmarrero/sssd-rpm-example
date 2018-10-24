@@ -1,0 +1,74 @@
+From 0be037bbedd0aed6a7eccead6aabe0d07258242a Mon Sep 17 00:00:00 2001
+From: Tomas Halman <thalman@redhat.com>
+Date: Mon, 1 Oct 2018 13:45:52 +0200
+Subject: [PATCH 57/83] doc: Add nsswitch.conf note to manpage
+
+We want to add note about nsswitch.conf configuration
+into sssd-files manpage.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3750
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+Reviewed-by: Justin Stephenson <jstephen@redhat.com>
+---
+ src/man/sssd-files.5.xml | 34 +++++++++++++++++++++++++++++++++-
+ 1 file changed, 33 insertions(+), 1 deletion(-)
+
+diff --git a/src/man/sssd-files.5.xml b/src/man/sssd-files.5.xml
+index 59e1b65..067e219 100644
+--- a/src/man/sssd-files.5.xml
++++ b/src/man/sssd-files.5.xml
+@@ -51,6 +51,27 @@
+                 <manvolnum>5</manvolnum>
+             </citerefentry>.
+         </para>
++        <para>
++            Another reason is to provide efficient caching of local users and groups.
++        </para>
++        <para>
++            Please note that some distributions enable the files domain automatically,
++            prepending the domain before any explicitly configured domains.
++            See enable_files_domain in
++            <citerefentry>
++                <refentrytitle>sssd.conf</refentrytitle>
++                <manvolnum>5</manvolnum>
++            </citerefentry>.
++        </para>
++        <para>
++            SSSD never handles resolution of user/group "root". Also resolution of
++            UID/GID 0 is not handled by SSSD. Such requests are passed to next
++            NSS module (usually files).
++        </para>
++        <para>
++            When SSSD is not running or responding, nss_sss returns the UNAVAIL code
++            which causes the request to be passed to the next module.
++        </para>
+     </refsect1>
+ 
+     <refsect1 id='configuration-options'>
+@@ -112,9 +133,20 @@
+ id_provider = files
+ </programlisting>
+         </para>
++        <para>
++            To leverage caching of local users and groups by SSSD
++            nss_sss module must be listed before nss_files module
++            in /etc/nsswitch.conf.
++        </para>
++        <para>
++<programlisting>
++passwd:     sss files
++group:      sss files
++</programlisting>
++        </para>
+     </refsect1>
+ 
+-	<xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="include/seealso.xml" />
++        <xi:include xmlns:xi="http://www.w3.org/2001/XInclude" href="include/seealso.xml" />
+ 
+ </refentry>
+ </reference>
+-- 
+2.9.5
+

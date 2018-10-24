@@ -1,0 +1,139 @@
+From de8c9caf61e7b971cda9563cc5851ea222db5830 Mon Sep 17 00:00:00 2001
+From: Tomas Halman <thalman@redhat.com>
+Date: Thu, 27 Sep 2018 16:03:40 +0200
+Subject: [PATCH 44/83] doc: remove local provider reference from manpages
+
+Introduce new condition for documentation build. Related part of
+documentation is excluded, if build is done without local provider.
+
+Resolves https://pagure.io/SSSD/sssd/issue/3826
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/man/Makefile.am         |  6 +++++-
+ src/man/include/seealso.xml | 44 +++++++++++++++++++++++---------------------
+ src/man/sssd.conf.5.xml     | 15 +++++++++------
+ 3 files changed, 37 insertions(+), 28 deletions(-)
+
+diff --git a/src/man/Makefile.am b/src/man/Makefile.am
+index b4c20d8..54a30d1 100644
+--- a/src/man/Makefile.am
++++ b/src/man/Makefile.am
+@@ -51,7 +51,11 @@ CRYPTO_CONDS = ;with_nss
+ else
+ CRYPTO_CONDS = ;with_openssl
+ endif
+-CONDS = with_false$(SUDO_CONDS)$(AUTOFS_CONDS)$(SSH_CONDS)$(PAC_RESPONDER_CONDS)$(IFP_CONDS)$(GPO_CONDS)$(SEC_CONDS)$(SYSTEMD_CONDS)$(FILES_CONDS)$(KCM_CONDS)$(STAP_CONDS)$(CRYPTO_CONDS)
++if BUILD_LOCAL_PROVIDER
++LOCAL_PROVIDER_CONDS = ;enable_local_provider
++endif
++
++CONDS = with_false$(SUDO_CONDS)$(AUTOFS_CONDS)$(SSH_CONDS)$(PAC_RESPONDER_CONDS)$(IFP_CONDS)$(GPO_CONDS)$(SEC_CONDS)$(SYSTEMD_CONDS)$(FILES_CONDS)$(KCM_CONDS)$(STAP_CONDS)$(CRYPTO_CONDS)$(LOCAL_PROVIDER_CONDS)
+ 
+ 
+ #Special Rules:
+diff --git a/src/man/include/seealso.xml b/src/man/include/seealso.xml
+index 52798e4..f324b66 100644
+--- a/src/man/include/seealso.xml
++++ b/src/man/include/seealso.xml
+@@ -44,27 +44,29 @@
+             <citerefentry>
+                 <refentrytitle>sss_debuglevel</refentrytitle><manvolnum>8</manvolnum>
+             </citerefentry>,
+-            <citerefentry>
+-                <refentrytitle>sss_groupadd</refentrytitle><manvolnum>8</manvolnum>
+-            </citerefentry>,
+-            <citerefentry>
+-                <refentrytitle>sss_groupdel</refentrytitle><manvolnum>8</manvolnum>
+-            </citerefentry>,
+-            <citerefentry>
+-                <refentrytitle>sss_groupshow</refentrytitle><manvolnum>8</manvolnum>
+-            </citerefentry>,
+-            <citerefentry>
+-                <refentrytitle>sss_groupmod</refentrytitle><manvolnum>8</manvolnum>
+-            </citerefentry>,
+-            <citerefentry>
+-                <refentrytitle>sss_useradd</refentrytitle><manvolnum>8</manvolnum>
+-            </citerefentry>,
+-            <citerefentry>
+-                <refentrytitle>sss_userdel</refentrytitle><manvolnum>8</manvolnum>
+-            </citerefentry>,
+-            <citerefentry>
+-                <refentrytitle>sss_usermod</refentrytitle><manvolnum>8</manvolnum>
+-            </citerefentry>,
++            <phrase condition="enable_local_provider">
++                <citerefentry>
++                    <refentrytitle>sss_groupadd</refentrytitle><manvolnum>8</manvolnum>
++                </citerefentry>,
++                <citerefentry>
++                    <refentrytitle>sss_groupdel</refentrytitle><manvolnum>8</manvolnum>
++                </citerefentry>,
++                <citerefentry>
++                    <refentrytitle>sss_groupshow</refentrytitle><manvolnum>8</manvolnum>
++                </citerefentry>,
++                <citerefentry>
++                    <refentrytitle>sss_groupmod</refentrytitle><manvolnum>8</manvolnum>
++                </citerefentry>,
++                <citerefentry>
++                    <refentrytitle>sss_useradd</refentrytitle><manvolnum>8</manvolnum>
++                </citerefentry>,
++                <citerefentry>
++                    <refentrytitle>sss_userdel</refentrytitle><manvolnum>8</manvolnum>
++                </citerefentry>,
++                <citerefentry>
++                    <refentrytitle>sss_usermod</refentrytitle><manvolnum>8</manvolnum>
++                </citerefentry>,
++            </phrase>
+             <citerefentry>
+                 <refentrytitle>sss_obfuscate</refentrytitle><manvolnum>8</manvolnum>
+             </citerefentry>,
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index 04143f1..c1e3895 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -2179,7 +2179,7 @@ pam_p11_allowed_services = +my_pam_service, -login
+                         <para>
+                             <quote>proxy</quote>: Support a legacy NSS provider.
+                         </para>
+-                        <para>
++                        <para condition="enable_local_provider">
+                             <quote>local</quote>: SSSD internal provider for
+                             local users (DEPRECATED).
+                         </para>
+@@ -2324,7 +2324,7 @@ pam_p11_allowed_services = +my_pam_service, -login
+                         <para>
+                             <quote>proxy</quote> for relaying authentication to some other PAM target.
+                         </para>
+-                        <para>
++                        <para condition="enable_local_provider">
+                             <quote>local</quote>: SSSD internal provider for
+                             local users
+                         </para>
+@@ -2836,9 +2836,12 @@ pam_p11_allowed_services = +my_pam_service, -login
+                     <term>case_sensitive (string)</term>
+                     <listitem>
+                         <para>
+-                            Treat user and group names as case sensitive. At
+-                            the moment, this option is not supported in
+-                            the local provider. Possible option values are:
++                            Treat user and group names as case sensitive.
++                            <phrase condition="enable_local_provider">
++                                At the moment, this option is not supported in
++                                the local provider.
++                            </phrase>
++                            Possible option values are:
+                         <variablelist>
+                             <varlistentry>
+                                 <term>True</term>
+@@ -3148,7 +3151,7 @@ ldap_user_extra_attrs = phone:telephoneNumber
+ </programlisting>
+         </refsect2>
+ 
+-        <refsect2 id='local_domain'>
++        <refsect2 id='local_domain' condition="enable_local_provider">
+             <title>The local domain section</title>
+             <para>
+                 This section contains settings for domain that stores users and
+-- 
+2.9.5
+

@@ -1,0 +1,68 @@
+From d7f0b58e2896ed2ef9ed5a390815c1e4df6caaee Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 6 Sep 2018 13:38:56 +0200
+Subject: [PATCH 18/83] sudo: respect case sensitivity in sudo responder
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+If the domain is not case sensitive and the case of the original user
+or group name differs from the name in the rule we failed to find the
+rule.
+
+Now we filter the rule only with lower cased values in such domain.
+
+Steps to reproduce:
+1. Add user/group with upper case, e.g. USER-1
+2. Add sudo rule with lower cased name, e.g. sudoUser: user-1
+3. Login to system with lower case, e.g. user-1
+4. Run sudo -l
+
+Without the patch, rule is not found.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3820
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+---
+ src/db/sysdb_sudo.c | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/src/db/sysdb_sudo.c b/src/db/sysdb_sudo.c
+index 3ad462d..19ed97b 100644
+--- a/src/db/sysdb_sudo.c
++++ b/src/db/sysdb_sudo.c
+@@ -418,7 +418,17 @@ sysdb_get_sudo_user_info(TALLOC_CTX *mem_ctx,
+         ret = EINVAL;
+         goto done;
+     }
+-    DEBUG(SSSDBG_TRACE_FUNC, "original name: %s\n", orig_name);
++
++    DEBUG(SSSDBG_TRACE_FUNC, "Original name: %s\n", orig_name);
++
++    orig_name = sss_get_cased_name(tmp_ctx, orig_name, domain->case_sensitive);
++    if (orig_name == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Out of memory!\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    DEBUG(SSSDBG_TRACE_FUNC, "Cased name: %s\n", orig_name);
+ 
+     if (_uid != NULL) {
+         uid = ldb_msg_find_attr_as_uint64(res->msgs[0], SYSDB_UIDNUM, 0);
+@@ -450,8 +460,9 @@ sysdb_get_sudo_user_info(TALLOC_CTX *mem_ctx,
+                     continue;
+                 }
+ 
+-                sysdb_groupnames[num_groups] = talloc_strdup(sysdb_groupnames,
+-                                                             groupname);
++                sysdb_groupnames[num_groups] = \
++                    sss_get_cased_name(sysdb_groupnames, groupname,
++                                       domain->case_sensitive);
+                 if (sysdb_groupnames[num_groups] == NULL) {
+                     DEBUG(SSSDBG_MINOR_FAILURE, "Cannot strdup %s\n", groupname);
+                     continue;
+-- 
+2.9.5
+

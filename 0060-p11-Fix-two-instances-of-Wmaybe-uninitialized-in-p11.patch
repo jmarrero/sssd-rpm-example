@@ -1,0 +1,37 @@
+From 7794caec36e7142423491d90aaade7e49b9df1c1 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 12 Oct 2018 09:32:11 +0200
+Subject: [PATCH 76/83] p11: Fix two instances of -Wmaybe-uninitialized in
+ p11_child_openssl.c
+
+If uri_str was passed to the p11_child and parsing the URI failed, then
+modules would be uninitialized, but freed in the done handler with
+p11_kit_modules_finalize_and_release()
+
+Also, another warning is suppressed by setting the 's' variable to zero.
+While it cannot happen that the variable will be uninitialized, we
+should help the compiler by setting a value explicitly.
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/p11_child/p11_child_openssl.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/p11_child/p11_child_openssl.c b/src/p11_child/p11_child_openssl.c
+index 9defdfc..adfe272 100644
+--- a/src/p11_child/p11_child_openssl.c
++++ b/src/p11_child/p11_child_openssl.c
+@@ -1036,8 +1036,8 @@ errno_t do_card(TALLOC_CTX *mem_ctx, struct p11_ctx *p11_ctx,
+ {
+     int ret;
+     size_t c;
+-    size_t s;
+-    CK_FUNCTION_LIST **modules;
++    size_t s = 0;
++    CK_FUNCTION_LIST **modules = NULL;
+     CK_FUNCTION_LIST *module = NULL;
+     char *mod_name;
+     char *mod_file_name;
+-- 
+2.9.5
+

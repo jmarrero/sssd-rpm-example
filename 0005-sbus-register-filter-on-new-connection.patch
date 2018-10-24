@@ -1,0 +1,48 @@
+From 55d5b43543b5ef62322fe635fe8108410cb4ea77 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 5 Sep 2018 15:08:52 +0200
+Subject: [PATCH 08/83] sbus: register filter on new connection
+
+The filter is not again registered on new connection when the old connection
+was lost. This caused a segfault when the router is destroyed during shutdown.
+
+It also would not allow to recieve and process any messages as the filter
+function is needed for that. However, this was not very visible with
+current sssd architecture.
+
+Steps to reproduce:
+1. Run SSSD
+2. pkill sssd_be
+3. Wait for responders to reconnect to backend
+4. Shutdown SSSD
+5. It will crash without this patch
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3821
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/sbus/router/sbus_router.c | 7 +++++++
+ 1 file changed, 7 insertions(+)
+
+diff --git a/src/sbus/router/sbus_router.c b/src/sbus/router/sbus_router.c
+index 24c2c76..d31cef1 100644
+--- a/src/sbus/router/sbus_router.c
++++ b/src/sbus/router/sbus_router.c
+@@ -364,6 +364,13 @@ errno_t
+ sbus_router_reset(struct sbus_connection *conn)
+ {
+     errno_t ret;
++    bool bret;
++
++    bret = sbus_router_filter_add(conn->router);
++    if (!bret) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unable to register message filter!\n");
++        return EFAULT;
++    }
+ 
+     ret = sbus_router_reset_listeners(conn);
+     if (ret != EOK) {
+-- 
+2.9.5
+

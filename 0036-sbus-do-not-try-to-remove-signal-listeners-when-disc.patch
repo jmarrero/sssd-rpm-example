@@ -1,0 +1,34 @@
+From b821ee3ca93beb94a7a9b22b6f7a205e4900212e Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 12 Sep 2018 13:22:34 +0200
+Subject: [PATCH 42/83] sbus: do not try to remove signal listeners when
+ disconnecting
+
+This may cause some troubles if the dbus connection was dropped
+as dbus will try to actually send the messages. Also when the
+connectin is being freed, tevent integration is already disabled
+so there is no point in doing this.
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/sbus/router/sbus_router_hash.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/sbus/router/sbus_router_hash.c b/src/sbus/router/sbus_router_hash.c
+index 186dc61..2d407b2 100644
+--- a/src/sbus/router/sbus_router_hash.c
++++ b/src/sbus/router/sbus_router_hash.c
+@@ -384,6 +384,10 @@ sbus_router_listeners_delete_cb(hash_entry_t *item,
+         return;
+     }
+ 
++    if (conn->disconnecting) {
++        return;
++    }
++
+     /* If we still have the D-Bus connection available, we try to unregister
+      * the previously registered listener when its removed from table. */
+ 
+-- 
+2.9.5
+

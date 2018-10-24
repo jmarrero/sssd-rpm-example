@@ -1,0 +1,330 @@
+From 657f3b89bca9adfb13f0867c91f1d76845d2d6dd Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Fri, 7 Sep 2018 22:26:21 +0200
+Subject: [PATCH 37/83] intg: add Smartcard authentication tests
+
+Two test for Smartcard authentication of a local user, i.e. a user
+managed by the files provider, are added. One for a successful
+authentication, the other for a failed authentication with a wrong PIN.
+
+Related to https://pagure.io/SSSD/sssd/issue/3500
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ configure.ac                         |   1 +
+ contrib/ci/deps.sh                   |   2 +
+ contrib/sssd.spec.in                 |   1 +
+ src/external/cwrap.m4                |   5 ++
+ src/external/intgcheck.m4            |   1 +
+ src/tests/intg/Makefile.am           |  24 ++++++-
+ src/tests/intg/test_pam_responder.py | 131 ++++++++++++++++++++++++++++++++---
+ 7 files changed, 155 insertions(+), 10 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index bb18ad4..5816b04 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -495,6 +495,7 @@ AM_CONDITIONAL([HAVE_CHECK], [test x$have_check != x])
+ AM_CHECK_CMOCKA
+ AM_CHECK_UID_WRAPPER
+ AM_CHECK_NSS_WRAPPER
++AM_CHECK_PAM_WRAPPER
+ AM_CHECK_TEST_CA
+ 
+ # Check if the user wants SSSD to be compiled with systemtap probes
+diff --git a/contrib/ci/deps.sh b/contrib/ci/deps.sh
+index 5906e53..c04c7aa 100644
+--- a/contrib/ci/deps.sh
++++ b/contrib/ci/deps.sh
+@@ -46,6 +46,7 @@ if [[ "$DISTRO_BRANCH" == -redhat-* ]]; then
+         pyldb
+         rpm-build
+         uid_wrapper
++        pam_wrapper
+         python-requests
+         curl-devel
+         krb5-server
+@@ -117,6 +118,7 @@ if [[ "$DISTRO_BRANCH" == -debian-* ]]; then
+         fakeroot
+         libnss-wrapper
+         libuid-wrapper
++        libpam-wrapper
+         python-pytest
+         python-ldap
+         python-ldb
+diff --git a/contrib/sssd.spec.in b/contrib/sssd.spec.in
+index 5ebd51f..26fae6d 100644
+--- a/contrib/sssd.spec.in
++++ b/contrib/sssd.spec.in
+@@ -237,6 +237,7 @@ BuildRequires: selinux-policy-targeted
+ BuildRequires: libcmocka-devel >= 1.0.0
+ BuildRequires: uid_wrapper
+ BuildRequires: nss_wrapper
++BuildRequires: pam_wrapper
+ 
+ # Test CA requires openssl independent if SSSD is build with NSS or openssl,
+ # openssh is needed for ssh-keygen and NSS builds need nss-tools for certutil.
+diff --git a/src/external/cwrap.m4 b/src/external/cwrap.m4
+index b8489cc..6e3487c 100644
+--- a/src/external/cwrap.m4
++++ b/src/external/cwrap.m4
+@@ -28,3 +28,8 @@ AC_DEFUN([AM_CHECK_NSS_WRAPPER],
+ [
+     AM_CHECK_WRAPPER(nss_wrapper, HAVE_NSS_WRAPPER)
+ ])
++
++AC_DEFUN([AM_CHECK_PAM_WRAPPER],
++[
++    AM_CHECK_WRAPPER(pam_wrapper, HAVE_PAM_WRAPPER)
++])
+diff --git a/src/external/intgcheck.m4 b/src/external/intgcheck.m4
+index 60a7bf3..c14f669 100644
+--- a/src/external/intgcheck.m4
++++ b/src/external/intgcheck.m4
+@@ -22,6 +22,7 @@ AC_DEFUN([SSS_ENABLE_INTGCHECK_REQS], [
+     if test x"$enable_intgcheck_reqs" = xyes; then
+         SSS_INTGCHECK_REQ([HAVE_UID_WRAPPER], [uid_wrapper])
+         SSS_INTGCHECK_REQ([HAVE_NSS_WRAPPER], [nss_wrapper])
++        SSS_INTGCHECK_REQ([HAVE_PAM_WRAPPER], [pam_wrapper])
+         SSS_INTGCHECK_REQ([HAVE_SLAPD], [slapd])
+         SSS_INTGCHECK_REQ([HAVE_LDAPMODIFY], [ldapmodify])
+         SSS_INTGCHECK_REQ([HAVE_FAKEROOT], [fakeroot])
+diff --git a/src/tests/intg/Makefile.am b/src/tests/intg/Makefile.am
+index 6f7605b..bb3a7f0 100644
+--- a/src/tests/intg/Makefile.am
++++ b/src/tests/intg/Makefile.am
+@@ -105,13 +105,29 @@ passwd: root
+ group:
+ 	echo "root:x:0:" > $@
+ 
++PAM_SERVICE_DIR=pam_service_dir
++pam_sss_service:
++	$(MKDIR_P) $(PAM_SERVICE_DIR)
++	echo "auth     required       $(DESTDIR)$(pammoddir)/pam_sss.so"  > $(PAM_SERVICE_DIR)/$@
++	echo "account  required       $(DESTDIR)$(pammoddir)/pam_sss.so" >> $(PAM_SERVICE_DIR)/$@
++	echo "password required       $(DESTDIR)$(pammoddir)/pam_sss.so" >> $(PAM_SERVICE_DIR)/$@
++	echo "session  required       $(DESTDIR)$(pammoddir)/pam_sss.so" >> $(PAM_SERVICE_DIR)/$@
++
+ CLEANFILES=config.py config.pyc passwd group
+ 
+ clean-local:
+ 	rm -Rf root
+ 	rm -f $(builddir)/cwrap-dbus-system.conf
+ 
+-intgcheck-installed: config.py passwd group
++if HAVE_NSS
++PAM_CERT_DB_PATH="sql:$(DESTDIR)$(sysconfdir)/pki/nssdb"
++SOFTHSM2_CONF=""
++else
++PAM_CERT_DB_PATH="$(abs_builddir)/../test_CA/SSSD_test_CA.pem"
++SOFTHSM2_CONF="$(abs_builddir)/../test_CA/softhsm2_one.conf"
++endif
++
++intgcheck-installed: config.py passwd group pam_sss_service
+ 	pipepath="$(DESTDIR)$(pipepath)"; \
+ 	if test $${#pipepath} -gt 80; then \
+ 	    echo "error: Pipe directory path too long," \
+@@ -131,12 +147,18 @@ intgcheck-installed: config.py passwd group
+ 	LDB_MODULES_PATH="$(DESTDIR)$(ldblibdir)" \
+ 	NON_WRAPPED_UID=$$(id -u) \
+ 	LD_PRELOAD="$(libdir)/getsockopt_wrapper.so:$$nss_wrapper:$$uid_wrapper" \
++	LD_LIBRARY_PATH="$$LD_LIBRARY_PATH:$(DESTDIR)$(nsslibdir)" \
+ 	NSS_WRAPPER_PASSWD="$(abs_builddir)/passwd" \
+ 	NSS_WRAPPER_GROUP="$(abs_builddir)/group" \
+ 	NSS_WRAPPER_MODULE_SO_PATH="$(DESTDIR)$(nsslibdir)/libnss_sss.so.2" \
+ 	NSS_WRAPPER_MODULE_FN_PREFIX="sss" \
+ 	UID_WRAPPER=1 \
+ 	UID_WRAPPER_ROOT=1 \
++	PAM_WRAPPER=0 \
++	PAM_WRAPPER_SERVICE_DIR="$(abs_builddir)/$(PAM_SERVICE_DIR)" \
++	PAM_WRAPPER_PATH=$$(pkg-config --libs pam_wrapper) \
++	PAM_CERT_DB_PATH=$(PAM_CERT_DB_PATH) \
++	SOFTHSM2_CONF=$(SOFTHSM2_CONF) \
+ 	DBUS_SOCK_DIR="$(DESTDIR)$(runstatedir)/dbus/" \
+ 	DBUS_SESSION_BUS_ADDRESS="unix:path=$$DBUS_SOCK_DIR/fake_socket" \
+ 	DBUS_SYSTEM_BUS_ADDRESS="unix:path=$$DBUS_SOCK_DIR/system_bus_socket" \
+diff --git a/src/tests/intg/test_pam_responder.py b/src/tests/intg/test_pam_responder.py
+index cf6fff2..c6d048c 100644
+--- a/src/tests/intg/test_pam_responder.py
++++ b/src/tests/intg/test_pam_responder.py
+@@ -27,31 +27,44 @@ import signal
+ import errno
+ import subprocess
+ import time
+-import pytest
++import shutil
+ 
+ import config
+ 
+-from util import unindent
++import pytest
++
++from intg.util import unindent
++from intg.files_ops import passwd_ops_setup
+ 
++USER1 = dict(name='user1', passwd='x', uid=10001, gid=20001,
++             gecos='User for tests',
++             dir='/home/user1',
++             shell='/bin/bash')
+ 
+-def format_pam_cert_auth_conf():
++
++def format_pam_cert_auth_conf(config):
+     """Format a basic SSSD configuration"""
+     return unindent("""\
+         [sssd]
++        debug_level = 10
+         domains = auth_only
+-        services = pam
++        services = pam, nss
+ 
+         [nss]
++        debug_level = 10
+ 
+         [pam]
+         pam_cert_auth = True
++        pam_p11_allowed_services = +pam_sss_service
++        pam_cert_db_path = {config.PAM_CERT_DB_PATH}
+         debug_level = 10
+ 
+         [domain/auth_only]
+-        id_provider = ldap
+-        auth_provider = ldap
+-        chpass_provider = ldap
+-        access_provider = ldap
++        debug_level = 10
++        id_provider = files
++
++        [certmap/auth_only/user1]
++        matchrule = <SUBJECT>.*CN=SSSD test cert 0001.*
+     """).format(**locals())
+ 
+ 
+@@ -79,6 +92,8 @@ def create_conf_fixture(request, contents):
+ 
+ def create_sssd_process():
+     """Start the SSSD process"""
++    os.environ["SSS_FILES_PASSWD"] = os.environ["NSS_WRAPPER_PASSWD"]
++    os.environ["SSS_FILES_GROUP"] = os.environ["NSS_WRAPPER_GROUP"]
+     if subprocess.call(["sssd", "-D", "-f"]) != 0:
+         raise Exception("sssd start failed")
+ 
+@@ -116,12 +131,41 @@ def create_sssd_fixture(request):
+     request.addfinalizer(cleanup_sssd_process)
+ 
+ 
++def create_nssdb():
++    os.mkdir(config.SYSCONFDIR + "/pki")
++    os.mkdir(config.SYSCONFDIR + "/pki/nssdb")
++    if subprocess.call(["certutil", "-N", "-d",
++                        "sql:" + config.SYSCONFDIR + "/pki/nssdb/",
++                        "--empty-password"]) != 0:
++        raise Exception("certutil failed")
++
++    pkcs11_txt = open(config.SYSCONFDIR + "/pki/nssdb/pkcs11.txt", "w")
++    pkcs11_txt.write("library=libsoftokn3.so\nname=soft\n" +
++                     "parameters=configdir='sql:" + config.ABS_BUILDDIR +
++                     "/../test_CA/p11_nssdb' " +
++                     "dbSlotDescription='SSSD Test Slot' " +
++                     "dbTokenDescription='SSSD Test Token' " +
++                     "secmod='secmod.db' flags=readOnly)\n\n")
++    pkcs11_txt.close()
++
++
++def cleanup_nssdb():
++    shutil.rmtree(config.SYSCONFDIR + "/pki")
++
++
++def create_nssdb_fixture(request):
++    create_nssdb()
++    request.addfinalizer(cleanup_nssdb)
++
++
+ @pytest.fixture
+ def simple_pam_cert_auth(request):
+     """Setup SSSD with pam_cert_auth=True"""
+-    conf = format_pam_cert_auth_conf()
++    config.PAM_CERT_DB_PATH = os.environ['PAM_CERT_DB_PATH']
++    conf = format_pam_cert_auth_conf(config)
+     create_conf_fixture(request, conf)
+     create_sssd_fixture(request)
++    create_nssdb_fixture(request)
+     return None
+ 
+ 
+@@ -129,3 +173,72 @@ def test_preauth_indicator(simple_pam_cert_auth):
+     """Check if preauth indicator file is created"""
+     statinfo = os.stat(config.PUBCONF_PATH + "/pam_preauth_available")
+     assert stat.S_ISREG(statinfo.st_mode)
++
++
++@pytest.fixture
++def pam_wrapper_setup(request):
++    pwrap_runtimedir = os.getenv("PAM_WRAPPER_SERVICE_DIR")
++    if pwrap_runtimedir is None:
++        raise ValueError("The PAM_WRAPPER_SERVICE_DIR variable is unset\n")
++
++
++def test_sc_auth_wrong_pin(simple_pam_cert_auth, pam_wrapper_setup,
++                           passwd_ops_setup):
++
++    passwd_ops_setup.useradd(**USER1)
++    current_env = os.environ.copy()
++    current_env['PAM_WRAPPER'] = "1"
++    current_env['SSSD_INTG_PEER_UID'] = "0"
++    current_env['SSSD_INTG_PEER_GID'] = "0"
++    current_env['LD_PRELOAD'] += ':' + os.environ['PAM_WRAPPER_PATH']
++
++    sssctl = subprocess.Popen(["sssctl", "user-checks", "user1",
++                               "--action=auth", "--service=pam_sss_service"],
++                              universal_newlines=True,
++                              env=current_env, stdin=subprocess.PIPE,
++                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++
++    try:
++        out, err = sssctl.communicate(input="111")
++    except:
++        sssctl.kill()
++        out, err = sssctl.communicate()
++
++    sssctl.stdin.close()
++    sssctl.stdout.close()
++
++    if sssctl.wait() != 0:
++        raise Exception("sssctl failed")
++
++    assert err.find("pam_authenticate for user [user1]: " +
++                    "Authentication failure") != -1
++
++
++def test_sc_auth(simple_pam_cert_auth, pam_wrapper_setup, passwd_ops_setup):
++
++    passwd_ops_setup.useradd(**USER1)
++    current_env = os.environ.copy()
++    current_env['PAM_WRAPPER'] = "1"
++    current_env['SSSD_INTG_PEER_UID'] = "0"
++    current_env['SSSD_INTG_PEER_GID'] = "0"
++    current_env['LD_PRELOAD'] += ':' + os.environ['PAM_WRAPPER_PATH']
++
++    sssctl = subprocess.Popen(["sssctl", "user-checks", "user1",
++                               "--action=auth", "--service=pam_sss_service"],
++                              universal_newlines=True,
++                              env=current_env, stdin=subprocess.PIPE,
++                              stdout=subprocess.PIPE, stderr=subprocess.PIPE)
++
++    try:
++        out, err = sssctl.communicate(input="123456")
++    except:
++        sssctl.kill()
++        out, err = sssctl.communicate()
++
++    sssctl.stdin.close()
++    sssctl.stdout.close()
++
++    if sssctl.wait() != 0:
++        raise Exception("sssctl failed")
++
++    assert err.find("pam_authenticate for user [user1]: Success") != -1
+-- 
+2.9.5
+
