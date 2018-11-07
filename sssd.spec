@@ -1,7 +1,7 @@
 %global rhel7_minor %(%{__grep} -o "7.[0-9]*" /etc/redhat-release |%{__sed} -s 's/7.//')
 
 # we don't want to provide private python extension libs
-%define __provides_exclude_from %{python2_sitearch}/.*\.so$|%{python3_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
+%define __provides_exclude_from %{python3_sitearch}/.*\.so$|%{_libdir}/%{name}/modules/libwbclient.so.*$
 
 # SSSD fails to build with -Wl,-z,defs
 %undefine _strict_symbol_defs_build
@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.0.0
-Release: 4%{?dist}
+Release: 5%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -166,7 +166,6 @@ BuildRequires: libxml2
 BuildRequires: docbook-style-xsl
 BuildRequires: krb5-devel
 BuildRequires: c-ares-devel
-BuildRequires: python2-devel
 BuildRequires: python3-devel
 BuildRequires: check-devel
 BuildRequires: doxygen
@@ -295,16 +294,6 @@ Also provides several other administrative tools:
     * sss_obfuscate for generating an obfuscated LDAP password
     * sssctl -- an sssd status and control utility
 
-%package -n python2-sssdconfig
-Summary: SSSD and IPA configuration file manipulation classes and functions
-Group: Applications/System
-License: GPLv3+
-BuildArch: noarch
-%{?python_provide:%python_provide python2-sssdconfig}
-
-%description -n python2-sssdconfig
-Provides python2 files for manipulation SSSD and IPA configuration files.
-
 %package -n python3-sssdconfig
 Summary: SSSD and IPA configuration file manipulation classes and functions
 Group: Applications/System
@@ -314,21 +303,6 @@ BuildArch: noarch
 
 %description -n python3-sssdconfig
 Provides python3 files for manipulation SSSD and IPA configuration files.
-
-%package -n python2-sss
-Summary: Python2 bindings for sssd
-Group: Development/Libraries
-License: LGPLv3+
-Requires: sssd-common = %{version}-%{release}
-%{?python_provide:%python_provide python2-sss}
-
-%description -n python2-sss
-Provides python2 module for manipulating users, groups, and nested groups in
-SSSD when using id_provider = local in /etc/sssd/sssd.conf.
-
-Also provides several other useful python2 bindings:
-    * function for retrieving list of groups user belongs to.
-    * class for obfuscation of passwords
 
 %package -n python3-sss
 Summary: Python3 bindings for sssd
@@ -344,15 +318,6 @@ SSSD when using id_provider = local in /etc/sssd/sssd.conf.
 Also provides several other useful python3 bindings:
     * function for retrieving list of groups user belongs to.
     * class for obfuscation of passwords
-
-%package -n python2-sss-murmur
-Summary: Python2 bindings for murmur hash function
-Group: Development/Libraries
-License: LGPLv3+
-%{?python_provide:%python_provide python2-sss-murmur}
-
-%description -n python2-sss-murmur
-Provides python2 module for calculating the murmur hash version 3
 
 %package -n python3-sss-murmur
 Summary: Python3 bindings for murmur hash function
@@ -490,19 +455,6 @@ Requires: libipa_hbac = %{version}-%{release}
 %description -n libipa_hbac-devel
 Utility library to validate FreeIPA HBAC rules for authorization requests
 
-%package -n python2-libipa_hbac
-Summary: Python2 bindings for the FreeIPA HBAC Evaluator library
-Group: Development/Libraries
-License: LGPLv3+
-Requires: libipa_hbac = %{version}-%{release}
-Provides: libipa_hbac-python = %{version}-%{release}
-Obsoletes: libipa_hbac-python < 1.13.0
-%{?python_provide:%python_provide python2-libipa_hbac}
-
-%description -n python2-libipa_hbac
-The python2-libipa_hbac contains the bindings so that libipa_hbac can be
-used by Python applications.
-
 %package -n python3-libipa_hbac
 Summary: Python3 bindings for the FreeIPA HBAC Evaluator library
 Group: Development/Libraries
@@ -532,19 +484,6 @@ Requires: libsss_nss_idmap = %{version}-%{release}
 
 %description -n libsss_nss_idmap-devel
 Utility library for SID and certificate based lookups
-
-%package -n python2-libsss_nss_idmap
-Summary: Python2 bindings for libsss_nss_idmap
-Group: Development/Libraries
-License: LGPLv3+
-Requires: libsss_nss_idmap = %{version}-%{release}
-Provides: libsss_nss_idmap-python = %{version}-%{release}
-Obsoletes: libsss_nss_idmap-python < 1.13.0
-%{?python_provide:%python_provide python2-libsss_nss_idmap}
-
-%description -n python2-libsss_nss_idmap
-The python2-libsss_nss_idmap contains the bindings so that libsss_nss_idmap can
-be used by Python applications.
 
 %package -n python3-libsss_nss_idmap
 Summary: Python3 bindings for libsss_nss_idmap
@@ -703,6 +642,7 @@ autoreconf -ivf
     --disable-rpath \
     --with-initscript=systemd \
     --with-syslog=journald \
+    --without-python2-bindings \
 %if (0%{?use_openssl} == 1)
     --with-crypto=libcrypto \
 %endif
@@ -758,11 +698,6 @@ rm -Rf ${RPM_BUILD_ROOT}/%{_docdir}/%{name}
 
 # Older versions of rpmbuild can only handle one -f option
 # So we need to append to the sssd*.lang file
-for file in `ls $RPM_BUILD_ROOT/%{python2_sitelib}/*.egg-info 2> /dev/null`
-do
-    echo %{python2_sitelib}/`basename $file` >> python2_sssdconfig.lang
-done
-
 for file in `ls $RPM_BUILD_ROOT/%{python3_sitelib}/*.egg-info 2> /dev/null`
 do
     echo %{python3_sitelib}/`basename $file` >> python3_sssdconfig.lang
@@ -837,9 +772,6 @@ done
 # Print these to the rpmbuild log
 echo "sssd.lang:"
 cat sssd.lang
-
-echo "python2_sssdconfig.lang:"
-cat python2_sssdconfig.lang
 
 echo "python3_sssdconfig.lang:"
 cat python3_sssdconfig.lang
@@ -1058,24 +990,14 @@ done
 %{_mandir}/man8/sss_seed.8*
 %{_mandir}/man8/sssctl.8*
 
-%files -n python2-sssdconfig -f python2_sssdconfig.lang
-%dir %{python2_sitelib}/SSSDConfig
-%{python2_sitelib}/SSSDConfig/*.py*
-
 %files -n python3-sssdconfig -f python3_sssdconfig.lang
 %dir %{python3_sitelib}/SSSDConfig
 %{python3_sitelib}/SSSDConfig/*.py*
 %dir %{python3_sitelib}/SSSDConfig/__pycache__
 %{python3_sitelib}/SSSDConfig/__pycache__/*.py*
 
-%files -n python2-sss
-%{python2_sitearch}/pysss.so
-
 %files -n python3-sss
 %{python3_sitearch}/pysss.so
-
-%files -n python2-sss-murmur
-%{python2_sitearch}/pysss_murmur.so
 
 %files -n python3-sss-murmur
 %{python3_sitearch}/pysss_murmur.so
@@ -1110,14 +1032,8 @@ done
 %{_libdir}/libsss_nss_idmap.so
 %{_libdir}/pkgconfig/sss_nss_idmap.pc
 
-%files -n python2-libsss_nss_idmap
-%{python2_sitearch}/pysss_nss_idmap.so
-
 %files -n python3-libsss_nss_idmap
 %{python3_sitearch}/pysss_nss_idmap.so
-
-%files -n python2-libipa_hbac
-%{python2_sitearch}/pyhbac.so
 
 %files -n python3-libipa_hbac
 %{python3_sitearch}/pyhbac.so
@@ -1278,6 +1194,8 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Nov 07 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-5
+- Resolves: rhbz#1629737 - sssd: Remove python2 (sub)packages from Fedora 30+
 
 * Wed Aug 29 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-4
 - Resolves: upstream#3821 - crash related to sbus_router_destructor()
