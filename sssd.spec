@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.0.0
-Release: 5%{?dist}
+Release: 6%{?dist}
 Group: Applications/System
 Summary: System Security Services Daemon
 License: GPLv3+
@@ -116,6 +116,10 @@ Patch0069: 0069-PYSSS-Re-add-the-pysss.getgrouplist-interface.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
+
+# https://github.com/SSSD/sssd/pull/715
+# https://bugzilla.redhat.com/show_bug.cgi?id=1654537
+Patch1000: 0001-sbus-use-120-second-default-timeout.patch
 
 ### Dependencies ###
 
@@ -1194,6 +1198,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Dec 12 2018 Adam Williamson <awilliam@redhat.com> - 2.0.0-6
+- Resolves: rhbz#1654537 - sbus: use 120 second default timeout
+
 * Wed Nov 07 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-5
 - Resolves: rhbz#1629737 - sssd: Remove python2 (sub)packages from Fedora 30+
 
