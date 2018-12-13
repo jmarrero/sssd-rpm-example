@@ -1,0 +1,27 @@
+From 53e6fdfd881f051898e85448832eafdd2ea09454 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 22 Nov 2018 11:33:20 +0100
+Subject: [PATCH] BUILD: Accept krb5 1.17 for building the PAC plugin
+
+Reviewed-by: Jakub Hrozek <jhrozek@redhat.com>
+---
+ src/external/pac_responder.m4 | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/external/pac_responder.m4 b/src/external/pac_responder.m4
+index e0685f0ce..dc986a1b8 100644
+--- a/src/external/pac_responder.m4
++++ b/src/external/pac_responder.m4
+@@ -18,7 +18,8 @@ then
+         Kerberos\ 5\ release\ 1.13* | \
+         Kerberos\ 5\ release\ 1.14* | \
+         Kerberos\ 5\ release\ 1.15* | \
+-        Kerberos\ 5\ release\ 1.16*)
++        Kerberos\ 5\ release\ 1.16* | \
++        Kerberos\ 5\ release\ 1.17*)
+             krb5_version_ok=yes
+             AC_MSG_RESULT([yes])
+             ;;
+-- 
+2.20.0
+

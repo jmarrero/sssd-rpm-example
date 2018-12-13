@@ -114,6 +114,10 @@ Patch0067: 0067-UTIL-Suppress-Coverity-warning.patch
 Patch0068: 0068-UTIL-move-and-rename-sysdb_error_to_errno-to-utils.patch
 Patch0069: 0069-PYSSS-Re-add-the-pysss.getgrouplist-interface.patch
 
+# not in sequence, backported to fix build with newer krb5
+Patch0400: 0001-tests-fix-mocking-krb5_creds-in-test_copy_ccache.patch
+Patch0401: 0001-BUILD-Accept-krb5-1.17-for-building-the-PAC-plugin.patch
+
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 
@@ -1200,6 +1204,7 @@ fi
 %changelog
 * Wed Dec 12 2018 Adam Williamson <awilliam@redhat.com> - 2.0.0-6
 - Resolves: rhbz#1654537 - sbus: use 120 second default timeout
+- Backport two other patches from master to fix build with recent krb5
 
 * Wed Nov 07 2018 Michal Židek <mzidek@redhat.com> - 2.0.0-5
 - Resolves: rhbz#1629737 - sssd: Remove python2 (sub)packages from Fedora 30+
