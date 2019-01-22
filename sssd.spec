@@ -255,7 +255,6 @@ Summary: SSSD Client libraries for NSS and PAM
 Group: Applications/System
 License: LGPLv3+
 Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
 Requires(post):  /usr/sbin/alternatives
 Requires(preun): /usr/sbin/alternatives
 
@@ -267,8 +266,6 @@ service.
 Summary: A library to allow communication between SUDO and SSSD
 Group: Development/Libraries
 License: LGPLv3+
-Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
 Conflicts: sssd-common < %{version}-%{release}
 
 %description -n libsss_sudo
@@ -429,8 +426,6 @@ PAM modules to leverage SSSD caching.
 Summary: FreeIPA Idmap library
 Group: Development/Libraries
 License: LGPLv3+
-Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
 
 %description -n libsss_idmap
 Utility library to convert SIDs to Unix uids and gids
@@ -448,8 +443,6 @@ Utility library to SIDs to Unix uids and gids
 Summary: FreeIPA HBAC Evaluator library
 Group: Development/Libraries
 License: LGPLv3+
-Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
 
 %description -n libipa_hbac
 Utility library to validate FreeIPA HBAC rules for authorization requests
@@ -478,8 +471,6 @@ used by Python applications.
 Summary: Library for SID and certificate based lookups
 Group: Development/Libraries
 License: LGPLv3+
-Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
 
 %description -n libsss_nss_idmap
 Utility library for SID and certificate based lookups
@@ -520,8 +511,6 @@ Summary: The SSSD D-Bus responder helper library
 Group: Development/Libraries
 License: GPLv3+
 Requires: sssd-dbus = %{version}-%{release}
-Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
 
 %description -n libsss_simpleifp
 Provides library that simplifies D-Bus API for the SSSD InfoPipe responder.
@@ -581,8 +570,6 @@ UIDs/GIDs to names and vice versa. It can be also used for mapping principal
 Summary: SSSD Certficate Mapping Library
 Group: Development/Libraries
 License: LGPLv3+
-Requires(post): /sbin/ldconfig
-Requires(postun): /sbin/ldconfig
 Conflicts: sssd-common < %{version}-%{release}
 
 %description -n libsss_certmap
@@ -1141,7 +1128,7 @@ done
 %systemd_postun_with_restart sssd-kcm.service
 
 %post client
-/sbin/ldconfig
+%{?ldconfig}
 /usr/sbin/alternatives --install /etc/cifs-utils/idmap-plugin cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so 20
 
 %preun client
@@ -1149,31 +1136,19 @@ if [ $1 -eq 0 ] ; then
         /usr/sbin/alternatives --remove cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so
 fi
 
-%postun client -p /sbin/ldconfig
+%ldconfig_postun client
 
-%post -n libsss_sudo -p /sbin/ldconfig
+%ldconfig_scriptlets -n libsss_sudo
 
-%postun -n libsss_sudo -p /sbin/ldconfig
+%ldconfig_scriptlets -n libipa_hbac
 
-%post -n libipa_hbac -p /sbin/ldconfig
+%ldconfig_scriptlets -n libsss_idmap
 
-%postun -n libipa_hbac -p /sbin/ldconfig
+%ldconfig_scriptlets -n libsss_nss_idmap
 
-%post -n libsss_idmap -p /sbin/ldconfig
+%ldconfig_scriptlets -n libsss_simpleifp
 
-%postun -n libsss_idmap -p /sbin/ldconfig
-
-%post -n libsss_nss_idmap -p /sbin/ldconfig
-
-%postun -n libsss_nss_idmap -p /sbin/ldconfig
-
-%post -n libsss_simpleifp -p /sbin/ldconfig
-
-%postun -n libsss_simpleifp -p /sbin/ldconfig
-
-%post -n libsss_certmap -p /sbin/ldconfig
-
-%postun -n libsss_certmap -p /sbin/ldconfig
+%ldconfig_scriptlets -n libsss_certmap
 
 %posttrans common
 %systemd_postun_with_restart sssd.service
