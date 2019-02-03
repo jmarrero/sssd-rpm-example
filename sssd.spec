@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.0.0
-Release: 6%{?dist}
+Release: 7%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -1143,6 +1143,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Sun Feb 03 2019 Fedora Release Engineering <releng@fedoraproject.org> - 2.0.0-7
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_30_Mass_Rebuild
+
 * Wed Dec 12 2018 Adam Williamson <awilliam@redhat.com> - 2.0.0-6
 - Resolves: rhbz#1654537 - sbus: use 120 second default timeout
 - Backport two other patches from master to fix build with recent krb5
