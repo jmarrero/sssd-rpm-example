@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.0.0
-Release: 8%{?dist}
+Release: 9%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -136,7 +136,7 @@ Requires: sssd-krb5 = %{version}-%{release}
 Requires: sssd-ipa = %{version}-%{release}
 Requires: sssd-ad = %{version}-%{release}
 Recommends: sssd-proxy = %{version}-%{release}
-Requires: python3-sssdconfig = %{version}-%{release}
+Suggests: python3-sssdconfig = %{version}-%{release}
 Suggests: sssd-dbus = %{version}-%{release}
 
 %global servicename sssd
@@ -1147,6 +1147,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 13 2019 Sinny Kumari <skumari@redhat.com> - 2.0.0-9
+- Resolves: rhbz#1667444 -  sssd: make python3-sssdconfig as suggest
+
 * Wed Feb 13 2019 Adam Williamson <awilliam@redhat.com> - 2.0.0-8
 - Resolves: rhbz#1676946 - startup fail with status NOTIMPLEMENTED
 
