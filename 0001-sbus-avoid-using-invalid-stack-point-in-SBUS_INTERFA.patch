@@ -1,0 +1,459 @@
+From 194438830cdd729e317c1e1baf93da7201dfd39b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Mon, 4 Feb 2019 12:00:01 +0100
+Subject: [PATCH 1/3] sbus: avoid using invalid stack point in SBUS_INTERFACE
+
+SBUS_INTERFACE macros expanded as:
+struct sbus_interface bus =
+    ({ sbus_interface(
+        "org.freedesktop.DBus",
+        ((void *)0),
+        (((const struct sbus_method[])
+        {
+            ({
+                /* ... compile time check of function signature omitted */ ;
+                sbus_method_sync(/* ... full list of params omitted */);
+            }),
+  ...
+
+This however includes an issue that methods/properties/signals are returned
+by value, however stored in sbus_interface as pointers. Once we return out
+of the top-level block and assign resulting sbus_interface into 'bus' variable
+those objects allocated on stack becomes invalid and can be overwritten by other
+allocations on stack.
+
+This patch overcomes this issue by changing declaration of SBUS_INTERFACE and
+avoiding using this top-level block. This still keeps the declarative structure
+and simplifies the code as it does not require any memory handling and
+tests for successful allocations.
+
+    const struct sbus_method __ ## varname ## _m[] = methods;                 \
+    const struct sbus_signal __ ## varname ## _s[] = signals;                 \
+    const struct sbus_property __ ## varname ## _p[] = properties;            \
+    struct sbus_interface varname = SBUS_IFACE_ ## iface(                     \
+        (__ ## varname ## _m),                                                \
+        (__ ## varname ## _s),                                                \
+        (__ ## varname ## _p)                                                 \
+    )
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/3924
+
+Reviewed-by: Alexey Tikhonov <atikhono@redhat.com>
+---
+ src/monitor/monitor.c                   |  2 +-
+ src/providers/data_provider/dp.c        | 10 +++++-----
+ src/providers/data_provider_be.c        |  2 +-
+ src/providers/proxy/proxy_child.c       |  2 +-
+ src/providers/proxy/proxy_client.c      |  2 +-
+ src/responder/autofs/autofssrv.c        |  2 +-
+ src/responder/common/responder_iface.c  |  6 +++---
+ src/responder/ifp/ifp_iface/ifp_iface.c | 24 ++++++++++++------------
+ src/responder/ifp/ifpsrv.c              |  2 +-
+ src/responder/nss/nss_iface.c           |  2 +-
+ src/responder/nss/nsssrv.c              |  2 +-
+ src/sbus/interface/sbus_introspection.c |  2 +-
+ src/sbus/interface/sbus_properties.c    |  2 +-
+ src/sbus/sbus_interface.h               | 22 +++++++++++++++++-----
+ src/sbus/server/sbus_server_interface.c |  2 +-
+ 15 files changed, 48 insertions(+), 36 deletions(-)
+
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index 136cf8f27..8d12f8133 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -2018,7 +2018,7 @@ static void monitor_sbus_connected(struct tevent_req *req)
+         goto done;
+     }
+ 
+-    struct sbus_interface iface = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface,
+         sssd_monitor,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_monitor, RegisterService, monitor_sbus_RegisterService, ctx)
+diff --git a/src/providers/data_provider/dp.c b/src/providers/data_provider/dp.c
+index bd003c8b3..e79d6f294 100644
+--- a/src/providers/data_provider/dp.c
++++ b/src/providers/data_provider/dp.c
+@@ -33,7 +33,7 @@ dp_init_interface(struct data_provider *provider)
+ {
+     errno_t ret;
+ 
+-    struct sbus_interface iface_dp_client = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_dp_client,
+         sssd_DataProvider_Client,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_DataProvider_Client, Register, dp_client_register, provider)
+@@ -42,7 +42,7 @@ dp_init_interface(struct data_provider *provider)
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_dp_backend = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_dp_backend,
+         sssd_DataProvider_Backend,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_DataProvider_Backend, IsOnline, dp_backend_is_online, provider->be_ctx)
+@@ -51,7 +51,7 @@ dp_init_interface(struct data_provider *provider)
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_dp_failover = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_dp_failover,
+         sssd_DataProvider_Failover,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_DataProvider_Failover, ListServices, dp_failover_list_services, provider->be_ctx),
+@@ -62,7 +62,7 @@ dp_init_interface(struct data_provider *provider)
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_dp_access = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_dp_access,
+         sssd_DataProvider_AccessControl,
+         SBUS_METHODS(
+             SBUS_ASYNC(METHOD, sssd_DataProvider_AccessControl, RefreshRules, dp_access_control_refresh_rules_send, dp_access_control_refresh_rules_recv, provider)
+@@ -71,7 +71,7 @@ dp_init_interface(struct data_provider *provider)
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_dp = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_dp,
+         sssd_dataprovider,
+         SBUS_METHODS(
+             SBUS_ASYNC(METHOD, sssd_dataprovider, pamHandler, dp_pam_handler_send, dp_pam_handler_recv, provider),
+diff --git a/src/providers/data_provider_be.c b/src/providers/data_provider_be.c
+index 7043e7a5f..942952b24 100644
+--- a/src/providers/data_provider_be.c
++++ b/src/providers/data_provider_be.c
+@@ -382,7 +382,7 @@ static void signal_be_reset_offline(struct tevent_context *ev,
+ static errno_t
+ be_register_monitor_iface(struct sbus_connection *conn, struct be_ctx *be_ctx)
+ {
+-    struct sbus_interface iface_service = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_service,
+         sssd_service,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_service, resInit, data_provider_res_init, be_ctx),
+diff --git a/src/providers/proxy/proxy_child.c b/src/providers/proxy/proxy_child.c
+index 134f96f82..4f06d42aa 100644
+--- a/src/providers/proxy/proxy_child.c
++++ b/src/providers/proxy/proxy_child.c
+@@ -348,7 +348,7 @@ proxy_cli_init(struct pc_ctx *ctx)
+         return ENOMEM;
+     }
+ 
+-    struct sbus_interface iface = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface,
+         sssd_ProxyChild_Auth,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_ProxyChild_Auth, PAM, pc_pam_handler, ctx)
+diff --git a/src/providers/proxy/proxy_client.c b/src/providers/proxy/proxy_client.c
+index 1c325eee5..09ebf3bda 100644
+--- a/src/providers/proxy/proxy_client.c
++++ b/src/providers/proxy/proxy_client.c
+@@ -100,7 +100,7 @@ proxy_client_init(struct sbus_connection *conn,
+ {
+     errno_t ret;
+ 
+-    struct sbus_interface iface = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface,
+         sssd_ProxyChild_Client,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_ProxyChild_Client, Register, proxy_client_register, auth_ctx)
+diff --git a/src/responder/autofs/autofssrv.c b/src/responder/autofs/autofssrv.c
+index 614e901e7..230bd2aac 100644
+--- a/src/responder/autofs/autofssrv.c
++++ b/src/responder/autofs/autofssrv.c
+@@ -62,7 +62,7 @@ autofs_register_service_iface(struct autofs_ctx *autofs_ctx,
+ {
+     errno_t ret;
+ 
+-    struct sbus_interface iface_svc = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_svc,
+         sssd_service,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_service, resInit, monitor_common_res_init, NULL),
+diff --git a/src/responder/common/responder_iface.c b/src/responder/common/responder_iface.c
+index 79b632c05..911cd6cc0 100644
+--- a/src/responder/common/responder_iface.c
++++ b/src/responder/common/responder_iface.c
+@@ -99,7 +99,7 @@ sss_resp_register_sbus_iface(struct sbus_connection *conn,
+ {
+     errno_t ret;
+ 
+-    struct sbus_interface iface_resp_domain = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_resp_domain,
+         sssd_Responder_Domain,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_Responder_Domain, SetActive, sss_resp_domain_active, rctx),
+@@ -109,7 +109,7 @@ sss_resp_register_sbus_iface(struct sbus_connection *conn,
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_resp_negcache = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_resp_negcache,
+         sssd_Responder_NegativeCache,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_Responder_NegativeCache, ResetUsers, sss_resp_reset_ncache_users, rctx),
+@@ -139,7 +139,7 @@ sss_resp_register_service_iface(struct resp_ctx *rctx)
+ {
+     errno_t ret;
+ 
+-    struct sbus_interface iface_svc = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_svc,
+         sssd_service,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_service, resInit, monitor_common_res_init, NULL),
+diff --git a/src/responder/ifp/ifp_iface/ifp_iface.c b/src/responder/ifp/ifp_iface/ifp_iface.c
+index fa9f9ba53..a3385091b 100644
+--- a/src/responder/ifp/ifp_iface/ifp_iface.c
++++ b/src/responder/ifp/ifp_iface/ifp_iface.c
+@@ -77,7 +77,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+ {
+     errno_t ret;
+ 
+-    struct sbus_interface iface_ifp = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp,
+         org_freedesktop_sssd_infopipe,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD,  org_freedesktop_sssd_infopipe, Ping, ifp_ping, ctx),
+@@ -96,7 +96,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_ifp_components = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_components,
+         org_freedesktop_sssd_infopipe_Components,
+         SBUS_METHODS(SBUS_NO_METHODS),
+         SBUS_SIGNALS(SBUS_NO_SIGNALS),
+@@ -109,7 +109,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         )
+     );
+ 
+-    struct sbus_interface iface_ifp_domains = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_domains,
+         org_freedesktop_sssd_infopipe_Domains,
+         SBUS_METHODS(SBUS_NO_METHODS),
+         SBUS_SIGNALS(SBUS_NO_SIGNALS),
+@@ -131,7 +131,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         )
+     );
+ 
+-    struct sbus_interface iface_ifp_domains_domain = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_domains_domain,
+         org_freedesktop_sssd_infopipe_Domains_Domain,
+         SBUS_METHODS(
+             SBUS_ASYNC(METHOD, org_freedesktop_sssd_infopipe_Domains_Domain, IsOnline, ifp_domains_domain_is_online_send, ifp_domains_domain_is_online_recv, ctx),
+@@ -144,7 +144,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_ifp_users = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_users,
+         org_freedesktop_sssd_infopipe_Users,
+         SBUS_METHODS(
+             SBUS_ASYNC(METHOD, org_freedesktop_sssd_infopipe_Users, FindByName, ifp_users_find_by_name_send, ifp_users_find_by_name_recv, ctx),
+@@ -159,7 +159,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_ifp_users_user = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_users_user,
+         org_freedesktop_sssd_infopipe_Users_User,
+         SBUS_METHODS(SBUS_NO_METHODS),
+         SBUS_SIGNALS(SBUS_NO_SIGNALS),
+@@ -178,7 +178,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         )
+     );
+ 
+-    struct sbus_interface iface_ifp_cache_user = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_cache_user,
+         org_freedesktop_sssd_infopipe_Cache,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, org_freedesktop_sssd_infopipe_Cache, List, ifp_cache_list_user, ctx),
+@@ -188,7 +188,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_ifp_cache_object_user = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_cache_object_user,
+         org_freedesktop_sssd_infopipe_Cache_Object,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, org_freedesktop_sssd_infopipe_Cache_Object, Store, ifp_cache_object_store_user, ctx),
+@@ -198,7 +198,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_ifp_groups = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_groups,
+         org_freedesktop_sssd_infopipe_Groups,
+         SBUS_METHODS(
+             SBUS_ASYNC(METHOD, org_freedesktop_sssd_infopipe_Groups, FindByName, ifp_groups_find_by_name_send, ifp_groups_find_by_name_recv, ctx),
+@@ -210,7 +210,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_ifp_groups_group = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_groups_group,
+         org_freedesktop_sssd_infopipe_Groups_Group,
+         SBUS_METHODS(
+             SBUS_ASYNC(METHOD, org_freedesktop_sssd_infopipe_Groups_Group, UpdateMemberList, ifp_groups_group_update_member_list_send, ifp_groups_group_update_member_list_recv, ctx)
+@@ -225,7 +225,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         )
+     );
+ 
+-    struct sbus_interface iface_ifp_cache_group = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_cache_group,
+         org_freedesktop_sssd_infopipe_Cache,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, org_freedesktop_sssd_infopipe_Cache, List, ifp_cache_list_group, ctx),
+@@ -235,7 +235,7 @@ ifp_register_sbus_interface(struct sbus_connection *conn,
+         SBUS_PROPERTIES(SBUS_NO_PROPERTIES)
+     );
+ 
+-    struct sbus_interface iface_ifp_cache_object_group = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_ifp_cache_object_group,
+         org_freedesktop_sssd_infopipe_Cache_Object,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, org_freedesktop_sssd_infopipe_Cache_Object, Store, ifp_cache_object_store_group, ctx),
+diff --git a/src/responder/ifp/ifpsrv.c b/src/responder/ifp/ifpsrv.c
+index 61072aad1..0c53534e4 100644
+--- a/src/responder/ifp/ifpsrv.c
++++ b/src/responder/ifp/ifpsrv.c
+@@ -135,7 +135,7 @@ ifp_register_service_iface(struct ifp_ctx *ifp_ctx,
+ {
+     errno_t ret;
+ 
+-    struct sbus_interface iface_svc = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_svc,
+         sssd_service,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_service, resInit, monitor_common_res_init, NULL),
+diff --git a/src/responder/nss/nss_iface.c b/src/responder/nss/nss_iface.c
+index f39c3d370..a47b35fca 100644
+--- a/src/responder/nss/nss_iface.c
++++ b/src/responder/nss/nss_iface.c
+@@ -219,7 +219,7 @@ nss_register_backend_iface(struct sbus_connection *conn,
+ {
+     errno_t ret;
+ 
+-    struct sbus_interface iface = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface,
+         sssd_nss_MemoryCache,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_nss_MemoryCache, UpdateInitgroups, nss_memorycache_update_initgroups, nss_ctx),
+diff --git a/src/responder/nss/nsssrv.c b/src/responder/nss/nsssrv.c
+index daaf3c06c..9cc9c5d35 100644
+--- a/src/responder/nss/nsssrv.c
++++ b/src/responder/nss/nsssrv.c
+@@ -276,7 +276,7 @@ nss_register_service_iface(struct nss_ctx *nss_ctx,
+ {
+     errno_t ret;
+ 
+-    struct sbus_interface iface_svc = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface_svc,
+         sssd_service,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, sssd_service, resInit, monitor_common_res_init, NULL),
+diff --git a/src/sbus/interface/sbus_introspection.c b/src/sbus/interface/sbus_introspection.c
+index b2de9a9ac..863383719 100644
+--- a/src/sbus/interface/sbus_introspection.c
++++ b/src/sbus/interface/sbus_introspection.c
+@@ -658,7 +658,7 @@ errno_t
+ sbus_register_introspection(struct sbus_router *router)
+ {
+ 
+-    struct sbus_interface iface = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface,
+         org_freedesktop_DBus_Introspectable,
+         SBUS_METHODS(
+             SBUS_ASYNC(METHOD, org_freedesktop_DBus_Introspectable, Introspect,
+diff --git a/src/sbus/interface/sbus_properties.c b/src/sbus/interface/sbus_properties.c
+index 9df4c6bd6..8be933caa 100644
+--- a/src/sbus/interface/sbus_properties.c
++++ b/src/sbus/interface/sbus_properties.c
+@@ -867,7 +867,7 @@ errno_t
+ sbus_register_properties(struct sbus_router *router)
+ {
+ 
+-    struct sbus_interface iface = SBUS_INTERFACE(
++    SBUS_INTERFACE(iface,
+         org_freedesktop_DBus_Properties,
+         SBUS_METHODS(
+             SBUS_ASYNC(METHOD, org_freedesktop_DBus_Properties, Get,
+diff --git a/src/sbus/sbus_interface.h b/src/sbus/sbus_interface.h
+index eb1462dd2..45ab4b5ad 100644
+--- a/src/sbus/sbus_interface.h
++++ b/src/sbus/sbus_interface.h
+@@ -80,7 +80,7 @@ struct sbus_node;
+  *     };
+  */
+ #define SBUS_METHODS(...)                                                     \
+-    (const struct sbus_method[]) {                                            \
++    {                                                                         \
+         __VA_ARGS__,                                                          \
+         SBUS_INTERFACE_SENTINEL                                               \
+     }
+@@ -117,7 +117,7 @@ struct sbus_node;
+  *     };
+  */
+ #define SBUS_SIGNALS(...)                                                     \
+-    (const struct sbus_signal[]) {                                            \
++    {                                                                         \
+         __VA_ARGS__,                                                          \
+         SBUS_INTERFACE_SENTINEL                                               \
+     }
+@@ -159,7 +159,7 @@ struct sbus_node;
+  *     };
+  */
+ #define SBUS_PROPERTIES(...)                                                  \
+-    (const struct sbus_property[]) {                                          \
++    {                                                                         \
+         __VA_ARGS__,                                                          \
+         SBUS_INTERFACE_SENTINEL                                               \
+     }
+@@ -228,6 +228,11 @@ struct sbus_node;
+ /**
+  * Create and sbus interface.
+  *
++ * @param varname      Name of the variable that will hold the interface
++ *                     description. It is created as:
++ *                       struct sbus_interface varname;
++ *                     You can refer to it later when creating 'sbus_path'
++ *                     structure as &varname.
+  * @param iface        Name of the interface with dots replaced
+  *                     with underscore. (token, not a string)
+  * @param methods      Methods on the interface.
+@@ -239,8 +244,15 @@ struct sbus_node;
+  *
+  * @see SBUS_METHODS, SBUS_SIGNALS, SBUS_PROPERTIES to create those arguments.
+  */
+-#define SBUS_INTERFACE(iface, methods, signals, properties)                   \
+-    SBUS_IFACE_ ## iface((methods), (signals), (properties))
++#define SBUS_INTERFACE(varname, iface, methods, signals, properties)          \
++    const struct sbus_method __ ## varname ## _m[] = methods;                 \
++    const struct sbus_signal __ ## varname ## _s[] = signals;                 \
++    const struct sbus_property __ ## varname ## _p[] = properties;            \
++    struct sbus_interface varname = SBUS_IFACE_ ## iface(                     \
++        (__ ## varname ## _m),                                                \
++        (__ ## varname ## _s),                                                \
++        (__ ## varname ## _p)                                                 \
++    )
+ 
+ /**
+  * Create a new sbus synchronous handler.
+diff --git a/src/sbus/server/sbus_server_interface.c b/src/sbus/server/sbus_server_interface.c
+index 695d4d09b..9c0ba0abb 100644
+--- a/src/sbus/server/sbus_server_interface.c
++++ b/src/sbus/server/sbus_server_interface.c
+@@ -387,7 +387,7 @@ sbus_server_setup_interface(struct sbus_server *server)
+ {
+     errno_t ret;
+ 
+-    struct sbus_interface bus = SBUS_INTERFACE(
++    SBUS_INTERFACE(bus,
+         org_freedesktop_DBus,
+         SBUS_METHODS(
+             SBUS_SYNC(METHOD, org_freedesktop_DBus, Hello, sbus_server_bus_hello, server),
+-- 
+2.20.1
+

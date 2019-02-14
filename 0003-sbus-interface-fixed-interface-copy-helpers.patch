@@ -1,0 +1,58 @@
+From 38ebae7e0ea889fa9022670a3e08e7352b624677 Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Mon, 4 Feb 2019 18:13:14 +0100
+Subject: [PATCH 3/3] sbus/interface: fixed interface copy helpers
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In `sbus_method_copy()` and other copy helpers there was code like:
+```
+copy = talloc_zero_array(mem_ctx, struct sbus_method, count + 1);
+memcpy(copy, input, sizeof(struct sbus_method) * count + 1);
+```
+Copy of one byte of "sentinel" doesn't make a sense.
+We can either rely on the fact that sentinel is zero-initialized struct
+*and* `talloc_zero_array()` zero-initializes memory (so copying of
+sentinel may be omitted at all) or just copy sentinel in a whole.
+Opted for second option as more clear variant.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/sbus/interface/sbus_interface.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/sbus/interface/sbus_interface.c b/src/sbus/interface/sbus_interface.c
+index ed1b5fd79..afd54dd81 100644
+--- a/src/sbus/interface/sbus_interface.c
++++ b/src/sbus/interface/sbus_interface.c
+@@ -109,7 +109,7 @@ sbus_method_copy(TALLOC_CTX *mem_ctx,
+ 
+     /* All data is either pointer to a static data or it is not a pointer.
+      * We can just copy it. */
+-    memcpy(copy, input, sizeof(struct sbus_method) * count + 1);
++    memcpy(copy, input, sizeof(struct sbus_method) * (count + 1));
+ 
+     return copy;
+ }
+@@ -144,7 +144,7 @@ sbus_signal_copy(TALLOC_CTX *mem_ctx,
+ 
+     /* All data is either pointer to a static data or it is not a pointer.
+      * We can just copy it. */
+-    memcpy(copy, input, sizeof(struct sbus_signal) * count + 1);
++    memcpy(copy, input, sizeof(struct sbus_signal) * (count + 1));
+ 
+     return copy;
+ }
+@@ -208,7 +208,7 @@ sbus_property_copy(TALLOC_CTX *mem_ctx,
+ 
+     /* All data is either pointer to a static data or it is not a pointer.
+      * We can just copy it. */
+-    memcpy(copy, input, sizeof(struct sbus_property) * count + 1);
++    memcpy(copy, input, sizeof(struct sbus_property) * (count + 1));
+ 
+     return copy;
+ }
+-- 
+2.20.1
+

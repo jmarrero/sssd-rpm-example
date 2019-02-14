@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.0.0
-Release: 7%{?dist}
+Release: 8%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -116,6 +116,10 @@ Patch0069: 0069-PYSSS-Re-add-the-pysss.getgrouplist-interface.patch
 # not in sequence, backported to fix build with newer krb5
 Patch0400: 0001-tests-fix-mocking-krb5_creds-in-test_copy_ccache.patch
 Patch0401: 0001-BUILD-Accept-krb5-1.17-for-building-the-PAC-plugin.patch
+# not in sequence, backports to fix RHBZ #1676946
+Patch0402: 0001-sbus-avoid-using-invalid-stack-point-in-SBUS_INTERFA.patch
+Patch0403: 0002-sbus-improve-documentation-of-SBUS_INTERFACE.patch
+Patch0404: 0003-sbus-interface-fixed-interface-copy-helpers.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1143,6 +1147,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 13 2019 Adam Williamson <awilliam@redhat.com> - 2.0.0-8
+- Resolves: rhbz#1676946 - startup fail with status NOTIMPLEMENTED
+
 * Sun Feb 03 2019 Fedora Release Engineering <releng@fedoraproject.org> - 2.0.0-7
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_30_Mass_Rebuild
 
