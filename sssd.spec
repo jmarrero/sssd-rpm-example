@@ -35,98 +35,18 @@
 %endif
 
 Name: sssd
-Version: 2.0.0
-Release: 9%{?dist}
+Version: 2.1.0
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
-Patch0001: 0001-BUILD-Fix-issue-with-installation-of-libsss_secrets.patch
-Patch0002: 0002-BUILD-Add-missing-deps-to-libsss_sbus-.so.patch
-Patch0003: 0003-BUILD-Reduce-compilation-of-unnecessary-files.patch
-Patch0004: 0004-KCM-Don-t-error-out-if-creating-a-new-ID-as-the-firs.patch
-Patch0005: 0005-sbus-register-filter-on-new-connection.patch
-Patch0006: 0006-sbus-fix-typo.patch
-Patch0007: 0007-sbus-check-for-null-message-in-sbus_message_bound.patch
-Patch0008: 0008-sbus-replace-sbus_message_bound_ref-with-sbus_messag.patch
-Patch0009: 0009-sbus-add-unit-tests-for-public-sbus_message-module.patch
-Patch0010: 0010-SELINUX-Always-add-SELinux-user-to-the-semanage-data.patch
-Patch0011: 0011-intg-flush-the-SSSD-caches-to-sync-with-files.patch
-Patch0012: 0012-sbus-dectect-python-binary-for-sbus_generate.sh.patch
-Patch0013: 0013-sudo-respect-case-sensitivity-in-sudo-responder.patch
-Patch0014: 0014-GPO-Add-gpo_implicit_deny-option.patch
-Patch0015: 0015-Skip-local-domain-if-not-supported.patch
-Patch0016: 0016-sysdb-extract-sysdb_ldb_msg_attr_to_certmap_info-cal.patch
-Patch0017: 0017-sysdb_ldb_msg_attr_to_certmap_info-set-SSS_CERTMAP_M.patch
-Patch0018: 0018-sysdb-add-attr_map-attribute-to-sysdb_ldb_msg_attr_t.patch
-Patch0019: 0019-confdb-add-confdb_certmap_to_sysdb.patch
-Patch0020: 0020-AD-LDAP-read-certificate-mapping-rules-from-config-f.patch
-Patch0021: 0021-sysdb-sysdb_certmap_add-handle-domains-more-flexible.patch
-Patch0022: 0022-confdb-add-special-handling-for-rules-for-the-files-.patch
-Patch0023: 0023-files-add-support-for-Smartcard-authentication.patch
-Patch0024: 0024-responder-make-sure-SSS_DP_CERT-is-passed-to-files-p.patch
-Patch0025: 0025-PAM-add-certificate-matching-rules-from-all-domains.patch
-Patch0026: 0026-doc-add-certificate-mapping-section-to-man-page.patch
-Patch0027: 0027-intg-user-default-locale.patch
-Patch0028: 0028-PAM-use-better-PAM-error-code-for-failed-Smartcard-a.patch
-Patch0029: 0029-test_ca-test-library-only-for-readable.patch
-Patch0030: 0030-test_ca-set-a-password-PIN-to-nss-databases.patch
-Patch0031: 0031-getsockopt_wrapper-add-support-for-PAM-clients.patch
-Patch0032: 0032-intg-add-Smartcard-authentication-tests.patch
-Patch0033: 0033-proxy-access-provider-directly-not-through-be_ctx.patch
-Patch0034: 0034-dp-set-be_ctx-provider-as-part-of-dp_init-request.patch
-Patch0035: 0035-sbus-read-destination-after-sender-is-set.patch
-Patch0036: 0036-sbus-do-not-try-to-remove-signal-listeners-when-disc.patch
-Patch0037: 0037-sbus-free-watch_fd-fdevent-explicitly.patch
-Patch0038: 0038-doc-remove-local-provider-reference-from-manpages.patch
-Patch0039: 0039-confdb-log-an-error-when-domain-is-misconfigured.patch
-Patch0040: 0040-be-use-be_is_offline-for-the-main-domain-when-asking.patch
-Patch0041: 0041-p11-handle-multiple-certs-during-auth-with-OpenSSL.patch
-Patch0042: 0042-doc-Add-nsswitch.conf-note-to-manpage.patch
-Patch0043: 0043-MAN-Fix-typo-in-ad_gpo_implicit_deny-default-value.patch
-Patch0044: 0044-p11_child-add-wait_for_card-option.patch
-Patch0045: 0045-PAM-add-p11_wait_for_card_timeout-option.patch
-Patch0046: 0046-pam_sss-make-flags-public.patch
-Patch0047: 0047-pam_sss-add-try_cert_auth-option.patch
-Patch0048: 0048-pam_sss-add-option-require_cert_auth.patch
-Patch0049: 0049-intg-require-SC-tests.patch
-Patch0050: 0050-p11_child-show-PKCS-11-URI-in-debug-output.patch
-Patch0051: 0051-p11_child-add-PKCS-11-uri-to-restrict-selection.patch
-Patch0052: 0052-PAM-add-p11_uri-option.patch
-Patch0053: 0053-tests-add-PKCS-11-URI-tests.patch
-Patch0054: 0054-test_config-Test-for-invalid-characker-in-domain.patch
-Patch0055: 0055-PAM-return-short-name-for-files-provider-users.patch
-Patch0056: 0056-TESTS-Add-a-test-for-whitespace-trimming-in-netgroup.patch
-Patch0057: 0057-FILES-The-files-provider-should-not-enumerate.patch
-Patch0058: 0058-p11_child-add-OCSP-check-ot-the-OpenSSL-version.patch
-Patch0059: 0059-p11_child-add-crl_file-option-for-the-OpenSSL-build.patch
-Patch0060: 0060-p11-Fix-two-instances-of-Wmaybe-uninitialized-in-p11.patch
-Patch0061: 0061-sudo-use-correct-sbus-interface.patch
-Patch0062: 0062-sudo-fix-error-handling-in-sudosrv_refresh_rules_don.patch
-Patch0063: 0063-sbus-remove-leftovers-from-previous-implementation.patch
-Patch0064: 0064-CONFIGURE-Add-minimal-required-version-for-p11-kit.patch
-Patch0065: 0065-SBUS-Silence-warning-maybe-uninitialized.patch
-Patch0066: 0066-files-add-session-recording-flag.patch
-Patch0067: 0067-UTIL-Suppress-Coverity-warning.patch
-Patch0068: 0068-UTIL-move-and-rename-sysdb_error_to_errno-to-utils.patch
-Patch0069: 0069-PYSSS-Re-add-the-pysss.getgrouplist-interface.patch
-
-# not in sequence, backported to fix build with newer krb5
-Patch0400: 0001-tests-fix-mocking-krb5_creds-in-test_copy_ccache.patch
-Patch0401: 0001-BUILD-Accept-krb5-1.17-for-building-the-PAC-plugin.patch
-# not in sequence, backports to fix RHBZ #1676946
-Patch0402: 0001-sbus-avoid-using-invalid-stack-point-in-SBUS_INTERFA.patch
-Patch0403: 0002-sbus-improve-documentation-of-SBUS_INTERFACE.patch
-Patch0404: 0003-sbus-interface-fixed-interface-copy-helpers.patch
+# Patch0001:
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
-
-# https://github.com/SSSD/sssd/pull/715
-# https://bugzilla.redhat.com/show_bug.cgi?id=1654537
-Patch1000: 0001-sbus-use-120-second-default-timeout.patch
 
 ### Dependencies ###
 
@@ -193,6 +113,7 @@ BuildRequires: selinux-policy-targeted
 BuildRequires: libcmocka-devel >= 1.0.0
 BuildRequires: uid_wrapper
 BuildRequires: nss_wrapper
+BuildRequires: pam_wrapper
 BuildRequires: libnl3-devel
 BuildRequires: systemd-devel
 BuildRequires: systemd
@@ -811,12 +732,12 @@ done
 %dir %{sssdstatedir}
 %dir %{_localstatedir}/cache/krb5rcache
 %attr(700,root,root) %dir %{dbpath}
-%attr(755,root,root) %dir %{mcpath}
+%attr(775,root,root) %dir %{mcpath}
 %attr(700,root,root) %dir %{secdbpath}
 %attr(751,root,root) %dir %{deskprofilepath}
-%ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/passwd
-%ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/group
-%ghost %attr(0644,root,root) %verify(not md5 size mtime) %{mcpath}/initgroups
+%ghost %attr(0664,root,root) %verify(not md5 size mtime) %{mcpath}/passwd
+%ghost %attr(0664,root,root) %verify(not md5 size mtime) %{mcpath}/group
+%ghost %attr(0664,root,root) %verify(not md5 size mtime) %{mcpath}/initgroups
 %attr(755,root,root) %dir %{pipepath}
 %attr(700,root,root) %dir %{pipepath}/private
 %attr(755,root,root) %dir %{pubconfpath}
@@ -1147,6 +1068,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Mar 27 2019 Michal Židek <mzidek@redhat.com> - 2.1.0-1
+- Update to latest released upstream version
+- https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_2_1_0.html
+
 * Wed Feb 13 2019 Sinny Kumari <skumari@redhat.com> - 2.0.0-9
 - Resolves: rhbz#1667444 -  sssd: make python3-sssdconfig as suggest
 
