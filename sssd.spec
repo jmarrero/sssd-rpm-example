@@ -36,14 +36,14 @@
 
 Name: sssd
 Version: 2.1.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
-# Patch0001:
+Patch0001: 0001-GPO-Add-option-ad_gpo_ignore_unreadable.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1068,6 +1068,13 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+
+* Wed Mar 27 2019 Michal Židek <mzidek@redhat.com> - 2.1.0-2
+- Resolves: upstream#3867 - [RFE] Need an option in SSSD so that it will skip
+                             GPOs that have groupPolicyContainers unreadable
+                             by SSSD.
+- CVE-2018-16838
+
 * Wed Mar 27 2019 Michal Židek <mzidek@redhat.com> - 2.1.0-1
 - Update to latest released upstream version
 - https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_2_1_0.html
