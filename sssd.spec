@@ -35,15 +35,15 @@
 %endif
 
 Name: sssd
-Version: 2.1.0
-Release: 2%{?dist}
+Version: 2.2.0
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
-Patch0001: 0001-GPO-Add-option-ad_gpo_ignore_unreadable.patch
+#Patch0001: ...
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -461,7 +461,7 @@ UIDs/GIDs to names and vice versa. It can be also used for mapping principal
 (user) name to IDs(UID or GID) or to obtain groups which user are member of.
 
 %package -n libsss_certmap
-Summary: SSSD Certficate Mapping Library
+Summary: SSSD Certificate Mapping Library
 License: LGPLv3+
 Conflicts: sssd-common < %{version}-%{release}
 
@@ -469,7 +469,7 @@ Conflicts: sssd-common < %{version}-%{release}
 Library to map certificates to users based on rules
 
 %package -n libsss_certmap-devel
-Summary: SSSD Certficate Mapping Library
+Summary: SSSD Certificate Mapping Library
 License: LGPLv3+
 Requires: libsss_certmap = %{version}-%{release}
 
@@ -1068,6 +1068,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Jun 17 2019 Michal Židek <mzidek@redhat.com> - 2.2.0-1
+- Update to latest released upstream version
+- https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_2_2_0.html
 
 * Wed Mar 27 2019 Michal Židek <mzidek@redhat.com> - 2.1.0-2
 - Resolves: upstream#3867 - [RFE] Need an option in SSSD so that it will skip
