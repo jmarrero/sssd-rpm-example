@@ -539,14 +539,14 @@ autoreconf -ivf
 
 make %{?_smp_mflags} all docs
 
+sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
+
 %check
 export CK_TIMEOUT_MULTIPLIER=10
 make %{?_smp_mflags} check VERBOSE=yes
 unset CK_TIMEOUT_MULTIPLIER
 
 %install
-
-sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
 
 make install DESTDIR=$RPM_BUILD_ROOT
 
