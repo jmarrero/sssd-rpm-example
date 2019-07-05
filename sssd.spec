@@ -36,14 +36,14 @@
 
 Name: sssd
 Version: 2.2.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
-#Patch0001: ...
+Patch0001: 0001-PROXY-Return-data-in-output-parameter-if-everything-.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1068,6 +1068,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Jul  5 2019 Jakub Hrozek <jhrozek@redhat.com> - 2.2.0-2
+- Resolves: rhbz#1724717 - sssd-proxy crashes resolving groups with
+                           no members
+
 * Mon Jun 17 2019 Michal Židek <mzidek@redhat.com> - 2.2.0-1
 - Update to latest released upstream version
 - https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_2_2_0.html
