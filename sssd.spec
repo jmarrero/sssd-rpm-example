@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.0
-Release: 4%{?dist}
+Release: 5%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -1069,6 +1069,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Aug 19 2019 Miro Hrončok <mhroncok@redhat.com> - 2.2.0-5
+- Rebuilt for Python 3.8
+
 * Sat Jul 27 2019 Fedora Release Engineering <releng@fedoraproject.org> - 2.2.0-4
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_31_Mass_Rebuild
 
