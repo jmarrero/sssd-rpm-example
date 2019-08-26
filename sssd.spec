@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.0
-Release: 5%{?dist}
+Release: 6%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -1069,6 +1069,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Mon Aug 26 2019 Stephen Gallagher <sgallagh@redhat.com> - 2.2.0-6
+- Rebuilding for libldb 2.0.5
+
 * Mon Aug 19 2019 Miro Hrončok <mhroncok@redhat.com> - 2.2.0-5
 - Rebuilt for Python 3.8
 
