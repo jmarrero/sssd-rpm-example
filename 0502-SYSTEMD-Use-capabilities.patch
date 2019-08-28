@@ -17,9 +17,9 @@ index 0c515d34caaa3ea397c4c7e95eef0188df170840..252889dbb2b7b1e651966258e7b76eab
  NotifyAccess=main
  PIDFile=@pidpath@/sssd.pid
 +CapabilityBoundingSet=CAP_IPC_LOCK CAP_CHOWN CAP_DAC_READ_SEARCH CAP_KILL CAP_NET_ADMIN CAP_SYS_NICE CAP_FOWNER CAP_SETGID CAP_SETUID CAP_SYS_ADMIN CAP_SYS_RESOURCE CAP_BLOCK_SUSPEND
+ Restart=on-failure
  
  [Install]
- WantedBy=multi-user.target
 -- 
 2.15.1
 

@@ -35,16 +35,14 @@
 %endif
 
 Name: sssd
-Version: 2.2.0
-Release: 6%{?dist}
+Version: 2.2.2
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
-Patch0001: 0001-PROXY-Return-data-in-output-parameter-if-everything-.patch
-Patch0002: 0002-MONITOR-Don-t-check-for-the-nscd-socket-while-regene.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1069,6 +1067,11 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Sep 11 2019 Michal Židek <mzidek@redhat.com> - 2.2.2-1
+- Update to latest released upstream version
+- https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_2_2_2.html
+- https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_2_2_1.html
+
 * Mon Aug 26 2019 Stephen Gallagher <sgallagh@redhat.com> - 2.2.0-6
 - Rebuilding for libldb 2.0.5
 
