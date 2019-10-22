@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.2
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -48,6 +48,10 @@ Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 # https://github.com/SSSD/sssd/pull/904
 # https://bugzilla.redhat.com/show_bug.cgi?id=1757224
 Patch0: 0001-KCM-Set-kdc_offset-to-zero-initially.patch
+# Workaround a problem setting up replica in containers
+# https://github.com/SSSD/sssd/pull/900
+# https://bugzilla.redhat.com/show_bug.cgi?id=1755643
+Patch1: 0001-SSS_CLIENT-got-rid-of-using-PRNG.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1072,6 +1076,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Oct 22 2019 Adam Williamson <awilliam@redhat.com> - 2.2.2-3
+- Resolves: rhbz#1755643 - Upgrade to sssd 2.2.2-1.fc30 breaks setting
+                           up FreeIPA replica in containers
+
 * Tue Oct 22 2019 Adam Williamson <awilliam@redhat.com> - 2.2.2-2
 - Resolves: rhbz#1757224 - Tickets act like they're expiring prematurely
                            when using KCM cache
