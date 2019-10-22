@@ -36,13 +36,18 @@
 
 Name: sssd
 Version: 2.2.2
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
 Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 
 ### Patches ###
+
+# Fix KCM cached tickets behaving as if expired shortly after issue
+# https://github.com/SSSD/sssd/pull/904
+# https://bugzilla.redhat.com/show_bug.cgi?id=1757224
+Patch0: 0001-KCM-Set-kdc_offset-to-zero-initially.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1067,6 +1072,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Oct 22 2019 Adam Williamson <awilliam@redhat.com> - 2.2.2-2
+- Resolves: rhbz#1757224 - Tickets act like they're expiring prematurely
+                           when using KCM cache
+
 * Wed Sep 11 2019 Michal Židek <mzidek@redhat.com> - 2.2.2-1
 - Update to latest released upstream version
 - https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_2_2_2.html

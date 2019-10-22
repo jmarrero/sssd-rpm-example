@@ -1,0 +1,41 @@
+From 2c9bdcf579e430fa8f7e5595a17cf7242adb5216 Mon Sep 17 00:00:00 2001
+From: Jakub Hrozek <jhrozek@redhat.com>
+Date: Fri, 11 Oct 2019 09:20:20 +0200
+Subject: [PATCH] KCM: Set kdc_offset to zero initially
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Resolves: https://pagure.io/SSSD/sssd/issue/4100
+
+KCM assumed that the client library would always set the KDC offset, but
+that's not always the case, especially when using multiple krb contexts
+from the client application:
+    https://bugzilla.redhat.com/show_bug.cgi?id=1757224#c64
+
+Heimdal also creates ccaches with zero kdc_offset:
+    https://github.com/heimdal/heimdal/commit/9f58896af958ae5e6e3ebde8c48dad4eda841986
+so we should do the same..
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+Reviewed-by: Robbie Harwood <rharwood@redhat.com>
+---
+ src/responder/kcm/kcmsrv_ccache.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ccache.c b/src/responder/kcm/kcmsrv_ccache.c
+index e24da9aa2..66e2752ba 100644
+--- a/src/responder/kcm/kcmsrv_ccache.c
++++ b/src/responder/kcm/kcmsrv_ccache.c
+@@ -82,7 +82,7 @@ errno_t kcm_cc_new(TALLOC_CTX *mem_ctx,
+ 
+     cc->owner.uid = cli_creds_get_uid(owner);
+     cc->owner.gid = cli_creds_get_gid(owner);
+-    cc->kdc_offset = INT32_MAX;
++    cc->kdc_offset = 0;
+ 
+     talloc_set_destructor(cc, kcm_cc_destructor);
+     *_cc = cc;
+-- 
+2.23.0
+
