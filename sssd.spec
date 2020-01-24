@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.2
-Release: 4%{?dist}
+Release: 5%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -53,8 +53,14 @@ Patch0: 0001-KCM-Set-kdc_offset-to-zero-initially.patch
 # https://bugzilla.redhat.com/show_bug.cgi?id=1755643
 Patch1: 0001-SSS_CLIENT-got-rid-of-using-PRNG.patch
 
+
+# Work around samba 4.12.0rc1 dropping a function we use
+Patch2: 0001-Fix-build-failure-against-samba-4.12.0rc1.patch
+
+
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
+
 
 ### Dependencies ###
 
@@ -1076,6 +1082,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Jan 24 2020 Stephen Gallagher <sgallagh@redhat.com> - 2.2.2-5
+- Fix build against samba-4.12.0rc1
+
 * Fri Jan 24 2020 Mohan Boddu <mboddu@bhujji.com> - 2.2.2-4
 - Rebuild for samba-4.12.0rc1
 

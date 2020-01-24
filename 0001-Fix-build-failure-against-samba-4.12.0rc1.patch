@@ -1,0 +1,48 @@
+From 391dc02eafed23892c5752834b18174b6cd54e20 Mon Sep 17 00:00:00 2001
+From: Stephen Gallagher <sgallagh@redhat.com>
+Date: Fri, 24 Jan 2020 15:17:39 +0100
+Subject: [PATCH] Fix build failure against samba 4.12.0rc1
+
+The ndr_pull_get_switch() function was dropped, but it was just a wrapper
+around the ndr_token_peek() function, so we can use this approach on both
+old and new versions of libndr.
+
+Signed-off-by: Stephen Gallagher <sgallagh@redhat.com>
+---
+ src/providers/ad/ad_gpo_ndr.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/providers/ad/ad_gpo_ndr.c b/src/providers/ad/ad_gpo_ndr.c
+index d573033494bc5aa3b56bd698a6860261834e58fd..8f405aa62b1b65a5ab9e4e9131c37fda84c5ffba 100644
+--- a/src/providers/ad/ad_gpo_ndr.c
++++ b/src/providers/ad/ad_gpo_ndr.c
+@@ -105,7 +105,7 @@ ndr_pull_security_ace_object_type(struct ndr_pull *ndr,
+                                   union security_ace_object_type *r)
+ {
+     uint32_t level;
+-    level = ndr_pull_get_switch_value(ndr, r);
++    level = ndr_token_peek(&ndr->switch_list, r);
+     NDR_PULL_CHECK_FLAGS(ndr, ndr_flags);
+     if (ndr_flags & NDR_SCALARS) {
+         NDR_CHECK(ndr_pull_union_align(ndr, 4));
+@@ -135,7 +135,7 @@ ndr_pull_security_ace_object_inherited_type(struct ndr_pull *ndr,
+                                             union security_ace_object_inherited_type *r)
+ {
+     uint32_t level;
+-    level = ndr_pull_get_switch_value(ndr, r);
++    level = ndr_token_peek(&ndr->switch_list, r);
+     NDR_PULL_CHECK_FLAGS(ndr, ndr_flags);
+     if (ndr_flags & NDR_SCALARS) {
+         NDR_CHECK(ndr_pull_union_align(ndr, 4));
+@@ -198,7 +198,7 @@ ndr_pull_security_ace_object_ctr(struct ndr_pull *ndr,
+                                  union security_ace_object_ctr *r)
+ {
+     uint32_t level;
+-    level = ndr_pull_get_switch_value(ndr, r);
++    level = ndr_token_peek(&ndr->switch_list, r);
+     NDR_PULL_CHECK_FLAGS(ndr, ndr_flags);
+     if (ndr_flags & NDR_SCALARS) {
+         NDR_CHECK(ndr_pull_union_align(ndr, 4));
+-- 
+2.24.1
+
