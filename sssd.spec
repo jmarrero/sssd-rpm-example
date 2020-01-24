@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.2
-Release: 3%{?dist}
+Release: 4%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -1076,6 +1076,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Jan 24 2020 Mohan Boddu <mboddu@bhujji.com> - 2.2.2-4
+- Rebuild for samba-4.12.0rc1
+
 * Tue Oct 22 2019 Adam Williamson <awilliam@redhat.com> - 2.2.2-3
 - Resolves: rhbz#1755643 - Upgrade to sssd 2.2.2-1.fc30 breaks setting
                            up FreeIPA replica in containers
