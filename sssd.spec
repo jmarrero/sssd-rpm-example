@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.2
-Release: 5%{?dist}
+Release: 6%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -1082,6 +1082,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Jan 31 2020 Fedora Release Engineering <releng@fedoraproject.org> - 2.2.2-6
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_32_Mass_Rebuild
+
 * Fri Jan 24 2020 Stephen Gallagher <sgallagh@redhat.com> - 2.2.2-5
 - Fix build against samba-4.12.0rc1
 
