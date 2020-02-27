@@ -1,0 +1,55 @@
+From 090cf77a0fd5f300a753667658af3ed763a88e83 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Thu, 26 Sep 2019 20:24:34 +0200
+Subject: [PATCH 12/15] ad: allow booleans for ad_inherit_opts_if_needed()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Currently ad_inherit_opts_if_needed() can only handle strings. With this
+patch it can handle boolean options as well.
+
+Related to https://pagure.io/SSSD/sssd/issue/4131
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/providers/ad/ad_common.c | 23 ++++++++++++++++++++---
+ 1 file changed, 20 insertions(+), 3 deletions(-)
+
+diff --git a/src/providers/ad/ad_common.c b/src/providers/ad/ad_common.c
+index 5540066d4..600e3ceb2 100644
+--- a/src/providers/ad/ad_common.c
++++ b/src/providers/ad/ad_common.c
+@@ -1479,9 +1479,26 @@ errno_t ad_inherit_opts_if_needed(struct dp_option *parent_opts,
+     const char *parent_val = NULL;
+     char *dummy = NULL;
+     char *option_list[2] = { NULL, NULL };
+-
+-    parent_val = dp_opt_get_cstring(parent_opts, opt_id);
+-    if (parent_val != NULL) {
++    bool is_default = true;
++
++    switch (parent_opts[opt_id].type) {
++    case DP_OPT_STRING:
++        parent_val = dp_opt_get_cstring(parent_opts, opt_id);
++        break;
++    case DP_OPT_BOOL:
++        /* For booleans it is hard to say if the option is set or not since
++         * both possible values are valid ones. So we check if the value is
++         * different from the default and skip if it is the default. In this
++         * case the sub-domain option would either be the default as well or
++         * manully set and in both cases we do not have to change it. */
++        is_default = (parent_opts[opt_id].val.boolean
++                                == parent_opts[opt_id].def_val.boolean);
++        break;
++    default:
++        DEBUG(SSSDBG_TRACE_FUNC, "Unsupported type, skipping.\n");
++    }
++
++    if (parent_val != NULL || !is_default) {
+         ret = confdb_get_string(cdb, NULL, subdom_conf_path,
+                                 parent_opts[opt_id].opt_name, NULL, &dummy);
+         if (ret != EOK) {
+-- 
+2.20.1
+

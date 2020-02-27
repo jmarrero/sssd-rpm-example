@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.3
-Release: 8%{?dist}
+Release: 9%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -54,6 +54,10 @@ Patch0008: 0008-data_provider_be-got-rid-of-duplicating-SIGTERM-hand.patch
 Patch0009:  0009-util-server-improved-debug-at-shutdown.patch
 Patch0010: 0010-util-sss_ptr_hash-fixed-double-free-in-sss_ptr_hash_.patch
 Patch0011: 0011-sdap-Add-randomness-to-ldap-connection-timeout.patch
+Patch0012: 0012-ad-allow-booleans-for-ad_inherit_opts_if_needed.patch
+Patch0013: 0013-ad-add-ad_use_ldaps.patch
+Patch0014: 0014-ldap-add-new-option-ldap_sasl_maxssf.patch
+Patch0015: 0015-ad-set-min-and-max-ssf-for-ldaps.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1082,6 +1086,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-9
+- Resolves: upstream#4131 Force LDAPS over 636 with AD Provider
+
 * Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-8
 - Resolves: upstream#3630 - Randomize ldap_connection_expire_timeout either
                             by default or w/ a configure option

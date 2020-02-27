@@ -1,0 +1,199 @@
+From 78649907b81b4bdaf8fc6a6e6ae55ed3cd5419f5 Mon Sep 17 00:00:00 2001
+From: Sumit Bose <sbose@redhat.com>
+Date: Fri, 27 Sep 2019 11:49:59 +0200
+Subject: [PATCH 14/15] ldap: add new option ldap_sasl_maxssf
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+There is already the ldap_sasl_minssf option. To be able to control the
+maximal security strength factor (ssf) e.g. when using SASL together
+with TLS the option ldap_sasl_maxssf is added as well.
+
+Related to https://pagure.io/SSSD/sssd/issue/4131
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/config/SSSDConfig/__init__.py.in       |  1 +
+ src/config/cfg_rules.ini                   |  1 +
+ src/config/etc/sssd.api.d/sssd-ad.conf     |  1 +
+ src/config/etc/sssd.api.d/sssd-ipa.conf    |  1 +
+ src/config/etc/sssd.api.d/sssd-ldap.conf   |  1 +
+ src/man/sssd-ldap.5.xml                    | 16 ++++++++++++++++
+ src/providers/ad/ad_opts.c                 |  1 +
+ src/providers/ipa/ipa_opts.c               |  1 +
+ src/providers/ldap/ldap_opts.c             |  1 +
+ src/providers/ldap/sdap.h                  |  1 +
+ src/providers/ldap/sdap_async_connection.c | 14 ++++++++++++++
+ 11 files changed, 39 insertions(+)
+
+diff --git a/src/config/SSSDConfig/__init__.py.in b/src/config/SSSDConfig/__init__.py.in
+index 6c2a1ce44..b3035fcff 100644
+--- a/src/config/SSSDConfig/__init__.py.in
++++ b/src/config/SSSDConfig/__init__.py.in
+@@ -306,6 +306,7 @@ option_strings = {
+     'ldap_sasl_authid' : _('Specify the sasl authorization id to use'),
+     'ldap_sasl_realm' : _('Specify the sasl authorization realm to use'),
+     'ldap_sasl_minssf' : _('Specify the minimal SSF for LDAP sasl authorization'),
++    'ldap_sasl_maxssf' : _('Specify the maximal SSF for LDAP sasl authorization'),
+     'ldap_krb5_keytab' : _('Kerberos service keytab'),
+     'ldap_krb5_init_creds' : _('Use Kerberos auth for LDAP connection'),
+     'ldap_referrals' : _('Follow LDAP referrals'),
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index 478ca9eb4..286443be4 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -665,6 +665,7 @@ option = ldap_sasl_authid
+ option = ldap_sasl_canonicalize
+ option = ldap_sasl_mech
+ option = ldap_sasl_minssf
++option = ldap_sasl_maxssf
+ option = ldap_schema
+ option = ldap_pwmodify_mode
+ option = ldap_search_base
+diff --git a/src/config/etc/sssd.api.d/sssd-ad.conf b/src/config/etc/sssd.api.d/sssd-ad.conf
+index 51cdad536..4d10e69d7 100644
+--- a/src/config/etc/sssd.api.d/sssd-ad.conf
++++ b/src/config/etc/sssd.api.d/sssd-ad.conf
+@@ -42,6 +42,7 @@ ldap_tls_reqcert = str, None, false
+ ldap_sasl_mech = str, None, false
+ ldap_sasl_authid = str, None, false
+ ldap_sasl_minssf = int, None, false
++ldap_sasl_maxssf = int, None, false
+ krb5_kdcip = str, None, false
+ krb5_server = str, None, false
+ krb5_backup_server = str, None, false
+diff --git a/src/config/etc/sssd.api.d/sssd-ipa.conf b/src/config/etc/sssd.api.d/sssd-ipa.conf
+index 7ed153d36..839f9f471 100644
+--- a/src/config/etc/sssd.api.d/sssd-ipa.conf
++++ b/src/config/etc/sssd.api.d/sssd-ipa.conf
+@@ -32,6 +32,7 @@ ldap_tls_reqcert = str, None, false
+ ldap_sasl_mech = str, None, false
+ ldap_sasl_authid = str, None, false
+ ldap_sasl_minssf = int, None, false
++ldap_sasl_maxssf = int, None, false
+ krb5_kdcip = str, None, false
+ krb5_server = str, None, false
+ krb5_backup_server = str, None, false
+diff --git a/src/config/etc/sssd.api.d/sssd-ldap.conf b/src/config/etc/sssd.api.d/sssd-ldap.conf
+index 4f73e901e..6db9828b9 100644
+--- a/src/config/etc/sssd.api.d/sssd-ldap.conf
++++ b/src/config/etc/sssd.api.d/sssd-ldap.conf
+@@ -35,6 +35,7 @@ ldap_page_size = int, None, false
+ ldap_deref_threshold = int, None, false
+ ldap_sasl_canonicalize = bool, None, false
+ ldap_sasl_minssf = int, None, false
++ldap_sasl_maxssf = int, None, false
+ ldap_connection_expire_timeout = int, None, false
+ ldap_connection_expire_offset = int, None, false
+ ldap_disable_paging = bool, None, false
+diff --git a/src/man/sssd-ldap.5.xml b/src/man/sssd-ldap.5.xml
+index f8bb973c7..0dc675410 100644
+--- a/src/man/sssd-ldap.5.xml
++++ b/src/man/sssd-ldap.5.xml
+@@ -612,6 +612,22 @@
+                     </listitem>
+                 </varlistentry>
+ 
++                <varlistentry>
++                    <term>ldap_sasl_maxssf (integer)</term>
++                    <listitem>
++                        <para>
++                            When communicating with an LDAP server using SASL,
++                            specify the maximal security level necessary to
++                            establish the connection. The values of this
++                            option are defined by OpenLDAP.
++                        </para>
++                        <para>
++                            Default: Use the system default (usually specified
++                            by ldap.conf)
++                        </para>
++                    </listitem>
++                </varlistentry>
++
+                 <varlistentry>
+                     <term>ldap_deref_threshold (integer)</term>
+                     <listitem>
+diff --git a/src/providers/ad/ad_opts.c b/src/providers/ad/ad_opts.c
+index 26420d655..e9a3dd6ef 100644
+--- a/src/providers/ad/ad_opts.c
++++ b/src/providers/ad/ad_opts.c
+@@ -106,6 +106,7 @@ struct dp_option ad_def_ldap_opts[] = {
+     { "ldap_sasl_authid", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "ldap_sasl_realm", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "ldap_sasl_minssf", DP_OPT_NUMBER, { .number = -1 }, NULL_NUMBER },
++    { "ldap_sasl_maxssf", DP_OPT_NUMBER, { .number = -1 }, NULL_NUMBER },
+     { "ldap_krb5_keytab", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "ldap_krb5_init_creds", DP_OPT_BOOL, BOOL_TRUE, BOOL_TRUE },
+     /* use the same parm name as the krb5 module so we set it only once */
+diff --git a/src/providers/ipa/ipa_opts.c b/src/providers/ipa/ipa_opts.c
+index 4fafa073d..55de6e600 100644
+--- a/src/providers/ipa/ipa_opts.c
++++ b/src/providers/ipa/ipa_opts.c
+@@ -114,6 +114,7 @@ struct dp_option ipa_def_ldap_opts[] = {
+     { "ldap_sasl_authid", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "ldap_sasl_realm", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "ldap_sasl_minssf", DP_OPT_NUMBER, { .number = 56 }, NULL_NUMBER },
++    { "ldap_sasl_maxssf", DP_OPT_NUMBER, { .number = -1 }, NULL_NUMBER },
+     { "ldap_krb5_keytab", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "ldap_krb5_init_creds", DP_OPT_BOOL, BOOL_TRUE, BOOL_TRUE },
+     /* use the same parm name as the krb5 module so we set it only once */
+diff --git a/src/providers/ldap/ldap_opts.c b/src/providers/ldap/ldap_opts.c
+index ffd0c6baa..d1b4e98ad 100644
+--- a/src/providers/ldap/ldap_opts.c
++++ b/src/providers/ldap/ldap_opts.c
+@@ -74,6 +74,7 @@ struct dp_option default_basic_opts[] = {
+     { "ldap_sasl_authid", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "ldap_sasl_realm", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "ldap_sasl_minssf", DP_OPT_NUMBER, { .number = -1 }, NULL_NUMBER },
++    { "ldap_sasl_maxssf", DP_OPT_NUMBER, { .number = -1 }, NULL_NUMBER },
+     { "ldap_krb5_keytab", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "ldap_krb5_init_creds", DP_OPT_BOOL, BOOL_TRUE, BOOL_TRUE },
+     /* use the same parm name as the krb5 module so we set it only once */
+diff --git a/src/providers/ldap/sdap.h b/src/providers/ldap/sdap.h
+index f27b3c480..808a2c400 100644
+--- a/src/providers/ldap/sdap.h
++++ b/src/providers/ldap/sdap.h
+@@ -192,6 +192,7 @@ enum sdap_basic_opt {
+     SDAP_SASL_AUTHID,
+     SDAP_SASL_REALM,
+     SDAP_SASL_MINSSF,
++    SDAP_SASL_MAXSSF,
+     SDAP_KRB5_KEYTAB,
+     SDAP_KRB5_KINIT,
+     SDAP_KRB5_KDC,
+diff --git a/src/providers/ldap/sdap_async_connection.c b/src/providers/ldap/sdap_async_connection.c
+index 7438d14a7..5f69cedcc 100644
+--- a/src/providers/ldap/sdap_async_connection.c
++++ b/src/providers/ldap/sdap_async_connection.c
+@@ -148,6 +148,8 @@ static void sdap_sys_connect_done(struct tevent_req *subreq)
+     const char *sasl_mech;
+     int sasl_minssf;
+     ber_len_t ber_sasl_minssf;
++    int sasl_maxssf;
++    ber_len_t ber_sasl_maxssf;
+ 
+     ret = sss_ldap_init_recv(subreq, &state->sh->ldap, &sd);
+     talloc_zfree(subreq);
+@@ -291,6 +293,18 @@ static void sdap_sys_connect_done(struct tevent_req *subreq)
+                 goto fail;
+             }
+         }
++
++        sasl_maxssf = dp_opt_get_int(state->opts->basic, SDAP_SASL_MAXSSF);
++        if (sasl_maxssf >= 0) {
++            ber_sasl_maxssf = (ber_len_t)sasl_maxssf;
++            lret = ldap_set_option(state->sh->ldap, LDAP_OPT_X_SASL_SSF_MAX,
++                                   &ber_sasl_maxssf);
++            if (lret != LDAP_OPT_SUCCESS) {
++                DEBUG(SSSDBG_CRIT_FAILURE, "Failed to set LDAP MAX SSF option "
++                                            "to %d\n", sasl_maxssf);
++                goto fail;
++            }
++        }
+     }
+ 
+     /* if we do not use start_tls the connection is not really connected yet
+-- 
+2.20.1
+
