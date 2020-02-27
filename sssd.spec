@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.3
-Release: 11%{?dist}
+Release: 12%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -59,6 +59,7 @@ Patch0013: 0013-ad-add-ad_use_ldaps.patch
 Patch0014: 0014-ldap-add-new-option-ldap_sasl_maxssf.patch
 Patch0015: 0015-ad-set-min-and-max-ssf-for-ldaps.patch
 Patch0016: 0016-BE_REFRESH-Do-not-try-to-refresh-domains-from-other-.patch
+Patch0017: 0017-sysdb_sudo-Enable-LDAP-time-format-compatibility.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1088,6 +1089,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-11
+- Resolves: upstream#4118 - sssd requires timed sudoers ldap entries to be
+  specified up to the seconds
+
 * Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-11
 - Add sssd-dbus package as a dependency of sssd-tools
 
