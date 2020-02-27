@@ -60,6 +60,13 @@ Patch0014: 0014-ldap-add-new-option-ldap_sasl_maxssf.patch
 Patch0015: 0015-ad-set-min-and-max-ssf-for-ldaps.patch
 Patch0016: 0016-BE_REFRESH-Do-not-try-to-refresh-domains-from-other-.patch
 Patch0017: 0017-sysdb_sudo-Enable-LDAP-time-format-compatibility.patch
+Patch0018: 0018-sbus_server-stylistic-rename.patch
+Patch0019: 0019-sss_ptr_hash-don-t-keep-empty-sss_ptr_hash_delete_da.patch
+Patch0020: 0020-sss_ptr_hash-sss_ptr_hash_delete-fix-optimization.patch
+Patch0021: 0021-sss_ptr_hash-removed-redundant-check.patch
+Patch0022: 0022-sss_ptr_hash-fixed-memory-leak.patch
+Patch0023: 0023-sss_ptr_hash-internal-refactoring.patch
+Patch0024: 0024-TESTS-added-sss_ptr_hash-unit-test.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1089,6 +1096,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-12
+- Resolves: upstream#4135 - util/sss_ptr_hash.c: potential double free in
+                            `sss_ptr_hash_delete_cb()`
+
 * Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-11
 - Resolves: upstream#4118 - sssd requires timed sudoers ldap entries to be
   specified up to the seconds

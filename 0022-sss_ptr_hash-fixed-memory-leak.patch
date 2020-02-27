@@ -1,0 +1,53 @@
+From 4bc0c2c7833dd643fc1137daf6519670c05c3736 Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Thu, 23 Jan 2020 21:11:16 +0100
+Subject: [PATCH 22/24] sss_ptr_hash: fixed memory leak
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In case `override` check was failed in _sss_ptr_hash_add()
+`value` was leaking.
+Fixed to do `override` check before value allocation.
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/util/sss_ptr_hash.c | 14 +++++++-------
+ 1 file changed, 7 insertions(+), 7 deletions(-)
+
+diff --git a/src/util/sss_ptr_hash.c b/src/util/sss_ptr_hash.c
+index bf111a613..114b6edeb 100644
+--- a/src/util/sss_ptr_hash.c
++++ b/src/util/sss_ptr_hash.c
+@@ -217,21 +217,21 @@ errno_t _sss_ptr_hash_add(hash_table_t *table,
+         return ERR_INVALID_DATA_TYPE;
+     }
+ 
++    table_key.type = HASH_KEY_STRING;
++    table_key.str = discard_const_p(char, key);
++
++    if (override == false && hash_has_key(table, &table_key)) {
++        return EEXIST;
++    }
++
+     value = sss_ptr_hash_value_create(table, key, talloc_ptr);
+     if (value == NULL) {
+         return ENOMEM;
+     }
+ 
+-    table_key.type = HASH_KEY_STRING;
+-    table_key.str = discard_const_p(char, key);
+-
+     table_value.type = HASH_VALUE_PTR;
+     table_value.ptr = value;
+ 
+-    if (override == false && hash_has_key(table, &table_key)) {
+-        return EEXIST;
+-    }
+-
+     hret = hash_enter(table, &table_key, &table_value);
+     if (hret != HASH_SUCCESS) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Unable to add key %s!\n", key);
+-- 
+2.20.1
+
