@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.3
-Release: 9%{?dist}
+Release: 10%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -58,6 +58,7 @@ Patch0012: 0012-ad-allow-booleans-for-ad_inherit_opts_if_needed.patch
 Patch0013: 0013-ad-add-ad_use_ldaps.patch
 Patch0014: 0014-ldap-add-new-option-ldap_sasl_maxssf.patch
 Patch0015: 0015-ad-set-min-and-max-ssf-for-ldaps.patch
+Patch0016: 0016-BE_REFRESH-Do-not-try-to-refresh-domains-from-other-.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1086,6 +1087,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-10
+- Resolves: upstream#4142 - sssd_be frequent crash
+
 * Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-9
 - Resolves: upstream#4131 Force LDAPS over 636 with AD Provider
 

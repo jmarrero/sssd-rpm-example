@@ -1,0 +1,36 @@
+From 007d5b79b7aef67dd843ed9a3b65095faaeb580f Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Wed, 22 Jan 2020 09:43:21 +0000
+Subject: [PATCH] BE_REFRESH: Do not try to refresh domains from other backends
+
+We cannot refresh domains from different sssd_be processes.
+We can refresh just subdomains
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/4142
+
+Merges: https://pagure.io/SSSD/sssd/pull-request/4139
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/providers/be_refresh.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/src/providers/be_refresh.c b/src/providers/be_refresh.c
+index 6cce38390..5e43571ce 100644
+--- a/src/providers/be_refresh.c
++++ b/src/providers/be_refresh.c
+@@ -385,6 +385,10 @@ static errno_t be_refresh_step(struct tevent_req *req)
+         if (state->index == BE_REFRESH_TYPE_SENTINEL) {
+             state->domain = get_next_domain(state->domain,
+                                             SSS_GND_DESCEND);
++            /* we can update just subdomains */
++            if (state->domain != NULL && !IS_SUBDOMAIN(state->domain)) {
++                break;
++            }
+             state->index = 0;
+             continue;
+         }
+-- 
+2.20.1
+
