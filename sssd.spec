@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.3
-Release: 12%{?dist}
+Release: 13%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -67,6 +67,8 @@ Patch0021: 0021-sss_ptr_hash-removed-redundant-check.patch
 Patch0022: 0022-sss_ptr_hash-fixed-memory-leak.patch
 Patch0023: 0023-sss_ptr_hash-internal-refactoring.patch
 Patch0024: 0024-TESTS-added-sss_ptr_hash-unit-test.patch
+Patch0025: 0025-p11_child-check-if-card-is-present-in-wait_for_card.patch
+Patch0026: 0026-PAM-client-only-require-UID-0-for-private-socket.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1096,6 +1098,11 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-13
+- Resolves: upstream#4159 - p11_child should have an option to skip
+                            C_WaitForSlotEvent if the PKCS#11 module does not
+                            implement it properly
+
 * Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-12
 - Resolves: upstream#4135 - util/sss_ptr_hash.c: potential double free in
                             `sss_ptr_hash_delete_cb()`
