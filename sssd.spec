@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.3
-Release: 7%{?dist}
+Release: 8%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -53,6 +53,7 @@ Patch0007: 0007-providers-krb5-got-rid-of-unused-code.patch
 Patch0008: 0008-data_provider_be-got-rid-of-duplicating-SIGTERM-hand.patch
 Patch0009:  0009-util-server-improved-debug-at-shutdown.patch
 Patch0010: 0010-util-sss_ptr_hash-fixed-double-free-in-sss_ptr_hash_.patch
+Patch0011: 0011-sdap-Add-randomness-to-ldap-connection-timeout.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1081,6 +1082,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-8
+- Resolves: upstream#3630 - Randomize ldap_connection_expire_timeout either
+                            by default or w/ a configure option
+
 * Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-7
 - Resolves: upstream#4135 - util/sss_ptr_hash.c: potential double free in
                             `sss_ptr_hash_delete_cb()`
