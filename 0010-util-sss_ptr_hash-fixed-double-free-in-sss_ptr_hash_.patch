@@ -1,0 +1,52 @@
+From 26e33b1984cce3549df170f58f8221201ad54cfd Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Tue, 7 Jan 2020 16:29:05 +0100
+Subject: [PATCH] util/sss_ptr_hash: fixed double free in
+ sss_ptr_hash_delete_cb()
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Calling data->callback(value->ptr) in sss_ptr_hash_delete_cb() could lead
+to freeing of value->ptr and thus to destruction of value->spy that is
+attached to value->ptr.
+In turn sss_ptr_hash_spy_destructor() calls sss_ptr_hash_delete() ->
+hash_delete() -> sss_ptr_hash_delete_cb() again and in this recursive
+execution hash entry was actually deleted and value was freed.
+When stack was unwound back to "first" sss_ptr_hash_delete_cb() it tried
+to free value again => double free.
+
+To prevent this bug value and hence spy are now freed before execution of
+data->callback(value->ptr).
+
+Resolves: https://pagure.io/SSSD/sssd/issue/4135
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ src/util/sss_ptr_hash.c | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/util/sss_ptr_hash.c b/src/util/sss_ptr_hash.c
+index c7403ffa6..8f9762cb9 100644
+--- a/src/util/sss_ptr_hash.c
++++ b/src/util/sss_ptr_hash.c
+@@ -154,13 +154,13 @@ sss_ptr_hash_delete_cb(hash_entry_t *item,
+     callback_entry.value.type = HASH_VALUE_PTR;
+     callback_entry.value.ptr = value->ptr;
+ 
++    /* Free value, this also will disable spy */
++    talloc_free(value);
++
+     /* Switch to the input value and call custom callback. */
+     if (data->callback != NULL) {
+         data->callback(&callback_entry, deltype, data->pvt);
+     }
+-
+-    /* Free value. */
+-    talloc_free(value);
+ }
+ 
+ hash_table_t *sss_ptr_hash_create(TALLOC_CTX *mem_ctx,
+-- 
+2.20.1
+
