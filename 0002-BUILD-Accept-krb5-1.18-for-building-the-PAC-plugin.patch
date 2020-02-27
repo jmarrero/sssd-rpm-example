@@ -1,0 +1,29 @@
+From 399ee9d1af9cca4026ce50c58ce25c45a30c85c2 Mon Sep 17 00:00:00 2001
+From: Lukas Slebodnik <lslebodn@redhat.com>
+Date: Sat, 1 Feb 2020 17:39:07 +0000
+Subject: [PATCH] BUILD: Accept krb5 1.18 for building the PAC plugin
+
+Merges: https://pagure.io/SSSD/sssd/pull-request/4152
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/external/pac_responder.m4 | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/src/external/pac_responder.m4 b/src/external/pac_responder.m4
+index dc986a1b8..114d8470f 100644
+--- a/src/external/pac_responder.m4
++++ b/src/external/pac_responder.m4
+@@ -19,7 +19,8 @@ then
+         Kerberos\ 5\ release\ 1.14* | \
+         Kerberos\ 5\ release\ 1.15* | \
+         Kerberos\ 5\ release\ 1.16* | \
+-        Kerberos\ 5\ release\ 1.17*)
++        Kerberos\ 5\ release\ 1.17* | \
++        Kerberos\ 5\ release\ 1.18*)
+             krb5_version_ok=yes
+             AC_MSG_RESULT([yes])
+             ;;
+-- 
+2.20.1
+
