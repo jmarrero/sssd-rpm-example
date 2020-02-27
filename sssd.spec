@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.3
-Release: 5%{?dist}
+Release: 6%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -49,6 +49,9 @@ Patch0003: 0003-INI-sssctl-config-check-command-error-messages.patch
 Patch0004: 0004-certmap-mention-special-regex-characters-in-man-page.patch
 Patch0005: 0005-ldap_child-do-not-try-PKINIT.patch
 Patch0006: 0006-util-watchdog-fixed-watchdog-implementation.patch
+Patch0007: 0007-providers-krb5-got-rid-of-unused-code.patch
+Patch0008: 0008-data_provider_be-got-rid-of-duplicating-SIGTERM-hand.patch
+Patch0009:  0009-util-server-improved-debug-at-shutdown.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1077,6 +1080,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-6
+- Resolves: upstream#4088 - server/be: SIGTERM handling is incorrect
+
 * Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-5
 - Resolves: upstream##4089 Watchdog implementation or usage is incorrect
 
