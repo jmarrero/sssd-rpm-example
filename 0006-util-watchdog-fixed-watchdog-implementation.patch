@@ -1,0 +1,52 @@
+From 2c13d8bd00f1e8ff30e9fc81f183f6450303ac30 Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Wed, 11 Dec 2019 18:42:49 +0100
+Subject: [PATCH] util/watchdog: fixed watchdog implementation
+
+In case watchdog detected locked process and this process was parent
+process it just sent SIGTERM to the whole group of processes, including
+itself.
+This handling was wrong: generic `server_setup()` installs custom
+libtevent handler for SIGTERM signal so this signal is only processed
+in the context of tevent mainloop. But if tevent mainloop is stuck
+(exactly the case that triggers WD) then event is not processed
+and this made watchdog useless.
+`watchdog_handler()` and `watchdog_detect_timeshift()` were amended to do
+unconditional `_exit()` after optionally sending a signal to the group.
+
+Resolves: https://pagure.io/SSSD/sssd/issue/4089
+
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/util/util_watchdog.c | 6 ++----
+ 1 file changed, 2 insertions(+), 4 deletions(-)
+
+diff --git a/src/util/util_watchdog.c b/src/util/util_watchdog.c
+index a07275b19..38c248271 100644
+--- a/src/util/util_watchdog.c
++++ b/src/util/util_watchdog.c
+@@ -54,9 +54,8 @@ static void watchdog_detect_timeshift(void)
+         if (write(watchdog_ctx.pipefd[1], "1", 1) != 1) {
+             if (getpid() == getpgrp()) {
+                 kill(-getpgrp(), SIGTERM);
+-            } else {
+-                _exit(1);
+             }
++            _exit(1);
+         }
+     }
+ }
+@@ -75,9 +74,8 @@ static void watchdog_handler(int sig)
+     if (__sync_add_and_fetch(&watchdog_ctx.ticks, 1) > WATCHDOG_MAX_TICKS) {
+         if (getpid() == getpgrp()) {
+             kill(-getpgrp(), SIGTERM);
+-        } else {
+-            _exit(1);
+         }
++        _exit(1);
+     }
+ }
+ 
+-- 
+2.20.1
+
