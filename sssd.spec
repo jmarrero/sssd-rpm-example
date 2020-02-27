@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.3
-Release: 10%{?dist}
+Release: 11%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -224,6 +224,7 @@ Requires: sssd-common = %{version}-%{release}
 # required by sss_obfuscate
 Requires: python3-sss = %{version}-%{release}
 Requires: python3-sssdconfig = %{version}-%{release}
+Recommends: sssd-dbus
 
 %description tools
 Provides userspace tools for manipulating users, groups, and nested groups in
@@ -1087,6 +1088,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-11
+- Add sssd-dbus package as a dependency of sssd-tools
+
 * Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-10
 - Resolves: upstream#4142 - sssd_be frequent crash
 
