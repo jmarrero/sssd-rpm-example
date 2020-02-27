@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.2.3
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://pagure.io/SSSD/sssd/
@@ -45,6 +45,7 @@ Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
 ### Patches ###
 Patch0001: 0001-Fix-build-failure-against-samba-4.12.0rc1.patch
 Patch0002: 0002-BUILD-Accept-krb5-1.18-for-building-the-PAC-plugin.patch
+Patch0003: 0003-INI-sssctl-config-check-command-error-messages.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1073,6 +1074,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-2
+- Resolves: upstream#4129 - sssctl config-check command does not give proper
+                            error messages with line numbers
+
 * Wed Feb 26 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-1
 - Update to latest released upstream version
 - https://docs.pagure.org/SSSD.sssd/users/relnotes/notes_2_2_3.htm

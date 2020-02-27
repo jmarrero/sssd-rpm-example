@@ -1,0 +1,35 @@
+From b626651847e188e89a332b8ac4bfaaa5047e1b3d Mon Sep 17 00:00:00 2001
+From: Tomas Halman <thalman@redhat.com>
+Date: Tue, 10 Dec 2019 16:30:32 +0100
+Subject: [PATCH] INI: sssctl config-check command error messages
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+In case of parsing error sssctl config-check command does not give
+proper error messages with line number. With this patch the error
+message is printed again.
+
+Resolves:
+https://pagure.io/SSSD/sssd/issue/4129
+
+Reviewed-by: Michal Židek <mzidek@redhat.com>
+---
+ src/util/sss_ini.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/src/util/sss_ini.c b/src/util/sss_ini.c
+index e3699805d..5d91602cd 100644
+--- a/src/util/sss_ini.c
++++ b/src/util/sss_ini.c
+@@ -865,6 +865,7 @@ int sss_ini_read_sssd_conf(struct sss_ini *self,
+ 
+     ret = sss_ini_parse(self);
+     if (ret != EOK) {
++        sss_ini_config_print_errors(self->error_list);
+         DEBUG(SSSDBG_FATAL_FAILURE, "Failed to parse configuration.\n");
+         return ERR_INI_PARSE_FAILED;
+     }
+-- 
+2.20.1
+
