@@ -35,41 +35,15 @@
 %endif
 
 Name: sssd
-Version: 2.2.3
-Release: 14%{?dist}
+Version: 2.3.0
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
-URL: https://pagure.io/SSSD/sssd/
-Source0: https://releases.pagure.org/SSSD/sssd/%{name}-%{version}.tar.gz
+URL: https://gihub.com/SSSD/sssd/
+Source0: https://github.com/SSSD/sssd/releases/download/sssd-2_3_0/sssd-2.3.0.tar.gz
 
 ### Patches ###
-Patch0001: 0001-Fix-build-failure-against-samba-4.12.0rc1.patch
-Patch0002: 0002-BUILD-Accept-krb5-1.18-for-building-the-PAC-plugin.patch
-Patch0003: 0003-INI-sssctl-config-check-command-error-messages.patch
-Patch0004: 0004-certmap-mention-special-regex-characters-in-man-page.patch
-Patch0005: 0005-ldap_child-do-not-try-PKINIT.patch
-Patch0006: 0006-util-watchdog-fixed-watchdog-implementation.patch
-Patch0007: 0007-providers-krb5-got-rid-of-unused-code.patch
-Patch0008: 0008-data_provider_be-got-rid-of-duplicating-SIGTERM-hand.patch
-Patch0009:  0009-util-server-improved-debug-at-shutdown.patch
-Patch0010: 0010-util-sss_ptr_hash-fixed-double-free-in-sss_ptr_hash_.patch
-Patch0011: 0011-sdap-Add-randomness-to-ldap-connection-timeout.patch
-Patch0012: 0012-ad-allow-booleans-for-ad_inherit_opts_if_needed.patch
-Patch0013: 0013-ad-add-ad_use_ldaps.patch
-Patch0014: 0014-ldap-add-new-option-ldap_sasl_maxssf.patch
-Patch0015: 0015-ad-set-min-and-max-ssf-for-ldaps.patch
-Patch0016: 0016-BE_REFRESH-Do-not-try-to-refresh-domains-from-other-.patch
-Patch0017: 0017-sysdb_sudo-Enable-LDAP-time-format-compatibility.patch
-Patch0018: 0018-sbus_server-stylistic-rename.patch
-Patch0019: 0019-sss_ptr_hash-don-t-keep-empty-sss_ptr_hash_delete_da.patch
-Patch0020: 0020-sss_ptr_hash-sss_ptr_hash_delete-fix-optimization.patch
-Patch0021: 0021-sss_ptr_hash-removed-redundant-check.patch
-Patch0022: 0022-sss_ptr_hash-fixed-memory-leak.patch
-Patch0023: 0023-sss_ptr_hash-internal-refactoring.patch
-Patch0024: 0024-TESTS-added-sss_ptr_hash-unit-test.patch
-Patch0025: 0025-p11_child-check-if-card-is-present-in-wait_for_card.patch
-Patch0026: 0026-PAM-client-only-require-UID-0-for-private-socket.patch
-Patch0027: 0027-nss-Collision-with-external-nss-symbol.patch
+Patch0001: 0001-test-avoid-endian-issues-in-network-tests.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -563,6 +537,7 @@ autoreconf -ivf
 %endif
     --enable-sss-default-nss-plugin \
     --enable-files-domain \
+    --enable-gss-spnego-for-zero-maxssf \
     %{?with_cifs_utils_plugin_option} \
     %{?enable_systemtap_opt}
 
@@ -1099,6 +1074,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed May 20 2020 Pavel Březina <pbrezina@redhat.com> - 2.3.0-1
+- Rebase to SSSD 2.3.0
+
 * Fri Feb 28 2020 Michal Židek <mzidek@redhat.com> - 2.2.3-14
 - Resolves: rhbz#1800567 - sssd fail to build in Fedora rawhide
 
