@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.3.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://gihub.com/SSSD/sssd/
@@ -1074,6 +1074,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue May 26 2020 Miro Hrončok <mhroncok@redhat.com> - 2.3.0-2
+- Rebuilt for Python 3.9
+
 * Wed May 20 2020 Pavel Březina <pbrezina@redhat.com> - 2.3.0-1
 - Rebase to SSSD 2.3.0
 
