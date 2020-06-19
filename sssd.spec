@@ -39,7 +39,7 @@ Version: 2.3.0
 Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
-URL: https://gihub.com/SSSD/sssd/
+URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/sssd-2_3_0/sssd-2.3.0.tar.gz
 
 ### Patches ###
@@ -1074,6 +1074,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Jun 19 2020 Peter Jones <pjones@redhat.com>
+- Fix github url typo
+
 * Tue May 26 2020 Miro Hrončok <mhroncok@redhat.com> - 2.3.0-2
 - Rebuilt for Python 3.9
 
