@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.3.0
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -513,6 +513,11 @@ for p in %patches ; do
 done
 
 %build
+# This package uses -Wl,-wrap to wrap calls at link time.  This is incompatible
+# with LTO.
+# Disable LTO
+%define _lto_cflags %{nil}
+
 autoreconf -ivf
 
 %configure \
@@ -1074,6 +1079,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Wed Jul  1 2020 Jeff Law <law@redhat.com>
+- Disable LTO
+
 * Fri Jun 19 2020 Peter Jones <pjones@redhat.com>
 - Fix github url typo
 
