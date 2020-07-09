@@ -23,7 +23,7 @@
 
     %global with_gdm_pam_extensions 1
 
-%if (0%{?fedora} > 28)
+%if (0%{?fedora} > 28) || (0%{?rhel} > 7)
     %global use_openssl 1
 %endif
 
@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.3.0
-Release: 4%{?dist}
+Release: 5%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -1079,6 +1079,9 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Fri Jul 24 2020 Merlin Mathesius <mmathesi@redhat.com> - 2.3.0-5
+- Minor ELN conditional fix
+
 * Tue Jul 14 2020 Tom Stellard <tstellar@redhat.com> - 2.3.0-4
 - Use make macros
 - https://fedoraproject.org/wiki/Changes/UseMakeBuildInstallMacro
