@@ -36,7 +36,7 @@
 
 Name: sssd
 Version: 2.3.0
-Release: 3%{?dist}
+Release: 4%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -546,18 +546,18 @@ autoreconf -ivf
     %{?with_cifs_utils_plugin_option} \
     %{?enable_systemtap_opt}
 
-make %{?_smp_mflags} all docs
+%make_build all docs
 
 sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
 
 %check
 export CK_TIMEOUT_MULTIPLIER=10
-make %{?_smp_mflags} check VERBOSE=yes
+%make_build check VERBOSE=yes
 unset CK_TIMEOUT_MULTIPLIER
 
 %install
 
-make install DESTDIR=$RPM_BUILD_ROOT
+%make_install
 
 if [ ! -f $RPM_BUILD_ROOT/%{_libdir}/%{name}/modules/libwbclient.so.%{libwbc_lib_version} ]
 then
@@ -1079,6 +1079,10 @@ fi
                                 %{_libdir}/%{name}/modules/libwbclient.so
 
 %changelog
+* Tue Jul 14 2020 Tom Stellard <tstellar@redhat.com> - 2.3.0-4
+- Use make macros
+- https://fedoraproject.org/wiki/Changes/UseMakeBuildInstallMacro
+
 * Wed Jul  1 2020 Jeff Law <law@redhat.com>
 - Disable LTO
 
