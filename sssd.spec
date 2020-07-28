@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 2.3.1
-Release: 3%{?dist}
+Release: 4%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -1016,6 +1016,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Jul 28 2020 Pavel Březina <pbrezina@redhat.com> - 2.3.1-4
+- Actually include 2.3.1 source
+
 * Tue Jul 28 2020 Pavel Březina <pbrezina@redhat.com> - 2.3.1-3
 - Fix test compilation with check-0.15
 
