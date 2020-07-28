@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 2.3.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -502,6 +502,7 @@ autoreconf -ivf
     --with-gpo-cache-path=%{gpocachepath} \
     --with-init-dir=%{_initrddir} \
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
+    --with-pid-path=%{_rundir} \
     --enable-nsslibdir=%{_libdir} \
     --enable-pammoddir=%{_libdir}/security \
     --enable-nfsidmaplibdir=%{_libdir}/libnfsidmap \
@@ -519,7 +520,7 @@ autoreconf -ivf
     %{?with_cifs_utils_plugin_option} \
     %{?enable_systemtap_opt}
 
-%make_build all docs
+%make_build all docs runstatedir=%{_rundir}
 
 sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
 
@@ -1013,6 +1014,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Mon Jul 27 2020 Pavel Březina <pbrezina@redhat.com> - 2.3.1-2
+- Use correct run dir (RHBZ#1557622)
+
 * Fri Jul 24 2020 Pavel Březina <pbrezina@redhat.com> - 2.3.1-1
 - Rebase to SSSD 2.3.1
 
