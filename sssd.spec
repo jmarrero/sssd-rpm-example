@@ -29,13 +29,15 @@
 
 Name: sssd
 Version: 2.3.1
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/sssd-2_3_1/sssd-2.3.1.tar.gz
 
 ### Patches ###
+Patch0001: 0001-fix-compilation-with-check-0.15.1.patch
+Patch0002: 0002-DEBUG-TESTS-Fix-warnings-format-not-a-string-literal.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1014,6 +1016,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Jul 28 2020 Pavel Březina <pbrezina@redhat.com> - 2.3.1-3
+- Fix test compilation with check-0.15
+
 * Mon Jul 27 2020 Pavel Březina <pbrezina@redhat.com> - 2.3.1-2
 - Use correct run dir (RHBZ#1557622)
 
