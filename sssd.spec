@@ -29,15 +29,13 @@
 
 Name: sssd
 Version: 2.4.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/sssd-2_4_0/sssd-2.4.0.tar.gz
 
 ### Patches ###
-Patch0001: 0001-fix-compilation-with-check-0.15.1.patch
-Patch0002: 0002-DEBUG-TESTS-Fix-warnings-format-not-a-string-literal.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1016,6 +1014,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Mon Oct 12 2020 Pavel Březina <pbrezina@redhat.com> - 2.4.0-2
+- Remove old patches
+
 * Mon Oct 12 2020 Pavel Březina <pbrezina@redhat.com> - 2.4.0-1
 - Rebase to SSSD 2.4.0
 
