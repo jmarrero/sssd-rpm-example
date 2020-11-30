@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 2.4.0
-Release: 3%{?dist}
+Release: 4%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -1014,6 +1014,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Mon Nov 30 2020 Stephen Gallagher <sgallagh@redhat.com> - 2.4.0-4
+- Rebuild for Fedora ELN
+
 * Tue Nov  3 2020 Petr Lautrbach <plautrba@redhat.com> - 2.4.0-3
 - Rebuild with libsemanage.so.2
 
