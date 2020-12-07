@@ -1,0 +1,404 @@
+From 23273319b546d034d31ffe3824b954659d20d104 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 27 Oct 2020 16:18:11 +0100
+Subject: [PATCH 09/19] kcm: move sec key parser to separate file so it can be
+ shared
+
+---
+ Makefile.am                            |   2 +
+ src/responder/kcm/kcmsrv_ccache.c      |  20 ++++
+ src/responder/kcm/kcmsrv_ccache.h      |  10 ++
+ src/responder/kcm/kcmsrv_ccache_json.c | 130 +---------------------
+ src/responder/kcm/kcmsrv_ccache_key.c  | 145 +++++++++++++++++++++++++
+ 5 files changed, 179 insertions(+), 128 deletions(-)
+ create mode 100644 src/responder/kcm/kcmsrv_ccache_key.c
+
+diff --git a/Makefile.am b/Makefile.am
+index 8ca46bf2f9add08155bfb824444437532c97909c..ae9bc540a86f2e291dd5b5f66e1ce4f0aacbaf61 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1819,6 +1819,7 @@ sssd_kcm_SOURCES = \
+     src/responder/kcm/kcmsrv_ccache.c \
+     src/responder/kcm/kcmsrv_ccache_mem.c \
+     src/responder/kcm/kcmsrv_ccache_json.c \
++    src/responder/kcm/kcmsrv_ccache_key.c \
+     src/responder/kcm/kcmsrv_ccache_secdb.c \
+     src/responder/kcm/kcmsrv_ops.c \
+     src/responder/kcm/kcmsrv_op_queue.c \
+@@ -3930,6 +3931,7 @@ if BUILD_KCM
+ test_kcm_marshalling_SOURCES = \
+     src/tests/cmocka/test_kcm_marshalling.c \
+     src/responder/kcm/kcmsrv_ccache_json.c \
++    src/responder/kcm/kcmsrv_ccache_key.c \
+     src/responder/kcm/kcmsrv_ccache.c \
+     src/util/sss_krb5.c \
+     src/util/sss_iobuf.c \
+diff --git a/src/responder/kcm/kcmsrv_ccache.c b/src/responder/kcm/kcmsrv_ccache.c
+index 66e2752ba755af3ef1c6c1b21036021a608a94c1..59f8a7293fa7422c199ca2916c8e6ae6039d9312 100644
+--- a/src/responder/kcm/kcmsrv_ccache.c
++++ b/src/responder/kcm/kcmsrv_ccache.c
+@@ -213,6 +213,26 @@ errno_t kcm_cc_store_creds(struct kcm_ccache *cc,
+     return EOK;
+ }
+ 
++errno_t kcm_cc_set_header(struct kcm_ccache *cc,
++                          const char *sec_key,
++                          struct cli_creds *client)
++{
++    errno_t ret;
++
++    ret = sec_key_parse(cc, sec_key, &cc->name, cc->uuid);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    /* We rely on sssd-secrets only searching the user's subtree so we
++     * set the ownership to the client
++     */
++    cc->owner.uid = cli_creds_get_uid(client);
++    cc->owner.gid = cli_creds_get_gid(client);
++
++    return EOK;
++}
++
+ errno_t kcm_cred_get_uuid(struct kcm_cred *crd, uuid_t _uuid)
+ {
+     if (crd == NULL) {
+diff --git a/src/responder/kcm/kcmsrv_ccache.h b/src/responder/kcm/kcmsrv_ccache.h
+index 5aaded0524d0765dea6bfb962a83cf625f0e85f4..892067f3170b19c0e55ceaa75b0c01f772c49d3d 100644
+--- a/src/responder/kcm/kcmsrv_ccache.h
++++ b/src/responder/kcm/kcmsrv_ccache.h
+@@ -100,6 +100,11 @@ struct kcm_cred *kcm_cred_new(TALLOC_CTX *mem_ctx,
+ errno_t kcm_cc_store_creds(struct kcm_ccache *cc,
+                            struct kcm_cred *crd);
+ 
++/* Set cc header information from sec key and client */
++errno_t kcm_cc_set_header(struct kcm_ccache *cc,
++                          const char *sec_key,
++                          struct cli_creds *client);
++
+ errno_t kcm_cred_get_uuid(struct kcm_cred *crd, uuid_t uuid);
+ 
+ /*
+@@ -320,6 +325,11 @@ bool sec_key_match_name(const char *sec_key,
+ bool sec_key_match_uuid(const char *sec_key,
+                         uuid_t uuid);
+ 
++errno_t sec_key_parse(TALLOC_CTX *mem_ctx,
++                      const char *sec_key,
++                      const char **_name,
++                      uuid_t uuid);
++
+ const char *sec_key_get_name(const char *sec_key);
+ 
+ errno_t sec_key_get_uuid(const char *sec_key,
+diff --git a/src/responder/kcm/kcmsrv_ccache_json.c b/src/responder/kcm/kcmsrv_ccache_json.c
+index 8101f5ddc148bfff83cc02cf9b19a3566209e781..7f73b56bf6c27417271876a989695ff917c3886e 100644
+--- a/src/responder/kcm/kcmsrv_ccache_json.c
++++ b/src/responder/kcm/kcmsrv_ccache_json.c
+@@ -37,12 +37,6 @@
+  */
+ #define KS_JSON_VERSION     1
+ 
+-/*
+- * The secrets store is a key-value store at heart. We store the UUID
+- * and the name in the key to allow easy lookups be either key
+- */
+-#define SEC_KEY_SEPARATOR   '-'
+-
+ /* Compat definition of json_array_foreach for older systems */
+ #ifndef json_array_foreach
+ #define json_array_foreach(array, idx, value) \
+@@ -51,119 +45,6 @@
+             idx++)
+ #endif
+ 
+-const char *sec_key_create(TALLOC_CTX *mem_ctx,
+-                           const char *name,
+-                           uuid_t uuid)
+-{
+-    char uuid_str[UUID_STR_SIZE];
+-
+-    uuid_unparse(uuid, uuid_str);
+-    return talloc_asprintf(mem_ctx,
+-                           "%s%c%s", uuid_str, SEC_KEY_SEPARATOR, name);
+-}
+-
+-static bool sec_key_valid(const char *sec_key)
+-{
+-    if (sec_key == NULL) {
+-        return false;
+-    }
+-
+-    if (strlen(sec_key) < UUID_STR_SIZE + 1) {
+-        /* One char for separator (at UUID_STR_SIZE, because strlen doesn't
+-         * include the '\0', but UUID_STR_SIZE does) and at least one for
+-         * the name */
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Key %s is too short\n", sec_key);
+-        return false;
+-    }
+-
+-    if (sec_key[UUID_STR_SIZE - 1] != SEC_KEY_SEPARATOR) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Key doesn't contain the separator\n");
+-        return false;
+-    }
+-
+-    return true;
+-}
+-
+-static errno_t sec_key_parse(TALLOC_CTX *mem_ctx,
+-                             const char *sec_key,
+-                             const char **_name,
+-                             uuid_t uuid)
+-{
+-    char uuid_str[UUID_STR_SIZE];
+-
+-    if (!sec_key_valid(sec_key)) {
+-        return EINVAL;
+-    }
+-
+-    strncpy(uuid_str, sec_key, sizeof(uuid_str)-1);
+-    if (sec_key[UUID_STR_SIZE - 1] != SEC_KEY_SEPARATOR) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Key doesn't contain the separator\n");
+-        return EINVAL;
+-    }
+-    uuid_str[UUID_STR_SIZE-1] = '\0';
+-
+-    *_name = talloc_strdup(mem_ctx, sec_key + UUID_STR_SIZE);
+-    if (*_name == NULL) {
+-        return ENOMEM;
+-    }
+-    uuid_parse(uuid_str, uuid);
+-
+-    return EOK;
+-}
+-
+-errno_t sec_key_get_uuid(const char *sec_key,
+-                         uuid_t uuid)
+-{
+-    char uuid_str[UUID_STR_SIZE];
+-
+-    if (!sec_key_valid(sec_key)) {
+-        return EINVAL;
+-    }
+-
+-    strncpy(uuid_str, sec_key, UUID_STR_SIZE-1);
+-    uuid_str[UUID_STR_SIZE-1] = '\0';
+-    uuid_parse(uuid_str, uuid);
+-    return EOK;
+-}
+-
+-const char *sec_key_get_name(const char *sec_key)
+-{
+-    if (!sec_key_valid(sec_key)) {
+-        return NULL;
+-    }
+-
+-    return sec_key + UUID_STR_SIZE;
+-}
+-
+-bool sec_key_match_name(const char *sec_key,
+-                        const char *name)
+-{
+-    if (!sec_key_valid(sec_key) || name == NULL) {
+-        return false;
+-    }
+-
+-    return strcmp(sec_key + UUID_STR_SIZE, name) == 0;
+-}
+-
+-bool sec_key_match_uuid(const char *sec_key,
+-                        uuid_t uuid)
+-{
+-    errno_t ret;
+-    uuid_t key_uuid;
+-
+-    /* `key_uuid` is output arg and isn't read in sec_key_get_uuid() but
+-     * since libuuid is opaque for cppcheck it generates false positive here
+-     */
+-    /* cppcheck-suppress uninitvar */
+-    ret = sec_key_get_uuid(sec_key, key_uuid);
+-    if (ret != EOK) {
+-        DEBUG(SSSDBG_MINOR_FAILURE, "Cannot convert key to UUID\n");
+-        return false;
+-    }
+-
+-    return uuid_compare(key_uuid, uuid) == 0;
+-}
+-
+ /*
+  * Creates an array of principal elements that will be used later
+  * in the form of:
+@@ -928,16 +809,9 @@ errno_t sec_kv_to_ccache_json(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    /* We rely on sssd-secrets only searching the user's subtree so we
+-     * set the ownership to the client
+-     */
+-    cc->owner.uid = cli_creds_get_uid(client);
+-    cc->owner.gid = cli_creds_get_gid(client);
+-
+-    ret = sec_key_parse(cc, sec_key, &cc->name, cc->uuid);
++    ret = kcm_cc_set_header(cc, sec_key, client);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_CRIT_FAILURE,
+-              "Cannt parse secret key [%d]: %s\n",
++        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot store ccache header [%d]: %s\n",
+               ret, sss_strerror(ret));
+         goto done;
+     }
+diff --git a/src/responder/kcm/kcmsrv_ccache_key.c b/src/responder/kcm/kcmsrv_ccache_key.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..ba64f2128c0bba62434b4f84d81514e6b52bc2b6
+--- /dev/null
++++ b/src/responder/kcm/kcmsrv_ccache_key.c
+@@ -0,0 +1,145 @@
++/*
++   SSSD
++
++   Copyright (C) Red Hat, 2020
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "config.h"
++
++#include <stdio.h>
++#include <talloc.h>
++
++#include "util/util.h"
++#include "responder/kcm/kcmsrv_ccache_pvt.h"
++
++/*
++ * The secrets store is a key-value store at heart. We store the UUID
++ * and the name in the key to allow easy lookups by either part.
++ */
++#define SEC_KEY_SEPARATOR   '-'
++
++const char *sec_key_create(TALLOC_CTX *mem_ctx,
++                           const char *name,
++                           uuid_t uuid)
++{
++    char uuid_str[UUID_STR_SIZE];
++
++    uuid_unparse(uuid, uuid_str);
++    return talloc_asprintf(mem_ctx,
++                           "%s%c%s", uuid_str, SEC_KEY_SEPARATOR, name);
++}
++
++static bool sec_key_valid(const char *sec_key)
++{
++    if (sec_key == NULL) {
++        return false;
++    }
++
++    if (strlen(sec_key) < UUID_STR_SIZE + 1) {
++        /* One char for separator (at UUID_STR_SIZE, because strlen doesn't
++         * include the '\0', but UUID_STR_SIZE does) and at least one for
++         * the name */
++        DEBUG(SSSDBG_CRIT_FAILURE, "Key %s is too short\n", sec_key);
++        return false;
++    }
++
++    if (sec_key[UUID_STR_SIZE - 1] != SEC_KEY_SEPARATOR) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Key doesn't contain the separator\n");
++        return false;
++    }
++
++    return true;
++}
++
++errno_t sec_key_parse(TALLOC_CTX *mem_ctx,
++                      const char *sec_key,
++                      const char **_name,
++                      uuid_t uuid)
++{
++    char uuid_str[UUID_STR_SIZE];
++
++    if (!sec_key_valid(sec_key)) {
++        return EINVAL;
++    }
++
++    strncpy(uuid_str, sec_key, sizeof(uuid_str)-1);
++    if (sec_key[UUID_STR_SIZE - 1] != SEC_KEY_SEPARATOR) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Key doesn't contain the separator\n");
++        return EINVAL;
++    }
++    uuid_str[UUID_STR_SIZE-1] = '\0';
++
++    *_name = talloc_strdup(mem_ctx, sec_key + UUID_STR_SIZE);
++    if (*_name == NULL) {
++        return ENOMEM;
++    }
++    uuid_parse(uuid_str, uuid);
++
++    return EOK;
++}
++
++errno_t sec_key_get_uuid(const char *sec_key,
++                         uuid_t uuid)
++{
++    char uuid_str[UUID_STR_SIZE];
++
++    if (!sec_key_valid(sec_key)) {
++        return EINVAL;
++    }
++
++    strncpy(uuid_str, sec_key, UUID_STR_SIZE-1);
++    uuid_str[UUID_STR_SIZE-1] = '\0';
++    uuid_parse(uuid_str, uuid);
++    return EOK;
++}
++
++const char *sec_key_get_name(const char *sec_key)
++{
++    if (!sec_key_valid(sec_key)) {
++        return NULL;
++    }
++
++    return sec_key + UUID_STR_SIZE;
++}
++
++bool sec_key_match_name(const char *sec_key,
++                        const char *name)
++{
++    if (!sec_key_valid(sec_key) || name == NULL) {
++        return false;
++    }
++
++    return strcmp(sec_key + UUID_STR_SIZE, name) == 0;
++}
++
++bool sec_key_match_uuid(const char *sec_key,
++                        uuid_t uuid)
++{
++    errno_t ret;
++    uuid_t key_uuid;
++
++    /* `key_uuid` is output arg and isn't read in sec_key_get_uuid() but
++     * since libuuid is opaque for cppcheck it generates false positive here
++     */
++    /* cppcheck-suppress uninitvar */
++    ret = sec_key_get_uuid(sec_key, key_uuid);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_MINOR_FAILURE, "Cannot convert key to UUID\n");
++        return false;
++    }
++
++    return uuid_compare(key_uuid, uuid) == 0;
++}
+-- 
+2.25.4
+

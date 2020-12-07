@@ -1,0 +1,509 @@
+From 426947971cd94cc93dd120ca8ad9bcbeb47059c4 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Mon, 19 Oct 2020 12:59:48 +0200
+Subject: [PATCH 03/19] kcm: disable encryption
+
+Encryption was a huge bottleneck for the secdb backend. This is
+backwards compatible and there is no need to destroy existing
+ccache. It will be stored unencrypted at first write to the cache.
+
+Note that the encryption did not provide any security as the cache
+is accessible only by root and the master key is stored together
+with the cache. So once someone gains access to the file it can
+be easily decrypted. Additionaly, there was also no encryption at
+the memory level.
+
+Resolves: https://github.com/SSSD/sssd/issues/5349
+---
+ src/responder/kcm/kcmsrv_ccache_secdb.c |  94 ++++-----------
+ src/responder/secrets/local.c           |   2 +-
+ src/util/secrets/secrets.c              | 149 +++++++++++++++++-------
+ src/util/secrets/secrets.h              |  13 ++-
+ 4 files changed, 146 insertions(+), 112 deletions(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ccache_secdb.c b/src/responder/kcm/kcmsrv_ccache_secdb.c
+index ed1c8247febc0a49dfd35b99a788b60ce8dda109..e6f4f9b05d17956f771ed4db63dc4940be0a838b 100644
+--- a/src/responder/kcm/kcmsrv_ccache_secdb.c
++++ b/src/responder/kcm/kcmsrv_ccache_secdb.c
+@@ -35,15 +35,13 @@
+ #define KCM_SECDB_CCACHE_FMT  KCM_SECDB_BASE_FMT"ccache/"
+ #define KCM_SECDB_DFL_FMT     KCM_SECDB_BASE_FMT"default"
+ 
+-static errno_t sec_get_b64(TALLOC_CTX *mem_ctx,
+-                           struct sss_sec_req *req,
+-                           struct sss_iobuf **_buf)
++static errno_t sec_get(TALLOC_CTX *mem_ctx,
++                       struct sss_sec_req *req,
++                       struct sss_iobuf **_buf)
+ {
+     errno_t ret;
+     TALLOC_CTX *tmp_ctx;
+-    char *b64_sec;
+-    uint8_t *data;
+-    size_t data_size;
++    char *secret;
+     struct sss_iobuf *buf;
+ 
+     tmp_ctx = talloc_new(mem_ctx);
+@@ -51,21 +49,15 @@ static errno_t sec_get_b64(TALLOC_CTX *mem_ctx,
+         return ENOMEM;
+     }
+ 
+-    ret = sss_sec_get(tmp_ctx, req, &b64_sec);
++    ret = sss_sec_get(tmp_ctx, req, &secret);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Cannot retrieve the secret [%d]: %s\n", ret, sss_strerror(ret));
+         goto done;
+     }
+ 
+-    data = sss_base64_decode(tmp_ctx, b64_sec, &data_size);
+-    if (data == NULL) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot decode secret from base64\n");
+-        ret = EIO;
+-        goto done;
+-    }
+-
+-    buf = sss_iobuf_init_readonly(tmp_ctx, data, data_size);
++    buf = sss_iobuf_init_readonly(tmp_ctx, (const uint8_t *)secret,
++                                  strlen(secret) + 1);
+     if (buf == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot init the iobuf\n");
+         ret = EIO;
+@@ -79,73 +71,35 @@ done:
+     return ret;
+ }
+ 
+-static errno_t sec_put_b64(TALLOC_CTX *mem_ctx,
+-                           struct sss_sec_req *req,
+-                           struct sss_iobuf *buf)
++static errno_t sec_put(TALLOC_CTX *mem_ctx,
++                       struct sss_sec_req *req,
++                       struct sss_iobuf *buf)
+ {
+     errno_t ret;
+-    TALLOC_CTX *tmp_ctx;
+-    char *secret;
+ 
+-    tmp_ctx = talloc_new(mem_ctx);
+-    if (tmp_ctx == NULL) {
+-        return ENOMEM;
+-    }
+-
+-    secret = sss_base64_encode(tmp_ctx,
+-                               sss_iobuf_get_data(buf),
+-                               sss_iobuf_get_size(buf));
+-    if (secret == NULL) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot encode secret to base64\n");
+-        ret = EIO;
+-        goto done;
+-    }
+-
+-    ret = sss_sec_put(req, secret);
++    ret = sss_sec_put(req, (const char *)sss_iobuf_get_data(buf),
++                      SSS_SEC_PLAINTEXT);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Cannot write the secret [%d]: %s\n", ret, sss_strerror(ret));
+-        goto done;
+     }
+ 
+-    ret = EOK;
+-done:
+-    talloc_free(tmp_ctx);
+     return ret;
+ }
+ 
+-static errno_t sec_update_b64(TALLOC_CTX *mem_ctx,
+-                              struct sss_sec_req *req,
+-                              struct sss_iobuf *buf)
++static errno_t sec_update(TALLOC_CTX *mem_ctx,
++                          struct sss_sec_req *req,
++                          struct sss_iobuf *buf)
+ {
+     errno_t ret;
+-    TALLOC_CTX *tmp_ctx;
+-    char *secret;
+ 
+-    tmp_ctx = talloc_new(mem_ctx);
+-    if (tmp_ctx == NULL) {
+-        return ENOMEM;
+-    }
+-
+-    secret = sss_base64_encode(tmp_ctx,
+-                               sss_iobuf_get_data(buf),
+-                               sss_iobuf_get_size(buf));
+-    if (secret == NULL) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot encode secret to base64\n");
+-        ret = EIO;
+-        goto done;
+-    }
+-
+-    ret = sss_sec_update(req, secret);
++    ret = sss_sec_update(req, (const char *)sss_iobuf_get_data(buf),
++                         SSS_SEC_PLAINTEXT);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Cannot write the secret [%d]: %s\n", ret, sss_strerror(ret));
+-        goto done;
+     }
+ 
+-    ret = EOK;
+-done:
+-    talloc_free(tmp_ctx);
+     return ret;
+ }
+ 
+@@ -493,7 +447,7 @@ static errno_t secdb_get_cc(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    ret = sec_get_b64(tmp_ctx, sreq, &ccbuf);
++    ret = sec_get(tmp_ctx, sreq, &ccbuf);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Cannot get the secret [%d][%s]\n", ret, sss_strerror(ret));
+@@ -748,9 +702,9 @@ static struct tevent_req *ccdb_secdb_set_default_send(TALLOC_CTX *mem_ctx,
+ 
+     ret = sss_sec_get(state, sreq, &cur_default);
+     if (ret == ENOENT) {
+-        ret = sec_put_b64(state, sreq, iobuf);
++        ret = sec_put(state, sreq, iobuf);
+     } else if (ret == EOK) {
+-        ret = sec_update_b64(state, sreq, iobuf);
++        ret = sec_update(state, sreq, iobuf);
+     }
+ 
+     if (ret != EOK) {
+@@ -804,7 +758,7 @@ static struct tevent_req *ccdb_secdb_get_default_send(TALLOC_CTX *mem_ctx,
+         goto immediate;
+     }
+ 
+-    ret = sec_get_b64(state, sreq, &dfl_iobuf);
++    ret = sec_get(state, sreq, &dfl_iobuf);
+     if (ret == ENOENT) {
+         uuid_clear(state->uuid);
+         ret = EOK;
+@@ -1230,7 +1184,7 @@ static struct tevent_req *ccdb_secdb_create_send(TALLOC_CTX *mem_ctx,
+         goto immediate;
+     }
+ 
+-    ret = sec_put_b64(state, ccache_req, ccache_payload);
++    ret = sec_put(state, ccache_req, ccache_payload);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE, "Failed to add the payload\n");
+         goto immediate;
+@@ -1308,7 +1262,7 @@ static struct tevent_req *ccdb_secdb_mod_send(TALLOC_CTX *mem_ctx,
+         goto immediate;
+     }
+ 
+-    ret = sec_update_b64(state, sreq, payload);
++    ret = sec_update(state, sreq, payload);
+     if (ret != EOK) {
+         goto immediate;
+     }
+@@ -1384,7 +1338,7 @@ static struct tevent_req *ccdb_secdb_store_cred_send(TALLOC_CTX *mem_ctx,
+         goto immediate;
+     }
+ 
+-    ret = sec_update_b64(state, sreq, payload);
++    ret = sec_update(state, sreq, payload);
+     if (ret != EOK) {
+         goto immediate;
+     }
+diff --git a/src/responder/secrets/local.c b/src/responder/secrets/local.c
+index eb37c08b7337c6713c2e74a55363f79ecfefd8c0..815e7507ba6b3e210891c26dd243a2a67d8920f0 100644
+--- a/src/responder/secrets/local.c
++++ b/src/responder/secrets/local.c
+@@ -168,7 +168,7 @@ static struct tevent_req *local_secret_req(TALLOC_CTX *mem_ctx,
+         }
+         if (ret) goto done;
+ 
+-        ret = sss_sec_put(ssec_req, secret);
++        ret = sss_sec_put(ssec_req, secret, SSS_SEC_MASTERKEY);
+         if (ret) goto done;
+         break;
+ 
+diff --git a/src/util/secrets/secrets.c b/src/util/secrets/secrets.c
+index d701face07aa3ea5dc62371066ba6947d7d496a9..b3d40fdcb4bc2aeeb6aae4e17654ae06b00db876 100644
+--- a/src/util/secrets/secrets.c
++++ b/src/util/secrets/secrets.c
+@@ -63,19 +63,53 @@ static struct sss_sec_quota default_kcm_quota = {
+     .containers_nest_level = DEFAULT_SEC_CONTAINERS_NEST_LEVEL,
+ };
+ 
++static const char *sss_sec_enctype_to_str(enum sss_sec_enctype enctype)
++{
++    switch (enctype) {
++    case SSS_SEC_PLAINTEXT:
++        return "plaintext";
++    case SSS_SEC_MASTERKEY:
++        return "masterkey";
++    case SSS_SEC_BASE64:
++        return "base64";
++    default:
++        DEBUG(SSSDBG_CRIT_FAILURE, "Bug: unknown encryption type %d\n",
++                enctype);
++        return "unknown";
++    }
++}
++
++static enum sss_sec_enctype sss_sec_str_to_enctype(const char *str)
++{
++    if (strcmp("plaintext", str) == 0) {
++        return SSS_SEC_PLAINTEXT;
++    }
++
++    if (strcmp("masterkey", str) == 0) {
++        return SSS_SEC_MASTERKEY;
++    }
++
++    if (strcmp("base64", str) == 0) {
++        return SSS_SEC_BASE64;
++    }
++
++    return SSS_SEC_ENCTYPE_SENTINEL;
++}
++
+ static int local_decrypt(struct sss_sec_ctx *sctx, TALLOC_CTX *mem_ctx,
+-                         const char *secret, const char *enctype,
++                         const char *secret, enum sss_sec_enctype enctype,
+                          char **plain_secret)
+ {
++    struct sss_sec_data _secret;
++    size_t outlen;
+     char *output;
++    int ret;
+ 
+-    if (enctype && strcmp(enctype, "masterkey") == 0) {
+-        DEBUG(SSSDBG_TRACE_INTERNAL, "Decrypting with masterkey\n");
+-
+-        struct sss_sec_data _secret;
+-        size_t outlen;
+-        int ret;
+-
++    switch (enctype) {
++    case SSS_SEC_PLAINTEXT:
++        output = talloc_strdup(mem_ctx, secret);
++        break;
++    case SSS_SEC_MASTERKEY:
+         _secret.data = (char *)sss_base64_decode(mem_ctx, secret,
+                                                  &_secret.length);
+         if (!_secret.data) {
+@@ -83,6 +117,7 @@ static int local_decrypt(struct sss_sec_ctx *sctx, TALLOC_CTX *mem_ctx,
+             return EINVAL;
+         }
+ 
++        DEBUG(SSSDBG_TRACE_INTERNAL, "Decrypting with masterkey\n");
+         ret = sss_decrypt(mem_ctx, AES256CBC_HMAC_SHA256,
+                           (uint8_t *)sctx->master_key.data,
+                           sctx->master_key.length,
+@@ -102,10 +137,17 @@ static int local_decrypt(struct sss_sec_ctx *sctx, TALLOC_CTX *mem_ctx,
+             talloc_free(output);
+             return EIO;
+         }
+-    } else {
+-        DEBUG(SSSDBG_TRACE_INTERNAL, "Unexpected enctype (not 'masterkey')\n");
+-        output = talloc_strdup(mem_ctx, secret);
+-        if (!output) return ENOMEM;
++        break;
++    case SSS_SEC_BASE64:
++        output = (char *)sss_base64_decode(mem_ctx, secret, &_secret.length);
++        break;
++    default:
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unknown encryption type '%d'\n", enctype);
++        return EINVAL;
++    }
++
++    if (output == NULL) {
++        return ENOMEM;
+     }
+ 
+     *plain_secret = output;
+@@ -113,39 +155,46 @@ static int local_decrypt(struct sss_sec_ctx *sctx, TALLOC_CTX *mem_ctx,
+ }
+ 
+ static int local_encrypt(struct sss_sec_ctx *sec_ctx, TALLOC_CTX *mem_ctx,
+-                         const char *secret, const char *enctype,
++                         const char *secret, enum sss_sec_enctype enctype,
+                          char **ciphertext)
+ {
+     struct sss_sec_data _secret;
+     char *output;
+     int ret;
+ 
+-    if (enctype == NULL) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "No encryption type\n");
+-        return EINVAL;
+-    }
++    switch (enctype) {
++    case SSS_SEC_PLAINTEXT:
++        output = talloc_strdup(mem_ctx, secret);
++        break;
++    case SSS_SEC_MASTERKEY:
++        ret = sss_encrypt(mem_ctx, AES256CBC_HMAC_SHA256,
++                          (uint8_t *)sec_ctx->master_key.data,
++                           sec_ctx->master_key.length,
++                          (const uint8_t *)secret, strlen(secret) + 1,
++                          (uint8_t **)&_secret.data, &_secret.length);
++        if (ret) {
++            DEBUG(SSSDBG_OP_FAILURE,
++                "sss_encrypt failed [%d]: %s\n", ret, sss_strerror(ret));
++            return ret;
++        }
+ 
+-    if (strcmp(enctype, "masterkey") != 0) {
+-        DEBUG(SSSDBG_CRIT_FAILURE, "Unknown encryption type '%s'\n", enctype);
++        output = sss_base64_encode(mem_ctx, (uint8_t *)_secret.data,
++                                   _secret.length);
++        talloc_free(_secret.data);
++        break;
++    case SSS_SEC_BASE64:
++        output = (char *)sss_base64_encode(mem_ctx, (const uint8_t *)secret,
++                                           strlen(secret) + 1);
++        break;
++    default:
++        DEBUG(SSSDBG_CRIT_FAILURE, "Unknown encryption type '%d'\n", enctype);
+         return EINVAL;
+     }
+ 
+-    ret = sss_encrypt(mem_ctx, AES256CBC_HMAC_SHA256,
+-                      (uint8_t *)sec_ctx->master_key.data,
+-                      sec_ctx->master_key.length,
+-                      (const uint8_t *)secret, strlen(secret) + 1,
+-                      (uint8_t **)&_secret.data, &_secret.length);
+-    if (ret) {
+-        DEBUG(SSSDBG_OP_FAILURE,
+-              "sss_encrypt failed [%d]: %s\n", ret, sss_strerror(ret));
+-        return ret;
++    if (output == NULL) {
++        return ENOMEM;
+     }
+ 
+-    output = sss_base64_encode(mem_ctx,
+-                               (uint8_t *)_secret.data, _secret.length);
+-    talloc_free(_secret.data);
+-    if (!output) return ENOMEM;
+-
+     *ciphertext = output;
+     return EOK;
+ }
+@@ -958,6 +1007,7 @@ errno_t sss_sec_get(TALLOC_CTX *mem_ctx,
+     struct ldb_result *res;
+     const char *attr_secret;
+     const char *attr_enctype;
++    enum sss_sec_enctype enctype;
+     int ret;
+ 
+     if (req == NULL || _secret == NULL) {
+@@ -1006,10 +1056,15 @@ errno_t sss_sec_get(TALLOC_CTX *mem_ctx,
+     attr_enctype = ldb_msg_find_attr_as_string(res->msgs[0], "enctype", NULL);
+ 
+     if (attr_enctype) {
+-        ret = local_decrypt(req->sctx, mem_ctx, attr_secret, attr_enctype, _secret);
++        enctype = sss_sec_str_to_enctype(attr_enctype);
++        ret = local_decrypt(req->sctx, mem_ctx, attr_secret, enctype, _secret);
+         if (ret) goto done;
+     } else {
+         *_secret = talloc_strdup(mem_ctx, attr_secret);
++        if (*_secret == NULL) {
++            ret = ENOMEM;
++            goto done;
++        }
+     }
+     ret = EOK;
+ 
+@@ -1019,10 +1074,10 @@ done:
+ }
+ 
+ errno_t sss_sec_put(struct sss_sec_req *req,
+-                    const char *secret)
++                    const char *secret,
++                    enum sss_sec_enctype enctype)
+ {
+     struct ldb_message *msg;
+-    const char *enctype = "masterkey";
+     char *enc_secret;
+     int ret;
+ 
+@@ -1087,7 +1142,7 @@ errno_t sss_sec_put(struct sss_sec_req *req,
+         goto done;
+     }
+ 
+-    ret = ldb_msg_add_string(msg, "enctype", enctype);
++    ret = ldb_msg_add_string(msg, "enctype", sss_sec_enctype_to_str(enctype));
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "ldb_msg_add_string failed adding enctype [%d]: %s\n",
+@@ -1132,10 +1187,10 @@ done:
+ }
+ 
+ errno_t sss_sec_update(struct sss_sec_req *req,
+-                       const char *secret)
++                       const char *secret,
++                       enum sss_sec_enctype enctype)
+ {
+     struct ldb_message *msg;
+-    const char *enctype = "masterkey";
+     char *enc_secret;
+     int ret;
+ 
+@@ -1192,6 +1247,22 @@ errno_t sss_sec_update(struct sss_sec_req *req,
+         goto done;
+     }
+ 
++    ret = ldb_msg_add_empty(msg, "enctype", LDB_FLAG_MOD_REPLACE, NULL);
++    if (ret != LDB_SUCCESS) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "ldb_msg_add_empty failed: [%s]\n", ldb_strerror(ret));
++        ret = EIO;
++        goto done;
++    }
++
++    ret = ldb_msg_add_string(msg, "enctype", sss_sec_enctype_to_str(enctype));
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "ldb_msg_add_string failed adding enctype [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
+     /* FIXME - should we have a lastUpdate timestamp? */
+     ret = ldb_msg_add_empty(msg, "secret", LDB_FLAG_MOD_REPLACE, NULL);
+     if (ret != LDB_SUCCESS) {
+diff --git a/src/util/secrets/secrets.h b/src/util/secrets/secrets.h
+index 9cf3975162c40a27ec92691f732a5aca5a5a8473..73f40f7eb620904cec8f1cb7891765323ada08ad 100644
+--- a/src/util/secrets/secrets.h
++++ b/src/util/secrets/secrets.h
+@@ -43,6 +43,13 @@
+ #define DEFAULT_SEC_KCM_MAX_UID_SECRETS  64
+ #define DEFAULT_SEC_KCM_MAX_PAYLOAD_SIZE 65536
+ 
++enum sss_sec_enctype {
++    SSS_SEC_PLAINTEXT,
++    SSS_SEC_MASTERKEY,
++    SSS_SEC_BASE64,
++    SSS_SEC_ENCTYPE_SENTINEL
++};
++
+ struct sss_sec_ctx;
+ 
+ struct sss_sec_req;
+@@ -91,10 +98,12 @@ errno_t sss_sec_get(TALLOC_CTX *mem_ctx,
+                     char **_secret);
+ 
+ errno_t sss_sec_put(struct sss_sec_req *req,
+-                    const char *secret);
++                    const char *secret,
++                    enum sss_sec_enctype enctype);
+ 
+ errno_t sss_sec_update(struct sss_sec_req *req,
+-                       const char *secret);
++                       const char *secret,
++                       enum sss_sec_enctype enctype);
+ 
+ errno_t sss_sec_create_container(struct sss_sec_req *req);
+ 
+-- 
+2.25.4
+

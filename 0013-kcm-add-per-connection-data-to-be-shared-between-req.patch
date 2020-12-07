@@ -1,0 +1,131 @@
+From ae6898e7dc60d7067f0d71212c7ed28fc9e8e285 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Fri, 16 Oct 2020 15:36:51 +0200
+Subject: [PATCH 13/19] kcm: add per-connection data to be shared between
+ requests
+
+Resolves: https://github.com/SSSD/sssd/issues/5349
+---
+ src/responder/kcm/kcmsrv_cmd.c | 21 +++++++++++++++++----
+ src/responder/kcm/kcmsrv_ops.c |  3 +++
+ src/responder/kcm/kcmsrv_ops.h |  5 +++++
+ 3 files changed, 25 insertions(+), 4 deletions(-)
+
+diff --git a/src/responder/kcm/kcmsrv_cmd.c b/src/responder/kcm/kcmsrv_cmd.c
+index 99980050f205730169f5907db4018e4fe57b046d..a1aa9aa20f7c2b5cd972bd944995286de5e7c1e2 100644
+--- a/src/responder/kcm/kcmsrv_cmd.c
++++ b/src/responder/kcm/kcmsrv_cmd.c
+@@ -373,13 +373,16 @@ static errno_t kcm_cmd_dispatch(struct kcm_ctx *kctx,
+ {
+     struct tevent_req *req;
+     struct cli_ctx *cctx;
++    struct kcm_conn_data *conn_data;
+ 
+     cctx = req_ctx->cctx;
++    conn_data = talloc_get_type(cctx->state_ctx, struct kcm_conn_data);
+ 
+     req = kcm_cmd_send(req_ctx,
+                        cctx->ev,
+                        kctx->qctx,
+                        req_ctx->kctx->kcm_data,
++                       conn_data,
+                        req_ctx->cctx->creds,
+                        &req_ctx->op_io.request,
+                        req_ctx->op_io.op);
+@@ -492,7 +495,7 @@ static void kcm_recv(struct cli_ctx *cctx)
+     int ret;
+ 
+     kctx = talloc_get_type(cctx->rctx->pvt_ctx, struct kcm_ctx);
+-    req = talloc_get_type(cctx->state_ctx, struct kcm_req_ctx);
++    req = talloc_get_type(cctx->protocol_ctx, struct kcm_req_ctx);
+     if (req == NULL) {
+         /* A new request comes in, setup data structures. */
+         req = kcm_new_req(cctx, kctx);
+@@ -503,7 +506,17 @@ static void kcm_recv(struct cli_ctx *cctx)
+             return;
+         }
+ 
+-        cctx->state_ctx = req;
++        cctx->protocol_ctx = req;
++    }
++
++    /* Shared data between requests that originates in the same connection. */
++    if (cctx->state_ctx == NULL) {
++        cctx->state_ctx = talloc_zero(cctx, struct kcm_conn_data);
++        if (cctx->state_ctx == NULL) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Cannot set up client state\n");
++            talloc_free(cctx);
++            return;
++        }
+     }
+ 
+     ret = kcm_recv_data(req, cctx->cfd, &req->reqbuf);
+@@ -558,7 +571,7 @@ static int kcm_send_data(struct cli_ctx *cctx)
+     struct kcm_req_ctx *req;
+     errno_t ret;
+ 
+-    req = talloc_get_type(cctx->state_ctx, struct kcm_req_ctx);
++    req = talloc_get_type(cctx->protocol_ctx, struct kcm_req_ctx);
+ 
+     ret = kcm_write_iovec(cctx->cfd, &req->repbuf.v_len);
+     if (ret != EOK) {
+@@ -604,7 +617,7 @@ static void kcm_send(struct cli_ctx *cctx)
+     DEBUG(SSSDBG_TRACE_INTERNAL, "All data sent!\n");
+     TEVENT_FD_NOT_WRITEABLE(cctx->cfde);
+     TEVENT_FD_READABLE(cctx->cfde);
+-    talloc_zfree(cctx->state_ctx);
++    talloc_zfree(cctx->protocol_ctx);
+     return;
+ }
+ 
+diff --git a/src/responder/kcm/kcmsrv_ops.c b/src/responder/kcm/kcmsrv_ops.c
+index 7fc3b0a5c4e123a398ef103f3ce92b45bc68f5cf..6ae1f0c647f4d385477ddeadbad93287cba05c55 100644
+--- a/src/responder/kcm/kcmsrv_ops.c
++++ b/src/responder/kcm/kcmsrv_ops.c
+@@ -38,6 +38,7 @@
+ 
+ struct kcm_op_ctx {
+     struct kcm_resp_ctx *kcm_data;
++    struct kcm_conn_data *conn_data;
+     struct cli_creds *client;
+ 
+     struct sss_iobuf *input;
+@@ -86,6 +87,7 @@ struct tevent_req *kcm_cmd_send(TALLOC_CTX *mem_ctx,
+                                 struct tevent_context *ev,
+                                 struct kcm_ops_queue_ctx *qctx,
+                                 struct kcm_resp_ctx *kcm_data,
++                                struct kcm_conn_data *conn_data,
+                                 struct cli_creds *client,
+                                 struct kcm_data *input,
+                                 struct kcm_op *op)
+@@ -135,6 +137,7 @@ struct tevent_req *kcm_cmd_send(TALLOC_CTX *mem_ctx,
+     }
+ 
+     state->op_ctx->kcm_data = kcm_data;
++    state->op_ctx->conn_data = conn_data;
+     state->op_ctx->client = client;
+ 
+     state->op_ctx->input = sss_iobuf_init_readonly(state->op_ctx,
+diff --git a/src/responder/kcm/kcmsrv_ops.h b/src/responder/kcm/kcmsrv_ops.h
+index 67d9f86026bf949548471f2280c130ebefd2f865..fd2dd03c9da3660e0c1346752e4db59c7cbe2c41 100644
+--- a/src/responder/kcm/kcmsrv_ops.h
++++ b/src/responder/kcm/kcmsrv_ops.h
+@@ -32,10 +32,15 @@ struct kcm_op;
+ struct kcm_op *kcm_get_opt(uint16_t opcode);
+ const char *kcm_opt_name(struct kcm_op *op);
+ 
++struct kcm_conn_data {
++    void *data;
++};
++
+ struct tevent_req *kcm_cmd_send(TALLOC_CTX *mem_ctx,
+                                 struct tevent_context *ev,
+                                 struct kcm_ops_queue_ctx *qctx,
+                                 struct kcm_resp_ctx *kcm_data,
++                                struct kcm_conn_data *conn_data,
+                                 struct cli_creds *client,
+                                 struct kcm_data *input,
+                                 struct kcm_op *op);
+-- 
+2.25.4
+

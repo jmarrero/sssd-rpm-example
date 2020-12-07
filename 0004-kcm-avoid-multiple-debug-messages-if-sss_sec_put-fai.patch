@@ -1,0 +1,26 @@
+From b8dd3fa32cef423217859a1ef04ec30dfef30fb2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 27 Oct 2020 16:45:22 +0100
+Subject: [PATCH 04/19] kcm: avoid multiple debug messages if sss_sec_put fails
+
+sec_put() already logs a message if the underlaying function fails
+so this debug message is really unnecessary.
+---
+ src/responder/kcm/kcmsrv_ccache_secdb.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ccache_secdb.c b/src/responder/kcm/kcmsrv_ccache_secdb.c
+index e6f4f9b05d17956f771ed4db63dc4940be0a838b..f3b9af840381881e99bbead70ea7edabf945a8e2 100644
+--- a/src/responder/kcm/kcmsrv_ccache_secdb.c
++++ b/src/responder/kcm/kcmsrv_ccache_secdb.c
+@@ -1186,7 +1186,6 @@ static struct tevent_req *ccdb_secdb_create_send(TALLOC_CTX *mem_ctx,
+ 
+     ret = sec_put(state, ccache_req, ccache_payload);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_OP_FAILURE, "Failed to add the payload\n");
+         goto immediate;
+     }
+ 
+-- 
+2.25.4
+

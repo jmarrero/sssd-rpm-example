@@ -1,0 +1,30 @@
+From efd57d2a6001b7015095f7ff5bbd0c55764e22ab Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 27 Oct 2020 16:37:05 +0100
+Subject: [PATCH 10/19] kcm: avoid suppression of cppcheck warning
+
+---
+ src/responder/kcm/kcmsrv_ccache_key.c | 7 +++----
+ 1 file changed, 3 insertions(+), 4 deletions(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ccache_key.c b/src/responder/kcm/kcmsrv_ccache_key.c
+index ba64f2128c0bba62434b4f84d81514e6b52bc2b6..4a24c38d45918632201740bfc82579a2449aa8f7 100644
+--- a/src/responder/kcm/kcmsrv_ccache_key.c
++++ b/src/responder/kcm/kcmsrv_ccache_key.c
+@@ -131,10 +131,9 @@ bool sec_key_match_uuid(const char *sec_key,
+     errno_t ret;
+     uuid_t key_uuid;
+ 
+-    /* `key_uuid` is output arg and isn't read in sec_key_get_uuid() but
+-     * since libuuid is opaque for cppcheck it generates false positive here
+-     */
+-    /* cppcheck-suppress uninitvar */
++    /* Clear uuid value to avoid cppcheck warning. */
++    uuid_clear(key_uuid);
++
+     ret = sec_key_get_uuid(sec_key, key_uuid);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_MINOR_FAILURE, "Cannot convert key to UUID\n");
+-- 
+2.25.4
+

@@ -1,0 +1,165 @@
+From f1db05d8839b39fd48471dcb29881c12ed27a434 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 29 Oct 2020 14:57:53 +0100
+Subject: [PATCH 14/19] sss_ptr_hash: fix double free for circular dependencies
+
+If the hash table delete callback deletes the stored item,
+we can end up in double free in case when we try to override
+an existing item (hash_enter(key) where key already exists).
+
+```c
+static void delete_cb(hash_entry_t *item,
+                      hash_destroy_enum deltype,
+                      void *pvt)
+{
+    talloc_free(item->value.ptr);
+}
+
+hash_enter(key);
+hash_enter(key);
+```
+
+The doble free it self is fine, since it is done via talloc destructor
+and talloc can cope with that. However, the hash table fails to store
+the new entry because hash_delete is called twice.
+
+```
+_sss_ptr_hash_add -> hash_enter -> hash_delete(old) -> delete_cb -> sss_ptr_hash_value_destructor -> hash_delete
+```
+---
+ src/tests/cmocka/test_sss_ptr_hash.c | 39 ++++++++++++++++++++++++++++
+ src/tests/cmocka/test_utils.c        |  3 +++
+ src/tests/cmocka/test_utils.h        |  1 +
+ src/util/sss_ptr_hash.c              | 20 ++++++++++++++
+ 4 files changed, 63 insertions(+)
+
+diff --git a/src/tests/cmocka/test_sss_ptr_hash.c b/src/tests/cmocka/test_sss_ptr_hash.c
+index 1458238f537970d0ecde80bd36830b28970ca364..31cf8b705367498822094f8811b393c1b35e12bc 100644
+--- a/src/tests/cmocka/test_sss_ptr_hash.c
++++ b/src/tests/cmocka/test_sss_ptr_hash.c
+@@ -91,6 +91,45 @@ void test_sss_ptr_hash_with_free_cb(void **state)
+     assert_int_equal(free_counter, MAX_ENTRIES_AMOUNT*2);
+ }
+ 
++void test_sss_ptr_hash_overwrite_with_free_cb(void **state)
++{
++    hash_table_t *table;
++    int free_counter = 0;
++    unsigned long count;
++    char *payload;
++    char *value;
++    errno_t ret;
++
++    table = sss_ptr_hash_create(global_talloc_context,
++                                free_payload_cb,
++                                &free_counter);
++    assert_non_null(table);
++
++    payload = talloc_strdup(table, "test_value1");
++    assert_non_null(payload);
++    talloc_set_name_const(payload, "char");
++    ret = sss_ptr_hash_add_or_override(table, "test", payload, char);
++    assert_int_equal(ret, 0);
++    count = hash_count(table);
++    assert_int_equal(count, 1);
++    value = sss_ptr_hash_lookup(table, "test", char);
++    assert_ptr_equal(value, payload);
++
++
++    payload = talloc_strdup(table, "test_value2");
++    assert_non_null(payload);
++    talloc_set_name_const(payload, "char");
++    ret = sss_ptr_hash_add_or_override(table, "test", payload, char);
++    assert_int_equal(ret, 0);
++    count = hash_count(table);
++    assert_int_equal(count, 1);
++    value = sss_ptr_hash_lookup(table, "test", char);
++    assert_ptr_equal(value, payload);
++
++    talloc_free(table);
++    assert_int_equal(free_counter, 2);
++}
++
+ struct table_wrapper
+ {
+     hash_table_t **table;
+diff --git a/src/tests/cmocka/test_utils.c b/src/tests/cmocka/test_utils.c
+index d77a972c1bc93638085c3d49131247fefb333d56..d258622fb50e849a3efabb123960db410eb399e1 100644
+--- a/src/tests/cmocka/test_utils.c
++++ b/src/tests/cmocka/test_utils.c
+@@ -2144,6 +2144,9 @@ int main(int argc, const char *argv[])
+         cmocka_unit_test_setup_teardown(test_sss_ptr_hash_with_free_cb,
+                                         setup_leak_tests,
+                                         teardown_leak_tests),
++        cmocka_unit_test_setup_teardown(test_sss_ptr_hash_overwrite_with_free_cb,
++                                        setup_leak_tests,
++                                        teardown_leak_tests),
+         cmocka_unit_test_setup_teardown(test_sss_ptr_hash_with_lookup_cb,
+                                         setup_leak_tests,
+                                         teardown_leak_tests),
+diff --git a/src/tests/cmocka/test_utils.h b/src/tests/cmocka/test_utils.h
+index 44b9479f965ee830ea0937c0fd89b87e35796598..458bcb750569c1f5f346917f29aa8b5500891988 100644
+--- a/src/tests/cmocka/test_utils.h
++++ b/src/tests/cmocka/test_utils.h
+@@ -35,6 +35,7 @@ void test_concatenate_string_array(void **state);
+ 
+ /* from src/tests/cmocka/test_sss_ptr_hash.c */
+ void test_sss_ptr_hash_with_free_cb(void **state);
++void test_sss_ptr_hash_overwrite_with_free_cb(void **state);
+ void test_sss_ptr_hash_with_lookup_cb(void **state);
+ void test_sss_ptr_hash_without_cb(void **state);
+ 
+diff --git a/src/util/sss_ptr_hash.c b/src/util/sss_ptr_hash.c
+index 6409236c782bac729ec51502019c04c83bce7cab..e3805dac4052b587d395b7163f5c45e1ba0aa6dc 100644
+--- a/src/util/sss_ptr_hash.c
++++ b/src/util/sss_ptr_hash.c
+@@ -54,6 +54,7 @@ struct sss_ptr_hash_value {
+     hash_table_t *table;
+     const char *key;
+     void *payload;
++    bool delete_in_progress;
+ };
+ 
+ static int
+@@ -61,12 +62,22 @@ sss_ptr_hash_value_destructor(struct sss_ptr_hash_value *value)
+ {
+     hash_key_t table_key;
+ 
++    /* Do not call hash_delete() if we got here from hash delete callback when
++     * the callback calls talloc_free(payload) which frees the value. This
++     * should not happen since talloc will avoid circular free but let's be
++     * over protective here. */
++    if (value->delete_in_progress) {
++        return 0;
++    }
++
++    value->delete_in_progress = true;
+     if (value->table && value->key) {
+         table_key.type = HASH_KEY_STRING;
+         table_key.str = discard_const_p(char, value->key);
+         if (hash_delete(value->table, &table_key) != HASH_SUCCESS) {
+             DEBUG(SSSDBG_CRIT_FAILURE,
+                   "failed to delete entry with key '%s'\n", value->key);
++            value->delete_in_progress = false;
+         }
+     }
+ 
+@@ -127,6 +138,15 @@ sss_ptr_hash_delete_cb(hash_entry_t *item,
+     callback_entry.key = item->key;
+     callback_entry.value.type = HASH_VALUE_PTR;
+     callback_entry.value.ptr = value->payload;
++
++    /* Delete the value in case this callback has been called directly
++     * from dhash (overwriting existing entry) instead of hash_delete()
++     * in value's destructor. */
++    if (!value->delete_in_progress) {
++        talloc_set_destructor(value, NULL);
++        talloc_free(value);
++    }
++
+     /* Even if execution is already in the context of
+      * talloc_free(payload) -> talloc_free(value) -> ...
+      * there still might be legitimate reasons to execute callback.
+-- 
+2.25.4
+

@@ -29,13 +29,32 @@
 
 Name: sssd
 Version: 2.4.0
-Release: 4%{?dist}
+Release: 5%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/sssd-2_4_0/sssd-2.4.0.tar.gz
 
 ### Patches ###
+Patch0001:  0001-kcm-fix-typos-in-debug-messages.patch
+Patch0002:  0002-kcm-avoid-name-confusion-in-GET_CRED_UUID_LIST-handl.patch
+Patch0003:  0003-kcm-disable-encryption.patch
+Patch0004:  0004-kcm-avoid-multiple-debug-messages-if-sss_sec_put-fai.patch
+Patch0005:  0005-secrets-allow-to-specify-secret-s-data-format.patch
+Patch0006:  0006-secrets-accept-binary-data-instead-of-string.patch
+Patch0007:  0007-iobuf-add-more-iobuf-functions.patch
+Patch0008:  0008-kcm-add-json-suffix-to-existing-searialization-funct.patch
+Patch0009:  0009-kcm-move-sec-key-parser-to-separate-file-so-it-can-b.patch
+Patch0010:  0010-kcm-avoid-suppression-of-cppcheck-warning.patch
+Patch0011:  0011-kcm-add-spaces-around-operators-in-kcmsrv_ccache_key.patch
+Patch0012:  0012-kcm-use-binary-format-to-store-ccache-instead-of-jso.patch
+Patch0013:  0013-kcm-add-per-connection-data-to-be-shared-between-req.patch
+Patch0014:  0014-sss_ptr_hash-fix-double-free-for-circular-dependenci.patch
+Patch0015:  0015-kcm-store-credentials-list-in-hash-table-to-avoid-ca.patch
+Patch0016:  0016-secrets-fix-may_payload_size-exceeded-debug-message.patch
+Patch0017:  0017-secrets-default-to-plaintext-if-enctype-attr-is-miss.patch
+Patch0018:  0018-secrets-move-attrs-names-to-macros.patch
+Patch0019:  0019-secrets-remove-base64-enctype.patch
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1014,6 +1033,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Mon Dec 7 2020 Pavel Březina <pbrezina@redhat.com> - 2.4.0-5
+- Improve sssd-kcm performance (rhbz#1645624)
+
 * Mon Nov 30 2020 Stephen Gallagher <sgallagh@redhat.com> - 2.4.0-4
 - Rebuild for Fedora ELN
 

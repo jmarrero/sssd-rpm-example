@@ -1,0 +1,292 @@
+From 27968f52eb57391ae64df57d29cf9911fc59d161 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 22 Oct 2020 13:34:52 +0200
+Subject: [PATCH 08/19] kcm: add json suffix to existing searialization
+ functions
+
+---
+ Makefile.am                                   | 10 ++---
+ src/responder/kcm/kcmsrv_ccache.h             | 18 ++++-----
+ src/responder/kcm/kcmsrv_ccache_json.c        | 18 ++++-----
+ src/responder/kcm/kcmsrv_ccache_secdb.c       | 14 +++----
+ src/responder/kcm/kcmsrv_ccache_secrets.c     |  9 ++---
+ ...n_marshalling.c => test_kcm_marshalling.c} | 39 ++++++-------------
+ 6 files changed, 44 insertions(+), 64 deletions(-)
+ rename src/tests/cmocka/{test_kcm_json_marshalling.c => test_kcm_marshalling.c} (90%)
+
+diff --git a/Makefile.am b/Makefile.am
+index 97aa1ec661268aaa7a3f09b5022c5677df19d9da..8ca46bf2f9add08155bfb824444437532c97909c 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -311,7 +311,7 @@ endif   # HAVE_INOTIFY
+ 
+ if BUILD_KCM
+ non_interactive_cmocka_based_tests += \
+-	test_kcm_json \
++	test_kcm_marshalling \
+ 	test_kcm_queue \
+         $(NULL)
+ endif   # BUILD_KCM
+@@ -3927,18 +3927,18 @@ test_sssd_krb5_locator_plugin_LDADD = \
+     $(NULL)
+ 
+ if BUILD_KCM
+-test_kcm_json_SOURCES = \
+-    src/tests/cmocka/test_kcm_json_marshalling.c \
++test_kcm_marshalling_SOURCES = \
++    src/tests/cmocka/test_kcm_marshalling.c \
+     src/responder/kcm/kcmsrv_ccache_json.c \
+     src/responder/kcm/kcmsrv_ccache.c \
+     src/util/sss_krb5.c \
+     src/util/sss_iobuf.c \
+     $(NULL)
+-test_kcm_json_CFLAGS = \
++test_kcm_marshalling_CFLAGS = \
+     $(AM_CFLAGS) \
+     $(UUID_CFLAGS) \
+     $(NULL)
+-test_kcm_json_LDADD = \
++test_kcm_marshalling_LDADD = \
+     $(JANSSON_LIBS) \
+     $(UUID_LIBS) \
+     $(KRB5_LIBS) \
+diff --git a/src/responder/kcm/kcmsrv_ccache.h b/src/responder/kcm/kcmsrv_ccache.h
+index d629923fa140bd30d8a59f56443dea7ce101c33e..5aaded0524d0765dea6bfb962a83cf625f0e85f4 100644
+--- a/src/responder/kcm/kcmsrv_ccache.h
++++ b/src/responder/kcm/kcmsrv_ccache.h
+@@ -333,16 +333,16 @@ const char *sec_key_create(TALLOC_CTX *mem_ctx,
+  * sec_key is a concatenation of the ccache's UUID and name
+  * sec_value is the JSON dump of the ccache contents
+  */
+-errno_t sec_kv_to_ccache(TALLOC_CTX *mem_ctx,
+-                         const char *sec_key,
+-                         const char *sec_value,
+-                         struct cli_creds *client,
+-                         struct kcm_ccache **_cc);
++errno_t sec_kv_to_ccache_json(TALLOC_CTX *mem_ctx,
++                              const char *sec_key,
++                              const char *sec_value,
++                              struct cli_creds *client,
++                              struct kcm_ccache **_cc);
+ 
+ /* Convert a kcm_ccache to a key-value pair to be stored in secrets */
+-errno_t kcm_ccache_to_sec_input(TALLOC_CTX *mem_ctx,
+-                                struct kcm_ccache *cc,
+-                                struct cli_creds *client,
+-                                struct sss_iobuf **_payload);
++errno_t kcm_ccache_to_sec_input_json(TALLOC_CTX *mem_ctx,
++                                     struct kcm_ccache *cc,
++                                     struct cli_creds *client,
++                                     struct sss_iobuf **_payload);
+ 
+ #endif /* _KCMSRV_CCACHE_H_ */
+diff --git a/src/responder/kcm/kcmsrv_ccache_json.c b/src/responder/kcm/kcmsrv_ccache_json.c
+index 38ec53c408c3b9d44f37d102c4a0c976ef32bdfe..8101f5ddc148bfff83cc02cf9b19a3566209e781 100644
+--- a/src/responder/kcm/kcmsrv_ccache_json.c
++++ b/src/responder/kcm/kcmsrv_ccache_json.c
+@@ -460,10 +460,10 @@ static errno_t ccache_to_sec_val(TALLOC_CTX *mem_ctx,
+     return EOK;
+ }
+ 
+-errno_t kcm_ccache_to_sec_input(TALLOC_CTX *mem_ctx,
+-                                struct kcm_ccache *cc,
+-                                struct cli_creds *client,
+-                                struct sss_iobuf **_payload)
++errno_t kcm_ccache_to_sec_input_json(TALLOC_CTX *mem_ctx,
++                                     struct kcm_ccache *cc,
++                                     struct cli_creds *client,
++                                     struct sss_iobuf **_payload)
+ {
+     errno_t ret;
+     const char *value;
+@@ -897,11 +897,11 @@ static errno_t sec_json_value_to_ccache(struct kcm_ccache *cc,
+  * sec_key is a concatenation of the ccache's UUID and name
+  * sec_value is the JSON dump of the ccache contents
+  */
+-errno_t sec_kv_to_ccache(TALLOC_CTX *mem_ctx,
+-                         const char *sec_key,
+-                         const char *sec_value,
+-                         struct cli_creds *client,
+-                         struct kcm_ccache **_cc)
++errno_t sec_kv_to_ccache_json(TALLOC_CTX *mem_ctx,
++                              const char *sec_key,
++                              const char *sec_value,
++                              struct cli_creds *client,
++                              struct kcm_ccache **_cc)
+ {
+     errno_t ret;
+     json_t *root = NULL;
+diff --git a/src/responder/kcm/kcmsrv_ccache_secdb.c b/src/responder/kcm/kcmsrv_ccache_secdb.c
+index f0143e686826e3bf637619efc799e0d2f0715ba4..f5cfe47a7c6deac17031788105ac4235a6aaa9ff 100644
+--- a/src/responder/kcm/kcmsrv_ccache_secdb.c
++++ b/src/responder/kcm/kcmsrv_ccache_secdb.c
+@@ -160,7 +160,7 @@ static errno_t kcm_ccache_to_secdb_kv(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    ret = kcm_ccache_to_sec_input(mem_ctx, cc, client, &payload);
++    ret = kcm_ccache_to_sec_input_json(mem_ctx, cc, client, &payload);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "Cannot convert ccache to a secret [%d][%s]\n", ret, sss_strerror(ret));
+@@ -454,11 +454,9 @@ static errno_t secdb_get_cc(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    ret = sec_kv_to_ccache(tmp_ctx,
+-                           secdb_key,
+-                           (const char *) sss_iobuf_get_data(ccbuf),
+-                           client,
+-                           &cc);
++    ret = sec_kv_to_ccache_json(tmp_ctx, secdb_key,
++                                (const char *)sss_iobuf_get_data(ccbuf),
++                                client, &cc);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Cannot convert JSON keyval to ccache blob [%d]: %s\n",
+@@ -1251,7 +1249,7 @@ static struct tevent_req *ccdb_secdb_mod_send(TALLOC_CTX *mem_ctx,
+         goto immediate;
+     }
+ 
+-    ret = kcm_ccache_to_sec_input(state, cc, client, &payload);
++    ret = kcm_ccache_to_sec_input_json(state, cc, client, &payload);
+     if (ret != EOK) {
+         goto immediate;
+     }
+@@ -1327,7 +1325,7 @@ static struct tevent_req *ccdb_secdb_store_cred_send(TALLOC_CTX *mem_ctx,
+         goto immediate;
+     }
+ 
+-    ret = kcm_ccache_to_sec_input(state, cc, client, &payload);
++    ret = kcm_ccache_to_sec_input_json(state, cc, client, &payload);
+     if (ret != EOK) {
+         goto immediate;
+     }
+diff --git a/src/responder/kcm/kcmsrv_ccache_secrets.c b/src/responder/kcm/kcmsrv_ccache_secrets.c
+index 440ab3bb99dd983ba0343f371c0c6470bbd53afc..9d1fe8cad2dc6ed3ab43e181d0db52673d4759cc 100644
+--- a/src/responder/kcm/kcmsrv_ccache_secrets.c
++++ b/src/responder/kcm/kcmsrv_ccache_secrets.c
+@@ -195,7 +195,7 @@ static errno_t kcm_ccache_to_sec_kv(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    ret = kcm_ccache_to_sec_input(mem_ctx, cc, client, &payload);
++    ret = kcm_ccache_to_sec_input_json(mem_ctx, cc, client, &payload);
+     if (ret != EOK) {
+         goto done;
+     }
+@@ -489,11 +489,8 @@ static void sec_get_done(struct tevent_req *subreq)
+         return;
+     }
+ 
+-    ret = sec_kv_to_ccache(state,
+-                           state->sec_key,
+-                           sec_value,
+-                           state->client,
+-                           &state->cc);
++    ret = sec_kv_to_ccache_json(state, state->sec_key, sec_value, state->client,
++                                &state->cc);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Cannot convert JSON keyval to ccache blob [%d]: %s\n",
+diff --git a/src/tests/cmocka/test_kcm_json_marshalling.c b/src/tests/cmocka/test_kcm_marshalling.c
+similarity index 90%
+rename from src/tests/cmocka/test_kcm_json_marshalling.c
+rename to src/tests/cmocka/test_kcm_marshalling.c
+index 48ee92bd675780b023b5c8275e5713b91388d06a..f82129974787bba6883662a732311f3370bcc4f1 100644
+--- a/src/tests/cmocka/test_kcm_json_marshalling.c
++++ b/src/tests/cmocka/test_kcm_marshalling.c
+@@ -154,7 +154,7 @@ static void assert_cc_equal(struct kcm_ccache *cc1,
+     assert_cc_offset_equal(cc1, cc2);
+ }
+ 
+-static void test_kcm_ccache_marshall_unmarshall(void **state)
++static void test_kcm_ccache_marshall_unmarshall_json(void **state)
+ {
+     struct kcm_marshalling_test_ctx *test_ctx = talloc_get_type(*state,
+                                         struct kcm_marshalling_test_ctx);
+@@ -182,10 +182,7 @@ static void test_kcm_ccache_marshall_unmarshall(void **state)
+                      &cc);
+     assert_int_equal(ret, EOK);
+ 
+-    ret = kcm_ccache_to_sec_input(test_ctx,
+-                                  cc,
+-                                  &owner,
+-                                  &payload);
++    ret = kcm_ccache_to_sec_input_json(test_ctx, cc, &owner, &payload);
+     assert_int_equal(ret, EOK);
+ 
+     data = sss_iobuf_get_data(payload);
+@@ -196,25 +193,19 @@ static void test_kcm_ccache_marshall_unmarshall(void **state)
+     key = sec_key_create(test_ctx, name, uuid);
+     assert_non_null(key);
+ 
+-    ret = sec_kv_to_ccache(test_ctx,
+-                           key,
+-                           (const char *) data,
+-                           &owner,
+-                           &cc2);
++    ret = sec_kv_to_ccache_json(test_ctx, key, (const char *)data, &owner,
++                                &cc2);
+     assert_int_equal(ret, EOK);
+ 
+     assert_cc_equal(cc, cc2);
+ 
+     /* This key is exactly one byte shorter than it should be */
+-    ret = sec_kv_to_ccache(test_ctx,
+-                           TEST_UUID_STR"-",
+-                           (const char *) data,
+-                           &owner,
+-                           &cc2);
++    ret = sec_kv_to_ccache_json(test_ctx, TEST_UUID_STR "-", (const char *)data,
++                                &owner, &cc2);
+     assert_int_equal(ret, EINVAL);
+ }
+ 
+-static void test_kcm_ccache_no_princ(void **state)
++static void test_kcm_ccache_no_princ_json(void **state)
+ {
+     struct kcm_marshalling_test_ctx *test_ctx = talloc_get_type(*state,
+                                         struct kcm_marshalling_test_ctx);
+@@ -246,10 +237,7 @@ static void test_kcm_ccache_no_princ(void **state)
+     princ = kcm_cc_get_client_principal(cc);
+     assert_null(princ);
+ 
+-    ret = kcm_ccache_to_sec_input(test_ctx,
+-                                  cc,
+-                                  &owner,
+-                                  &payload);
++    ret = kcm_ccache_to_sec_input_json(test_ctx, cc, &owner, &payload);
+     assert_int_equal(ret, EOK);
+ 
+     data = sss_iobuf_get_data(payload);
+@@ -260,11 +248,8 @@ static void test_kcm_ccache_no_princ(void **state)
+     key = sec_key_create(test_ctx, name, uuid);
+     assert_non_null(key);
+ 
+-    ret = sec_kv_to_ccache(test_ctx,
+-                           key,
+-                           (const char *) data,
+-                           &owner,
+-                           &cc2);
++    ret = sec_kv_to_ccache_json(test_ctx, key, (const char *)data, &owner,
++                                &cc2);
+     assert_int_equal(ret, EOK);
+ 
+     assert_cc_equal(cc, cc2);
+@@ -340,10 +325,10 @@ int main(int argc, const char *argv[])
+     };
+ 
+     const struct CMUnitTest tests[] = {
+-        cmocka_unit_test_setup_teardown(test_kcm_ccache_marshall_unmarshall,
++        cmocka_unit_test_setup_teardown(test_kcm_ccache_marshall_unmarshall_json,
+                                         setup_kcm_marshalling,
+                                         teardown_kcm_marshalling),
+-        cmocka_unit_test_setup_teardown(test_kcm_ccache_no_princ,
++        cmocka_unit_test_setup_teardown(test_kcm_ccache_no_princ_json,
+                                         setup_kcm_marshalling,
+                                         teardown_kcm_marshalling),
+         cmocka_unit_test(test_sec_key_get_uuid),
+-- 
+2.25.4
+

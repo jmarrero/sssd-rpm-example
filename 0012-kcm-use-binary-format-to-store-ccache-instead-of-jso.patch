@@ -1,0 +1,741 @@
+From 94ceb85465dbf052f681bbd6c8ebced4d2d97f92 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 27 Oct 2020 16:21:31 +0100
+Subject: [PATCH 12/19] kcm: use binary format to store ccache instead of json
+
+JSON is computationally complex and the parser is a bottleneck which
+consumes about 10% of time. It also create the ccache unnecessary
+large because it requires lots of unneded character and base64
+encoding.
+
+Binary format is fast, simple and small.
+
+This is backwards compatible and there is no need to destroy existing
+ccache. It will be stored in binary format at first write to the cache.
+
+Resolves: https://github.com/SSSD/sssd/issues/5349
+---
+ Makefile.am                               |   2 +
+ src/responder/kcm/kcmsrv_ccache.h         |  16 +-
+ src/responder/kcm/kcmsrv_ccache_binary.c  | 308 ++++++++++++++++++++++
+ src/responder/kcm/kcmsrv_ccache_json.c    |   1 -
+ src/responder/kcm/kcmsrv_ccache_secdb.c   |  49 ++--
+ src/responder/kcm/kcmsrv_ccache_secrets.c |   2 +-
+ src/tests/cmocka/test_kcm_marshalling.c   | 112 +++++++-
+ src/tests/multihost/basic/test_kcm.py     |  12 +-
+ src/util/secrets/secrets.c                |   2 +-
+ 9 files changed, 476 insertions(+), 28 deletions(-)
+ create mode 100644 src/responder/kcm/kcmsrv_ccache_binary.c
+
+diff --git a/Makefile.am b/Makefile.am
+index ae9bc540a86f2e291dd5b5f66e1ce4f0aacbaf61..430b4e8424d6bde0c7de919c6aceabf3839e3a23 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -1817,6 +1817,7 @@ sssd_kcm_SOURCES = \
+     src/responder/kcm/kcm.c \
+     src/responder/kcm/kcmsrv_cmd.c \
+     src/responder/kcm/kcmsrv_ccache.c \
++    src/responder/kcm/kcmsrv_ccache_binary.c \
+     src/responder/kcm/kcmsrv_ccache_mem.c \
+     src/responder/kcm/kcmsrv_ccache_json.c \
+     src/responder/kcm/kcmsrv_ccache_key.c \
+@@ -3930,6 +3931,7 @@ test_sssd_krb5_locator_plugin_LDADD = \
+ if BUILD_KCM
+ test_kcm_marshalling_SOURCES = \
+     src/tests/cmocka/test_kcm_marshalling.c \
++    src/responder/kcm/kcmsrv_ccache_binary.c \
+     src/responder/kcm/kcmsrv_ccache_json.c \
+     src/responder/kcm/kcmsrv_ccache_key.c \
+     src/responder/kcm/kcmsrv_ccache.c \
+diff --git a/src/responder/kcm/kcmsrv_ccache.h b/src/responder/kcm/kcmsrv_ccache.h
+index 892067f3170b19c0e55ceaa75b0c01f772c49d3d..b0a7acb9fed8a8f89a3d0e2239ab28c7ce80fa23 100644
+--- a/src/responder/kcm/kcmsrv_ccache.h
++++ b/src/responder/kcm/kcmsrv_ccache.h
+@@ -352,7 +352,21 @@ errno_t sec_kv_to_ccache_json(TALLOC_CTX *mem_ctx,
+ /* Convert a kcm_ccache to a key-value pair to be stored in secrets */
+ errno_t kcm_ccache_to_sec_input_json(TALLOC_CTX *mem_ctx,
+                                      struct kcm_ccache *cc,
+-                                     struct cli_creds *client,
+                                      struct sss_iobuf **_payload);
+ 
++/*
++ * sec_key is a concatenation of the ccache's UUID and name
++ * sec_value is the binary representation of ccache.
++ */
++errno_t sec_kv_to_ccache_binary(TALLOC_CTX *mem_ctx,
++                                const char *sec_key,
++                                struct sss_iobuf *sec_value,
++                                struct cli_creds *client,
++                                struct kcm_ccache **_cc);
++
++/* Convert a kcm_ccache to its binary representation. */
++errno_t kcm_ccache_to_sec_input_binary(TALLOC_CTX *mem_ctx,
++                                       struct kcm_ccache *cc,
++                                       struct sss_iobuf **_payload);
++
+ #endif /* _KCMSRV_CCACHE_H_ */
+diff --git a/src/responder/kcm/kcmsrv_ccache_binary.c b/src/responder/kcm/kcmsrv_ccache_binary.c
+new file mode 100644
+index 0000000000000000000000000000000000000000..7bfdbf13bfeaa7d45de6352e7b51b781b713b8f2
+--- /dev/null
++++ b/src/responder/kcm/kcmsrv_ccache_binary.c
+@@ -0,0 +1,308 @@
++/*
++    Authors:
++        Pavel Březina <pbrezina@redhat.com>
++
++    Copyright (C) 2020 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "config.h"
++
++#include <stdio.h>
++#include <talloc.h>
++
++#include "util/util.h"
++#include "util/util_creds.h"
++#include "util/crypto/sss_crypto.h"
++#include "responder/kcm/kcmsrv_ccache_pvt.h"
++
++static errno_t krb_data_to_bin(krb5_data *data, struct sss_iobuf *buf)
++{
++    return sss_iobuf_write_varlen(buf, (uint8_t *)data->data, data->length);
++}
++
++static errno_t princ_to_bin(krb5_principal princ, struct sss_iobuf *buf)
++{
++    errno_t ret;
++
++    if (princ == NULL) {
++        return sss_iobuf_write_uint8(buf, 0);
++    }
++
++    /* Mark that principal is not empty. */
++    ret = sss_iobuf_write_uint8(buf, 1);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    ret = krb_data_to_bin(&princ->realm, buf);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    ret = sss_iobuf_write_int32(buf, princ->type);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    ret = sss_iobuf_write_int32(buf, princ->length);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    for (krb5_int32 i = 0; i < princ->length; i++) {
++        ret = krb_data_to_bin(&princ->data[i], buf);
++        if (ret != EOK) {
++            return ret;
++        }
++    }
++
++    return EOK;
++}
++
++static errno_t creds_to_bin(struct kcm_cred *creds, struct sss_iobuf *buf)
++{
++    struct kcm_cred *crd;
++    uint32_t count = 0;
++    errno_t ret;
++
++    DLIST_FOR_EACH(crd, creds) {
++        count++;
++    }
++
++    ret = sss_iobuf_write_uint32(buf, count);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    DLIST_FOR_EACH(crd, creds) {
++        ret = sss_iobuf_write_len(buf, (uint8_t *)crd->uuid, sizeof(uuid_t));
++        if (ret != EOK) {
++            return ret;
++        }
++
++        ret = sss_iobuf_write_iobuf(buf, crd->cred_blob);
++        if (ret != EOK) {
++            return ret;
++        }
++    }
++
++    return EOK;
++}
++
++errno_t kcm_ccache_to_sec_input_binary(TALLOC_CTX *mem_ctx,
++                                       struct kcm_ccache *cc,
++                                       struct sss_iobuf **_payload)
++{
++    struct sss_iobuf *buf;
++    errno_t ret;
++
++    buf = sss_iobuf_init_empty(mem_ctx, sizeof(krb5_principal_data), 0);
++    if (buf == NULL) {
++        return ENOMEM;
++    }
++
++    ret = sss_iobuf_write_int32(buf, cc->kdc_offset);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    ret = princ_to_bin(cc->client, buf);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    ret = creds_to_bin(cc->creds, buf);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    *_payload = buf;
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        talloc_free(buf);
++    }
++
++    return ret;
++}
++
++static errno_t bin_to_krb_data(TALLOC_CTX *mem_ctx,
++                               struct sss_iobuf *buf,
++                               krb5_data *out)
++{
++    uint8_t *data;
++    size_t len;
++    errno_t ret;
++
++    ret = sss_iobuf_read_varlen(mem_ctx, buf, &data, &len);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    out->magic = 0;
++    out->data = (char*)data;
++    out->length = len;
++
++    return EOK;
++}
++
++static errno_t bin_to_princ(TALLOC_CTX *mem_ctx,
++                            struct sss_iobuf *buf,
++                            krb5_principal *_princ)
++{
++    krb5_principal princ;
++    uint8_t non_empty;
++    krb5_int32 i;
++    errno_t ret;
++
++    ret = sss_iobuf_read_uint8(buf, &non_empty);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    if (non_empty == 0) {
++        *_princ = NULL;
++        return EOK;
++    }
++
++    princ = talloc_zero(mem_ctx, struct krb5_principal_data);
++    if (princ == NULL) {
++        return ENOMEM;
++    }
++    princ->magic = KV5M_PRINCIPAL;
++
++    ret = bin_to_krb_data(princ, buf, &princ->realm);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    ret = sss_iobuf_read_int32(buf, &princ->type);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    ret = sss_iobuf_read_int32(buf, &princ->length);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    princ->data = talloc_zero_array(princ, krb5_data, princ->length);
++    if (princ->length > 0 && princ->data == NULL) {
++        return ENOMEM;
++    }
++
++    for (i = 0; i < princ->length; i++) {
++        ret = bin_to_krb_data(princ, buf, &princ->data[i]);
++        if (ret != EOK) {
++            return ret;
++        }
++    }
++
++    *_princ = princ;
++
++    return EOK;
++}
++
++static errno_t bin_to_creds(TALLOC_CTX *mem_ctx,
++                            struct sss_iobuf *buf,
++                            struct kcm_cred **_creds)
++{
++    struct kcm_cred *creds = NULL;
++    struct kcm_cred *crd;
++    struct sss_iobuf *cred_blob;
++    uint32_t count;
++    uuid_t uuid;
++    errno_t ret;
++
++    ret = sss_iobuf_read_uint32(buf, &count);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    for (uint32_t i = 0; i < count; i++) {
++        ret = sss_iobuf_read_len(buf, sizeof(uuid_t), (uint8_t*)uuid);
++        if (ret != EOK) {
++            return ret;
++        }
++
++        ret = sss_iobuf_read_iobuf(NULL, buf, &cred_blob);
++        if (ret != EOK) {
++            return ret;
++        }
++
++        crd = kcm_cred_new(mem_ctx, uuid, cred_blob);
++        if (crd == NULL) {
++            talloc_free(cred_blob);
++            return ENOMEM;
++        }
++
++        DLIST_ADD(creds, crd);
++    }
++
++    *_creds = creds;
++
++    return EOK;
++}
++
++errno_t sec_kv_to_ccache_binary(TALLOC_CTX *mem_ctx,
++                                const char *sec_key,
++                                struct sss_iobuf *sec_value,
++                                struct cli_creds *client,
++                                struct kcm_ccache **_cc)
++{
++    struct kcm_ccache *cc;
++    errno_t ret;
++
++    cc = talloc_zero(mem_ctx, struct kcm_ccache);
++    if (cc == NULL) {
++        return ENOMEM;
++    }
++
++    ret = kcm_cc_set_header(cc, sec_key, client);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Cannot store ccache header [%d]: %s\n",
++              ret, sss_strerror(ret));
++        goto done;
++    }
++
++    ret = sss_iobuf_read_int32(sec_value, &cc->kdc_offset);
++    if  (ret != EOK) {
++        goto done;
++    }
++
++    ret = bin_to_princ(cc, sec_value, &cc->client);
++    if  (ret != EOK) {
++        goto done;
++    }
++
++    ret = bin_to_creds(cc, sec_value, &cc->creds);
++    if  (ret != EOK) {
++        goto done;
++    }
++
++    *_cc = cc;
++
++    ret = EOK;
++
++done:
++    if (ret != EOK) {
++        talloc_free(cc);
++    }
++
++    return ret;
++}
+diff --git a/src/responder/kcm/kcmsrv_ccache_json.c b/src/responder/kcm/kcmsrv_ccache_json.c
+index 7f73b56bf6c27417271876a989695ff917c3886e..e790cbea36d57d2ba0d4e25fc8fc249a4e653c3c 100644
+--- a/src/responder/kcm/kcmsrv_ccache_json.c
++++ b/src/responder/kcm/kcmsrv_ccache_json.c
+@@ -343,7 +343,6 @@ static errno_t ccache_to_sec_val(TALLOC_CTX *mem_ctx,
+ 
+ errno_t kcm_ccache_to_sec_input_json(TALLOC_CTX *mem_ctx,
+                                      struct kcm_ccache *cc,
+-                                     struct cli_creds *client,
+                                      struct sss_iobuf **_payload)
+ {
+     errno_t ret;
+diff --git a/src/responder/kcm/kcmsrv_ccache_secdb.c b/src/responder/kcm/kcmsrv_ccache_secdb.c
+index f5cfe47a7c6deac17031788105ac4235a6aaa9ff..726711ac441c40a6bfc84045e9b3e5b85505c7e0 100644
+--- a/src/responder/kcm/kcmsrv_ccache_secdb.c
++++ b/src/responder/kcm/kcmsrv_ccache_secdb.c
+@@ -37,11 +37,14 @@
+ 
+ static errno_t sec_get(TALLOC_CTX *mem_ctx,
+                        struct sss_sec_req *req,
+-                       struct sss_iobuf **_buf)
++                       struct sss_iobuf **_buf,
++                       char **_datatype)
+ {
+     errno_t ret;
+     TALLOC_CTX *tmp_ctx;
+-    char *secret;
++    char *datatype;
++    uint8_t *data;
++    size_t len;
+     struct sss_iobuf *buf;
+ 
+     tmp_ctx = talloc_new(mem_ctx);
+@@ -49,23 +52,27 @@ static errno_t sec_get(TALLOC_CTX *mem_ctx,
+         return ENOMEM;
+     }
+ 
+-    ret = sss_sec_get(tmp_ctx, req, (uint8_t **)&secret, NULL, NULL);
++    ret = sss_sec_get(tmp_ctx, req, &data, &len, &datatype);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Cannot retrieve the secret [%d]: %s\n", ret, sss_strerror(ret));
+         goto done;
+     }
+ 
+-    buf = sss_iobuf_init_readonly(tmp_ctx, (const uint8_t *)secret,
+-                                  strlen(secret) + 1);
++    buf = sss_iobuf_init_steal(tmp_ctx, data, len);
+     if (buf == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE, "Cannot init the iobuf\n");
+         ret = EIO;
+         goto done;
+     }
+ 
+-    ret = EOK;
+     *_buf = talloc_steal(mem_ctx, buf);
++    if (_datatype != NULL) {
++        *_datatype = talloc_steal(mem_ctx, datatype);
++    }
++
++    ret = EOK;
++
+ done:
+     talloc_free(tmp_ctx);
+     return ret;
+@@ -78,7 +85,7 @@ static errno_t sec_put(TALLOC_CTX *mem_ctx,
+     errno_t ret;
+ 
+     ret = sss_sec_put(req, sss_iobuf_get_data(buf), sss_iobuf_get_size(buf),
+-                      SSS_SEC_PLAINTEXT, "simple");
++                      SSS_SEC_PLAINTEXT, "binary");
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Cannot write the secret [%d]: %s\n", ret, sss_strerror(ret));
+@@ -94,7 +101,7 @@ static errno_t sec_update(TALLOC_CTX *mem_ctx,
+     errno_t ret;
+ 
+     ret = sss_sec_update(req, sss_iobuf_get_data(buf), sss_iobuf_get_size(buf),
+-                         SSS_SEC_PLAINTEXT, "simple");
++                         SSS_SEC_PLAINTEXT, "binary");
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Cannot write the secret [%d]: %s\n", ret, sss_strerror(ret));
+@@ -160,7 +167,7 @@ static errno_t kcm_ccache_to_secdb_kv(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    ret = kcm_ccache_to_sec_input_json(mem_ctx, cc, client, &payload);
++    ret = kcm_ccache_to_sec_input_binary(mem_ctx, cc, &payload);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "Cannot convert ccache to a secret [%d][%s]\n", ret, sss_strerror(ret));
+@@ -434,6 +441,7 @@ static errno_t secdb_get_cc(TALLOC_CTX *mem_ctx,
+     struct kcm_ccache *cc = NULL;
+     struct sss_sec_req *sreq = NULL;
+     struct sss_iobuf *ccbuf;
++    char *datatype;
+ 
+     tmp_ctx = talloc_new(mem_ctx);
+     if (tmp_ctx == NULL) {
+@@ -447,20 +455,23 @@ static errno_t secdb_get_cc(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    ret = sec_get(tmp_ctx, sreq, &ccbuf);
++    ret = sec_get(tmp_ctx, sreq, &ccbuf, &datatype);
+     if (ret != EOK) {
+         DEBUG(SSSDBG_OP_FAILURE,
+               "Cannot get the secret [%d][%s]\n", ret, sss_strerror(ret));
+         goto done;
+     }
+ 
+-    ret = sec_kv_to_ccache_json(tmp_ctx, secdb_key,
+-                                (const char *)sss_iobuf_get_data(ccbuf),
+-                                client, &cc);
++    if (strcmp(datatype, "binary") == 0) {
++        ret = sec_kv_to_ccache_binary(tmp_ctx, secdb_key, ccbuf, client, &cc);
++    } else {
++        ret = sec_kv_to_ccache_json(tmp_ctx, secdb_key,
++                                    (const char *)sss_iobuf_get_data(ccbuf),
++                                    client, &cc);
++    }
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_OP_FAILURE,
+-              "Cannot convert JSON keyval to ccache blob [%d]: %s\n",
+-              ret, sss_strerror(ret));
++        DEBUG(SSSDBG_OP_FAILURE, "Cannot convert %s data to ccache "
++              "[%d]: %s\n", datatype, ret, sss_strerror(ret));
+         goto done;
+     }
+ 
+@@ -756,7 +767,7 @@ static struct tevent_req *ccdb_secdb_get_default_send(TALLOC_CTX *mem_ctx,
+         goto immediate;
+     }
+ 
+-    ret = sec_get(state, sreq, &dfl_iobuf);
++    ret = sec_get(state, sreq, &dfl_iobuf, NULL);
+     if (ret == ENOENT) {
+         uuid_clear(state->uuid);
+         ret = EOK;
+@@ -1249,7 +1260,7 @@ static struct tevent_req *ccdb_secdb_mod_send(TALLOC_CTX *mem_ctx,
+         goto immediate;
+     }
+ 
+-    ret = kcm_ccache_to_sec_input_json(state, cc, client, &payload);
++    ret = kcm_ccache_to_sec_input_binary(state, cc, &payload);
+     if (ret != EOK) {
+         goto immediate;
+     }
+@@ -1325,7 +1336,7 @@ static struct tevent_req *ccdb_secdb_store_cred_send(TALLOC_CTX *mem_ctx,
+         goto immediate;
+     }
+ 
+-    ret = kcm_ccache_to_sec_input_json(state, cc, client, &payload);
++    ret = kcm_ccache_to_sec_input_binary(state, cc, &payload);
+     if (ret != EOK) {
+         goto immediate;
+     }
+diff --git a/src/responder/kcm/kcmsrv_ccache_secrets.c b/src/responder/kcm/kcmsrv_ccache_secrets.c
+index 9d1fe8cad2dc6ed3ab43e181d0db52673d4759cc..f3d69842cf8c230800aaf4fc6554495fcf03f57d 100644
+--- a/src/responder/kcm/kcmsrv_ccache_secrets.c
++++ b/src/responder/kcm/kcmsrv_ccache_secrets.c
+@@ -195,7 +195,7 @@ static errno_t kcm_ccache_to_sec_kv(TALLOC_CTX *mem_ctx,
+         goto done;
+     }
+ 
+-    ret = kcm_ccache_to_sec_input_json(mem_ctx, cc, client, &payload);
++    ret = kcm_ccache_to_sec_input_json(mem_ctx, cc, &payload);
+     if (ret != EOK) {
+         goto done;
+     }
+diff --git a/src/tests/cmocka/test_kcm_marshalling.c b/src/tests/cmocka/test_kcm_marshalling.c
+index f82129974787bba6883662a732311f3370bcc4f1..cebebac804b0a8a109084b35f58d4aab21e28da2 100644
+--- a/src/tests/cmocka/test_kcm_marshalling.c
++++ b/src/tests/cmocka/test_kcm_marshalling.c
+@@ -182,7 +182,7 @@ static void test_kcm_ccache_marshall_unmarshall_json(void **state)
+                      &cc);
+     assert_int_equal(ret, EOK);
+ 
+-    ret = kcm_ccache_to_sec_input_json(test_ctx, cc, &owner, &payload);
++    ret = kcm_ccache_to_sec_input_json(test_ctx, cc, &payload);
+     assert_int_equal(ret, EOK);
+ 
+     data = sss_iobuf_get_data(payload);
+@@ -237,7 +237,7 @@ static void test_kcm_ccache_no_princ_json(void **state)
+     princ = kcm_cc_get_client_principal(cc);
+     assert_null(princ);
+ 
+-    ret = kcm_ccache_to_sec_input_json(test_ctx, cc, &owner, &payload);
++    ret = kcm_ccache_to_sec_input_json(test_ctx, cc, &payload);
+     assert_int_equal(ret, EOK);
+ 
+     data = sss_iobuf_get_data(payload);
+@@ -255,6 +255,108 @@ static void test_kcm_ccache_no_princ_json(void **state)
+     assert_cc_equal(cc, cc2);
+ }
+ 
++static void test_kcm_ccache_marshall_unmarshall_binary(void **state)
++{
++    struct kcm_marshalling_test_ctx *test_ctx = talloc_get_type(*state,
++                                        struct kcm_marshalling_test_ctx);
++    errno_t ret;
++    struct cli_creds owner;
++    struct kcm_ccache *cc;
++    struct kcm_ccache *cc2;
++    struct sss_iobuf *payload;
++    const char *name;
++    const char *key;
++    uint8_t *data;
++    uuid_t uuid;
++
++    owner.ucred.uid = getuid();
++    owner.ucred.gid = getuid();
++
++    name = talloc_asprintf(test_ctx, "%"SPRIuid, getuid());
++    assert_non_null(name);
++
++    ret = kcm_cc_new(test_ctx,
++                     test_ctx->kctx,
++                     &owner,
++                     name,
++                     test_ctx->princ,
++                     &cc);
++    assert_int_equal(ret, EOK);
++
++    ret = kcm_ccache_to_sec_input_binary(test_ctx, cc, &payload);
++    assert_int_equal(ret, EOK);
++
++    data = sss_iobuf_get_data(payload);
++    assert_non_null(data);
++
++    ret = kcm_cc_get_uuid(cc, uuid);
++    assert_int_equal(ret, EOK);
++    key = sec_key_create(test_ctx, name, uuid);
++    assert_non_null(key);
++
++    sss_iobuf_cursor_reset(payload);
++    ret = sec_kv_to_ccache_binary(test_ctx, key, payload, &owner, &cc2);
++    assert_int_equal(ret, EOK);
++
++    assert_cc_equal(cc, cc2);
++
++    /* This key is exactly one byte shorter than it should be */
++    sss_iobuf_cursor_reset(payload);
++    ret = sec_kv_to_ccache_binary(test_ctx, TEST_UUID_STR "-", payload, &owner,
++                                  &cc2);
++    assert_int_equal(ret, EINVAL);
++}
++
++static void test_kcm_ccache_no_princ_binary(void **state)
++{
++    struct kcm_marshalling_test_ctx *test_ctx = talloc_get_type(*state,
++                                        struct kcm_marshalling_test_ctx);
++    errno_t ret;
++    struct cli_creds owner;
++    const char *name;
++    struct kcm_ccache *cc;
++    krb5_principal princ;
++    struct kcm_ccache *cc2;
++    struct sss_iobuf *payload;
++    const char *key;
++    uint8_t *data;
++    uuid_t uuid;
++
++    owner.ucred.uid = getuid();
++    owner.ucred.gid = getuid();
++
++    name = talloc_asprintf(test_ctx, "%"SPRIuid, getuid());
++    assert_non_null(name);
++
++    ret = kcm_cc_new(test_ctx,
++                     test_ctx->kctx,
++                     &owner,
++                     name,
++                     NULL,
++                     &cc);
++    assert_int_equal(ret, EOK);
++
++    princ = kcm_cc_get_client_principal(cc);
++    assert_null(princ);
++
++    ret = kcm_ccache_to_sec_input_binary(test_ctx, cc, &payload);
++    assert_int_equal(ret, EOK);
++
++    data = sss_iobuf_get_data(payload);
++    assert_non_null(data);
++
++    ret = kcm_cc_get_uuid(cc, uuid);
++    assert_int_equal(ret, EOK);
++    key = sec_key_create(test_ctx, name, uuid);
++    assert_non_null(key);
++
++    sss_iobuf_cursor_reset(payload);
++    ret = sec_kv_to_ccache_binary(test_ctx, key, payload, &owner, &cc2);
++    assert_int_equal(ret, EOK);
++
++    assert_cc_equal(cc, cc2);
++}
++
+ void test_sec_key_get_uuid(void **state)
+ {
+     errno_t ret;
+@@ -325,6 +427,12 @@ int main(int argc, const char *argv[])
+     };
+ 
+     const struct CMUnitTest tests[] = {
++        cmocka_unit_test_setup_teardown(test_kcm_ccache_marshall_unmarshall_binary,
++                                        setup_kcm_marshalling,
++                                        teardown_kcm_marshalling),
++        cmocka_unit_test_setup_teardown(test_kcm_ccache_no_princ_binary,
++                                        setup_kcm_marshalling,
++                                        teardown_kcm_marshalling),
+         cmocka_unit_test_setup_teardown(test_kcm_ccache_marshall_unmarshall_json,
+                                         setup_kcm_marshalling,
+                                         teardown_kcm_marshalling),
+diff --git a/src/tests/multihost/basic/test_kcm.py b/src/tests/multihost/basic/test_kcm.py
+index e5d315827b31f205216d6a20768533ef50983537..6f65431f88b0e77110c3a89c24363d28027390f6 100644
+--- a/src/tests/multihost/basic/test_kcm.py
++++ b/src/tests/multihost/basic/test_kcm.py
+@@ -310,6 +310,12 @@ class TestSanityKCM(object):
+         set_param(multihost, 'kcm', 'max_ccache_size', '1')
+         self._restart_kcm(multihost)
+ 
+-        with pytest.raises(paramiko.ssh_exception.AuthenticationException):
+-            ssh_foo3 = SSHClient(multihost.master[0].sys_hostname,
+-                                 username='foo3', password='Secret123')
++        # We use kinit to exceed the maximum ccache size as it creates payload
++        # of 1280 bytes by acquiring tgt and also some control credentials.
++        # SSH authentication is not sufficient as it stores only tgt.
++        ssh_foo3 = SSHClient(multihost.master[0].sys_hostname,
++                             username='foo3', password='Secret123')
++        (_, _, exit_status) = ssh_foo3.execute_cmd(
++            'kinit foo3@EXAMPLE.TEST', 'Secret123'
++        )
++        assert exit_status != 0
+diff --git a/src/util/secrets/secrets.c b/src/util/secrets/secrets.c
+index 2a7149ae8b1c88623784ffd4f3e7f908be15c662..6fd9e0af5bd9986052efdb8e244ddeb9e4fa50ff 100644
+--- a/src/util/secrets/secrets.c
++++ b/src/util/secrets/secrets.c
+@@ -36,7 +36,7 @@
+ #define SECRETS_BASEDN  "cn=secrets"
+ #define KCM_BASEDN      "cn=kcm"
+ 
+-#define LOCAL_SIMPLE_FILTER "(type=simple)"
++#define LOCAL_SIMPLE_FILTER "(|(type=simple)(type=binary))"
+ #define LOCAL_CONTAINER_FILTER "(type=container)"
+ 
+ typedef int (*url_mapper_fn)(TALLOC_CTX *mem_ctx,
+-- 
+2.25.4
+

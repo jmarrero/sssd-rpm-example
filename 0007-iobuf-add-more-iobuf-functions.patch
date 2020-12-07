@@ -1,0 +1,265 @@
+From 51c8dda998c5b7bfa08362a13915fcff265a6f8f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Fri, 23 Oct 2020 13:10:13 +0200
+Subject: [PATCH 07/19] iobuf: add more iobuf functions
+
+These will be used in later patches.
+---
+ src/shared/safealign.h |   4 ++
+ src/util/sss_iobuf.c   | 141 +++++++++++++++++++++++++++++++++++++++++
+ src/util/sss_iobuf.h   |  46 ++++++++++++++
+ 3 files changed, 191 insertions(+)
+
+diff --git a/src/shared/safealign.h b/src/shared/safealign.h
+index b00c37f5b98bd4bf7ff6cea8e1208d80c77f0228..35909faa25967cefd296808431620f51232f67e2 100644
+--- a/src/shared/safealign.h
++++ b/src/shared/safealign.h
+@@ -97,6 +97,10 @@ safealign_memcpy(void *dest, const void *src, size_t n, size_t *counter)
+ #define SAFEALIGN_SETMEM_UINT16(dest, value, pctr) \
+     SAFEALIGN_SETMEM_VALUE(dest, value, uint16_t, pctr)
+ 
++/* SAFEALIGN_SETMEM_UINT8(void *dest, uint8_t value, size_t *pctr) */
++#define SAFEALIGN_SETMEM_UINT8(dest, value, pctr) \
++    SAFEALIGN_SETMEM_VALUE(dest, value, uint8_t, pctr)
++
+ /* These macros are the same as their equivalents without _CHECK suffix,
+  * but additionally make the caller return EINVAL immediately if *pctr
+  * would exceed len. */
+diff --git a/src/util/sss_iobuf.c b/src/util/sss_iobuf.c
+index 518713e4cc3dd99627a3a4450f235cbbc69ed3a2..3056a7b0db38746cfed154179787e53622e1a041 100644
+--- a/src/util/sss_iobuf.c
++++ b/src/util/sss_iobuf.c
+@@ -66,6 +66,30 @@ struct sss_iobuf *sss_iobuf_init_readonly(TALLOC_CTX *mem_ctx,
+     return iobuf;
+ }
+ 
++struct sss_iobuf *sss_iobuf_init_steal(TALLOC_CTX *mem_ctx,
++                                       uint8_t *data,
++                                       size_t size)
++{
++    struct sss_iobuf *iobuf;
++
++    iobuf = talloc_zero(mem_ctx, struct sss_iobuf);
++    if (iobuf == NULL) {
++        return NULL;
++    }
++
++    iobuf->data = talloc_steal(iobuf, data);
++    iobuf->size = size;
++    iobuf->capacity = size;
++    iobuf->dp = 0;
++
++    return iobuf;
++}
++
++void sss_iobuf_cursor_reset(struct sss_iobuf *iobuf)
++{
++    iobuf->dp = 0;
++}
++
+ size_t sss_iobuf_get_len(struct sss_iobuf *iobuf)
+ {
+     if (iobuf == NULL) {
+@@ -223,6 +247,109 @@ errno_t sss_iobuf_write_len(struct sss_iobuf *iobuf,
+     return EOK;
+ }
+ 
++errno_t sss_iobuf_read_varlen(TALLOC_CTX *mem_ctx,
++                              struct sss_iobuf *iobuf,
++                              uint8_t **_out,
++                              size_t *_len)
++{
++    uint8_t *out;
++    uint32_t len;
++    size_t slen;
++    errno_t ret;
++
++    if (iobuf == NULL || _out == NULL || _len == NULL) {
++        return EINVAL;
++    }
++
++    ret = sss_iobuf_read_uint32(iobuf, &len);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    if (len == 0) {
++        *_out = NULL;
++        *_len = 0;
++        return EOK;
++    }
++
++    out = talloc_array(mem_ctx, uint8_t, len);
++    if (out == NULL) {
++        return ENOMEM;
++    }
++
++    slen = len;
++    ret = sss_iobuf_read_len(iobuf, slen, out);
++    if (ret != EOK) {
++        talloc_free(out);
++        return ret;
++    }
++
++    *_out = out;
++    *_len = slen;
++
++    return EOK;
++}
++
++errno_t sss_iobuf_write_varlen(struct sss_iobuf *iobuf,
++                               uint8_t *data,
++                               size_t len)
++{
++    errno_t ret;
++
++    if (iobuf == NULL || (data == NULL && len != 0)) {
++        return EINVAL;
++    }
++
++    ret = sss_iobuf_write_uint32(iobuf, len);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    if (len == 0) {
++        return EOK;
++    }
++
++    return sss_iobuf_write_len(iobuf, data, len);
++}
++
++errno_t sss_iobuf_read_iobuf(TALLOC_CTX *mem_ctx,
++                             struct sss_iobuf *iobuf,
++                             struct sss_iobuf **_out)
++{
++    struct sss_iobuf *out;
++    uint8_t *data;
++    size_t len;
++    errno_t ret;
++
++    ret = sss_iobuf_read_varlen(NULL, iobuf, &data, &len);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    out = sss_iobuf_init_steal(mem_ctx, data, len);
++    if (out == NULL) {
++        return ENOMEM;
++    }
++
++    *_out = out;
++
++    return EOK;
++}
++
++errno_t sss_iobuf_write_iobuf(struct sss_iobuf *iobuf,
++                              struct sss_iobuf *data)
++{
++    return sss_iobuf_write_varlen(iobuf, data->data, data->size);
++}
++
++errno_t sss_iobuf_read_uint8(struct sss_iobuf *iobuf,
++                             uint8_t *_val)
++{
++    SAFEALIGN_COPY_UINT8_CHECK(_val, iobuf_ptr(iobuf),
++                               iobuf->capacity, &iobuf->dp);
++    return EOK;
++}
++
+ errno_t sss_iobuf_read_uint32(struct sss_iobuf *iobuf,
+                               uint32_t *_val)
+ {
+@@ -239,6 +366,20 @@ errno_t sss_iobuf_read_int32(struct sss_iobuf *iobuf,
+     return EOK;
+ }
+ 
++errno_t sss_iobuf_write_uint8(struct sss_iobuf *iobuf,
++                              uint8_t val)
++{
++    errno_t ret;
++
++    ret = ensure_bytes(iobuf, sizeof(uint8_t));
++    if (ret != EOK) {
++        return ret;
++    }
++
++    SAFEALIGN_SETMEM_UINT8(iobuf_ptr(iobuf), val, &iobuf->dp);
++    return EOK;
++}
++
+ errno_t sss_iobuf_write_uint32(struct sss_iobuf *iobuf,
+                                uint32_t val)
+ {
+diff --git a/src/util/sss_iobuf.h b/src/util/sss_iobuf.h
+index cc3dfd1e98eeb49b979ac321bd0253bffa8a6dff..159fbc0b9ff756ca996722a84a1a13635d1aa8de 100644
+--- a/src/util/sss_iobuf.h
++++ b/src/util/sss_iobuf.h
+@@ -50,6 +50,29 @@ struct sss_iobuf *sss_iobuf_init_readonly(TALLOC_CTX *mem_ctx,
+                                           const uint8_t *data,
+                                           size_t size);
+ 
++/*
++ * @brief Allocate an IO buffer with a fixed size, stealing input data.
++ *
++ * This function is useful for parsing an input buffer from an existing
++ * buffer pointed to by data.
++ *
++ * The iobuf assumes ownership of the data buffer.
++ *
++ * @param[in]  mem_ctx      The talloc context that owns the iobuf
++ * @param[in]  data         The data to initialize the IO buffer with.
++ * @param[in]  size         The size of the data buffer
++ *
++ * @return The newly created buffer on success or NULL on an error.
++ */
++struct sss_iobuf *sss_iobuf_init_steal(TALLOC_CTX *mem_ctx,
++                                       uint8_t *data,
++                                       size_t size);
++
++/*
++ * @brief Reset internal cursor of the IO buffer (seek to the start)
++ */
++void sss_iobuf_cursor_reset(struct sss_iobuf *iobuf);
++
+ /*
+  * @brief Returns the number of bytes currently stored in the iobuf
+  *
+@@ -131,6 +154,28 @@ errno_t sss_iobuf_write_len(struct sss_iobuf *iobuf,
+                             uint8_t *buf,
+                             size_t len);
+ 
++errno_t sss_iobuf_read_varlen(TALLOC_CTX *mem_ctx,
++                              struct sss_iobuf *iobuf,
++                              uint8_t **_out,
++                              size_t *_len);
++
++errno_t sss_iobuf_write_varlen(struct sss_iobuf *iobuf,
++                               uint8_t *data,
++                               size_t len);
++
++errno_t sss_iobuf_read_iobuf(TALLOC_CTX *mem_ctx,
++                             struct sss_iobuf *iobuf,
++                             struct sss_iobuf **_out);
++
++errno_t sss_iobuf_write_iobuf(struct sss_iobuf *iobuf,
++                              struct sss_iobuf *data);
++
++errno_t sss_iobuf_read_uint8(struct sss_iobuf *iobuf,
++                             uint8_t *_val);
++
++errno_t sss_iobuf_write_uint8(struct sss_iobuf *iobuf,
++                              uint8_t val);
++
+ errno_t sss_iobuf_read_uint32(struct sss_iobuf *iobuf,
+                               uint32_t *_val);
+ 
+@@ -148,4 +193,5 @@ errno_t sss_iobuf_read_stringz(struct sss_iobuf *iobuf,
+ 
+ errno_t sss_iobuf_write_stringz(struct sss_iobuf *iobuf,
+                                 const char *str);
++
+ #endif /* __SSS_IOBUF_H_ */
+-- 
+2.25.4
+
