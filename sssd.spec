@@ -29,7 +29,7 @@
 
 Name: sssd
 Version: 2.4.0
-Release: 5%{?dist}
+Release: 6%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -55,6 +55,8 @@ Patch0016:  0016-secrets-fix-may_payload_size-exceeded-debug-message.patch
 Patch0017:  0017-secrets-default-to-plaintext-if-enctype-attr-is-miss.patch
 Patch0018:  0018-secrets-move-attrs-names-to-macros.patch
 Patch0019:  0019-secrets-remove-base64-enctype.patch
+Patch0020:  0020-kcm-decode-base64-encoded-secret-on-upgrade-path.patch
+
 
 ### Downstream only patches ###
 Patch0502: 0502-SYSTEMD-Use-capabilities.patch
@@ -1033,6 +1035,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Fri Dec 11 2020 Pavel Březina <pbrezina@redhat.com> - 2.4.0-6
+- Improve sssd-kcm performance, fix upgrade with existing credentials (rhbz#1645624)
+
 * Mon Dec 7 2020 Pavel Březina <pbrezina@redhat.com> - 2.4.0-5
 - Improve sssd-kcm performance (rhbz#1645624)
 
