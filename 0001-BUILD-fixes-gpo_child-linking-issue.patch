@@ -1,0 +1,49 @@
+From cf308d6c0e763336526b2e6295f1a075b217900f Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Fri, 5 Feb 2021 14:51:26 +0100
+Subject: [PATCH] BUILD: fixes gpo_child linking issue
+
+/usr/bin/ld: src/util/gpo_child-signal.o (symbol from plugin): undefined reference to symbol 'BlockSignals@@SAMBA_UTIL_0.0.1'
+
+Resolves: https://github.com/SSSD/sssd/issues/5385
+---
+ Makefile.am           | 3 ++-
+ src/external/samba.m4 | 8 ++++++++
+ 2 files changed, 10 insertions(+), 1 deletion(-)
+
+diff --git a/Makefile.am b/Makefile.am
+index f0083ffd7aaec01d87d9e38569b4714b3dbb2caa..41fc6517beec348daf58ce4d41f03a444901c81c 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -4738,7 +4738,8 @@ gpo_child_LDADD = \
+     $(POPT_LIBS) \
+     $(DHASH_LIBS) \
+     $(INI_CONFIG_LIBS) \
+-    $(SMBCLIENT_LIBS)
++    $(SMBCLIENT_LIBS) \
++    $(SAMBA_UTIL_LIBS)
+ 
+ proxy_child_SOURCES = \
+     src/providers/proxy/proxy_child.c \
+diff --git a/src/external/samba.m4 b/src/external/samba.m4
+index 0bc573a0f28d8b0aecd8953f7485944b8bc71baa..bbfa996048ab5e773b686836cfbb4378d412d1b0 100644
+--- a/src/external/samba.m4
++++ b/src/external/samba.m4
+@@ -30,6 +30,14 @@ without them. In this case, you will need to execute configure script
+ with argument --without-samba
+     ]]))
+ 
++    PKG_CHECK_MODULES(SAMBA_UTIL, samba-util, ,
++        AC_MSG_ERROR([[Please install libsamba-util development libraries.
++libsamba-util libraries are necessary for building ad and ipa provider.
++If you do not want to build these providers it is possible to build SSSD
++without them. In this case, you will need to execute configure script
++with argument --without-samba
++    ]]))
++
+     if test x"$HAVE_LIBINI_CONFIG_V1_1" != x1; then
+         AC_MSG_ERROR([[Please install libini_config development libraries
+ v1.1.0, or newer. libini_config libraries are necessary for building ipa
+-- 
+2.25.4
+
