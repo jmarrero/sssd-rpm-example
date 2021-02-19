@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 2.4.2
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -37,7 +37,6 @@ Source0: https://github.com/SSSD/sssd/releases/download/2.4.2/sssd-2.4.2.tar.gz
 
 ### Dependencies ###
 
-Requires: python3-sssdconfig = %{version}-%{release}
 Requires: sssd-ad = %{version}-%{release}
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-ipa = %{version}-%{release}
@@ -45,6 +44,7 @@ Requires: sssd-krb5 = %{version}-%{release}
 Requires: sssd-ldap = %{version}-%{release}
 Recommends: sssd-proxy = %{version}-%{release}
 Recommends: logrotate
+Suggests: python3-sssdconfig = %{version}-%{release}
 Suggests: sssd-dbus = %{version}-%{release}
 
 %global servicename sssd
@@ -752,8 +752,8 @@ done
 %files krb5-common
 %license COPYING
 %attr(755,%{sssd_user},%{sssd_user}) %dir %{pubconfpath}/krb5.include.d
-%attr(4750,root,%{sssd_user}) %{_libexecdir}/%{servicename}/ldap_child
-%attr(4750,root,%{sssd_user}) %{_libexecdir}/%{servicename}/krb5_child
+%attr(%{child_attrs},root,%{sssd_user}) %{_libexecdir}/%{servicename}/ldap_child
+%attr(%{child_attrs},root,%{sssd_user}) %{_libexecdir}/%{servicename}/krb5_child
 
 %files krb5 -f sssd_krb5.lang
 %license COPYING
@@ -768,7 +768,7 @@ done
 %license COPYING
 %attr(700,%{sssd_user},%{sssd_user}) %dir %{keytabdir}
 %{_libdir}/%{name}/libsss_ipa.so
-%attr(4750,root,%{sssd_user}) %{_libexecdir}/%{servicename}/selinux_child
+%attr(%{child_attrs},root,%{sssd_user}) %{_libexecdir}/%{servicename}/selinux_child
 %{_mandir}/man5/sssd-ipa.5*
 
 %files ad -f sssd_ad.lang
@@ -779,7 +779,7 @@ done
 
 %files proxy
 %license COPYING
-%attr(4750,root,%{sssd_user}) %{_libexecdir}/%{servicename}/proxy_child
+%attr(%{child_attrs},root,%{sssd_user}) %{_libexecdir}/%{servicename}/proxy_child
 %{_libdir}/%{name}/libsss_proxy.so
 
 %files dbus -f sssd_dbus.lang
@@ -1009,6 +1009,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Fri Feb 19 2021 Pavel Březina <pbrezina@redhat.com> - 2.4.2-2
+- Remove setuid from child binaries and relax requirement on python3-sssdconfig
+
 * Fri Feb 19 2021 Pavel Březina <pbrezina@redhat.com> - 2.4.2-1
 - Rebase to SSSD 2.4.2
 
