@@ -7,6 +7,13 @@
 %global sssd_user root
 %endif
 
+# Set setuid bit on child helpers if we support non-root user.
+%if "%{sssd_user}" == "root"
+%global child_attrs 0750
+%else
+%global child_attrs 4750
+%endif
+
 # we don't want to provide private python extension libs
 %define __provides_exclude_from %{python3_sitearch}/.*\.so$
 
@@ -19,18 +26,14 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.4.1
+Version: 2.4.2
 Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.4.1/sssd-2.4.1.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.4.2/sssd-2.4.2.tar.gz
 
 ### Patches ###
-Patch0001:  0001-BUILD-fixes-gpo_child-linking-issue.patch
-
-### Downstream only patches ###
-Patch0502: 0502-SYSTEMD-Use-capabilities.patch
 
 ### Dependencies ###
 
@@ -477,7 +480,6 @@ autoreconf -ivf
 %configure \
     --disable-rpath \
     --disable-static \
-    --enable-files-domain \
     --enable-gss-spnego-for-zero-maxssf \
     --enable-nfsidmaplibdir=%{_libdir}/libnfsidmap \
     --enable-nsslibdir=%{_libdir} \
@@ -497,6 +499,7 @@ autoreconf -ivf
     --with-syslog=journald \
     --with-test-dir=/dev/shm \
 %if 0%{?fedora}
+    --enable-files-domain \
     --disable-polkit-rules-path \
 %endif
     %{nil}
@@ -1006,6 +1009,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Fri Feb 19 2021 Pavel Březina <pbrezina@redhat.com> - 2.4.2-1
+- Rebase to SSSD 2.4.2
+
 * Fri Feb 5 2021 Pavel Březina <pbrezina@redhat.com> - 2.4.1-1
 - Rebase to SSSD 2.4.1
 
