@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 2.4.2
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -1009,6 +1009,10 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Mar 02 2021 Zbigniew Jędrzejewski-Szmek <zbyszek@in.waw.pl> - 2.4.2-3
+- Rebuilt for updated systemd-rpm-macros
+  See https://pagure.io/fesco/issue/2583.
+
 * Fri Feb 19 2021 Pavel Březina <pbrezina@redhat.com> - 2.4.2-2
 - Remove setuid from child binaries and relax requirement on python3-sssdconfig
 
