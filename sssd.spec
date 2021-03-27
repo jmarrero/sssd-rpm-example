@@ -100,6 +100,7 @@ BuildRequires: make
 BuildRequires: nss_wrapper
 BuildRequires: openldap-devel
 BuildRequires: openssh
+BuildRequires: openssl
 BuildRequires: openssl-devel
 BuildRequires: p11-kit-devel
 BuildRequires: pam_wrapper
