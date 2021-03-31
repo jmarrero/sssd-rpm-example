@@ -118,6 +118,7 @@ BuildRequires: softhsm >= 2.1.0
 BuildRequires: systemd-devel
 BuildRequires: systemtap-sdt-devel
 BuildRequires: uid_wrapper
+BuildRequires: po4a
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -951,18 +952,20 @@ getent passwd sssd >/dev/null || useradd -r -g sssd -d / -s /sbin/nologin -c "Us
 
 %postun common
 %systemd_postun_with_restart sssd-autofs.socket
-%systemd_postun_with_restart sssd-autofs.service
 %systemd_postun_with_restart sssd-nss.socket
-%systemd_postun_with_restart sssd-nss.service
 %systemd_postun_with_restart sssd-pac.socket
-%systemd_postun_with_restart sssd-pac.service
 %systemd_postun_with_restart sssd-pam.socket
 %systemd_postun_with_restart sssd-pam-priv.socket
-%systemd_postun_with_restart sssd-pam.service
 %systemd_postun_with_restart sssd-ssh.socket
-%systemd_postun_with_restart sssd-ssh.service
 %systemd_postun_with_restart sssd-sudo.socket
-%systemd_postun_with_restart sssd-sudo.service
+
+# Services have RefuseManualStart=true, therefore we can't request restart.
+%systemd_postun sssd-autofs.service
+%systemd_postun sssd-nss.service
+%systemd_postun sssd-pac.service
+%systemd_postun sssd-pam.service
+%systemd_postun sssd-ssh.service
+%systemd_postun sssd-sudo.service
 
 %post dbus
 %systemd_post sssd-ifp.service
