@@ -27,13 +27,15 @@
 
 Name: sssd
 Version: 2.4.2
-Release: 3%{?dist}
+Release: 4%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/2.4.2/sssd-2.4.2.tar.gz
 
 ### Patches ###
+
+Patch0001: 0001-systemd-configs-add-CAP_DAC_OVERRIDE-for-ifp-in-certain-case.patch
 
 ### Dependencies ###
 
@@ -1013,6 +1015,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Wed Mar 31 2021 Pavel Březina <pbrezina@redhat.com> - 2.4.2-4
+- Add CAP_DAC_OVERRIDE to ifp service file if required by build configuration
+
 * Tue Mar 02 2021 Zbigniew Jędrzejewski-Szmek <zbyszek@in.waw.pl> - 2.4.2-3
 - Rebuilt for updated systemd-rpm-macros
   See https://pagure.io/fesco/issue/2583.
