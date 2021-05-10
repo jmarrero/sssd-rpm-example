@@ -26,17 +26,14 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.4.2
-Release: 5%{?dist}
+Version: 2.5.0
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.4.2/sssd-2.4.2.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.5.0/sssd-2.5.0.tar.gz
 
 ### Patches ###
-
-Patch0001: 0001-systemd-configs-add-CAP_DAC_OVERRIDE-for-ifp-in-certain-case.patch
-Patch0002: 0002-configure-new-autoconf.patch
 
 ### Dependencies ###
 
@@ -103,12 +100,13 @@ BuildRequires: make
 BuildRequires: nss_wrapper
 BuildRequires: openldap-devel
 BuildRequires: openssh
+# required for p11_child smartcard tests
 BuildRequires: openssl
 BuildRequires: openssl-devel
 BuildRequires: p11-kit-devel
 BuildRequires: pam_wrapper
 BuildRequires: pam-devel
-BuildRequires: pcre-devel
+BuildRequires: pcre2-devel
 BuildRequires: pkgconfig
 BuildRequires: popt-devel
 BuildRequires: python3-devel
@@ -164,7 +162,6 @@ Summary: SSSD Client libraries for NSS and PAM
 License: LGPLv3+
 Requires: libsss_nss_idmap = %{version}-%{release}
 Requires: libsss_idmap = %{version}-%{release}
-Requires(post): /sbin/ldconfig
 Requires(post):  /usr/sbin/alternatives
 Requires(preun): /usr/sbin/alternatives
 
@@ -990,7 +987,6 @@ getent passwd sssd >/dev/null || useradd -r -g sssd -d / -s /sbin/nologin -c "Us
 %systemd_postun_with_restart sssd-kcm.service
 
 %post client
-%{?ldconfig}
 /usr/sbin/alternatives --install /etc/cifs-utils/idmap-plugin cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so 20
 
 %preun client
@@ -998,24 +994,13 @@ if [ $1 -eq 0 ] ; then
         /usr/sbin/alternatives --remove cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so
 fi
 
-%ldconfig_postun client
-
-%ldconfig_scriptlets -n libsss_sudo
-
-%ldconfig_scriptlets -n libipa_hbac
-
-%ldconfig_scriptlets -n libsss_idmap
-
-%ldconfig_scriptlets -n libsss_nss_idmap
-
-%ldconfig_scriptlets -n libsss_simpleifp
-
-%ldconfig_scriptlets -n libsss_certmap
-
 %posttrans common
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Mon May 10 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.0-1
+- Rebase to SSSD 2.5.0
+
 * Thu Apr  8 2021 Iker Pedrosa <ipedrosa@redhat.com> - 2.4.2-5
 - Change configure to avoid errors with new autoconf version (rhbz#1943130)
 
