@@ -27,13 +27,17 @@
 
 Name: sssd
 Version: 2.5.0
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/2.5.0/sssd-2.5.0.tar.gz
 
 ### Patches ###
+
+Patch0001: 0001-KCM-return-KRB5_FCC_INTERNAL-for-unknown-or-not-impl.patch
+Patch0002: 0002-SECRETS-Resolve-mkey-path-correctly.patch
+Patch0003: 0003-UTIL-SECRETS-mistype-fix.patch
 
 ### Dependencies ###
 
@@ -998,6 +1002,10 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Wed May 19 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.0-2
+- Fix regression in sssd-kcm when upgrading from 2.4.0 directly to 2.5.0
+- Return correct error code for unknown/unsupported operations in sssd-kcm
+
 * Mon May 10 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.0-1
 - Rebase to SSSD 2.5.0
 

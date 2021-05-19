@@ -1,0 +1,49 @@
+From 9b017dbc80cf09b3a2d7e09f771faf70d4538b4f Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Thu, 13 May 2021 12:18:24 +0200
+Subject: [PATCH 1/5] KCM: return KRB5_FCC_INTERNAL for unknown or not
+ implemented operation
+
+sssd-kcm should follow Heimdal's return codes. Heimdal returns `KRB5_FCC_INTERNAL`
+for cases where operation code is not known or not implemented. See:
+
+* https://github.com/heimdal/heimdal/blob/master/kcm/protocol.c#L1785
+* https://github.com/heimdal/heimdal/blob/master/kcm/protocol.c#L1792
+
+We returned different codes before this patch which makes Kerberos to differentiate
+between Heimdal and sssd implementation. This leads to errors like:
+
+* https://github.com/krb5/krb5/pull/1178#issuecomment-838289703
+
+Resolves: https://github.com/SSSD/sssd/issues/5628
+
+Reviewed-by: Justin Stephenson <jstephen@redhat.com>
+---
+ src/responder/kcm/kcmsrv_cmd.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/responder/kcm/kcmsrv_cmd.c b/src/responder/kcm/kcmsrv_cmd.c
+index 6b11b184124c7cb17be2c7858afda3d56a4dcea6..3ad17ef431bb3d42b39f56d04c97acfc25f06d2f 100644
+--- a/src/responder/kcm/kcmsrv_cmd.c
++++ b/src/responder/kcm/kcmsrv_cmd.c
+@@ -197,7 +197,7 @@ static errno_t kcm_input_parse(struct kcm_reqbuf *reqbuf,
+     if (op_io->op == NULL) {
+         DEBUG(SSSDBG_CRIT_FAILURE,
+               "Did not find a KCM operation handler for the requested opcode\n");
+-        return ERR_KCM_MALFORMED_IN_PKT;
++        return ERR_KCM_OP_NOT_IMPLEMENTED;
+     }
+ 
+     /* The operation only receives the payload, not the opcode or the protocol info */
+@@ -643,7 +643,7 @@ krb5_error_code sss2krb5_error(errno_t err)
+     case EACCES:
+         return KRB5_FCC_PERM;
+     case ERR_KCM_OP_NOT_IMPLEMENTED:
+-        return KRB5_CC_NOSUPP;
++        return KRB5_FCC_INTERNAL;
+     case ERR_WRONG_NAME_FORMAT:
+         return KRB5_CC_BADNAME;
+     case ERR_NO_MATCHING_CREDS:
+-- 
+2.30.2
+
