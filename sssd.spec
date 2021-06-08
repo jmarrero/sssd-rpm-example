@@ -26,18 +26,14 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.5.0
-Release: 3%{?dist}
+Version: 2.5.1
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.5.0/sssd-2.5.0.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.5.1/sssd-2.5.1.tar.gz
 
 ### Patches ###
-
-Patch0001: 0001-KCM-return-KRB5_FCC_INTERNAL-for-unknown-or-not-impl.patch
-Patch0002: 0002-SECRETS-Resolve-mkey-path-correctly.patch
-Patch0003: 0003-UTIL-SECRETS-mistype-fix.patch
 
 ### Dependencies ###
 
@@ -1002,6 +998,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Jun 08 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.1-1
+- Rebase to SSSD 2.5.1
+
 * Fri Jun 04 2021 Python Maint <python-maint@redhat.com>
 - Rebuilt for Python 3.10
 
