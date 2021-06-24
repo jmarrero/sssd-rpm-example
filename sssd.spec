@@ -27,13 +27,24 @@
 
 Name: sssd
 Version: 2.5.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/2.5.1/sssd-2.5.1.tar.gz
 
 ### Patches ###
+
+Patch0001:  0001-krb5_child-reduce-log-severity-in-sss_send_pac-in-ca.patch
+Patch0002:  0002-secrets-reduce-log-severity-in-local_db_create-in-ca.patch
+Patch0003:  0003-KCM-use-SSSDBG_MINOR_FAILURE-for-ERR_KCM_OP_NOT_IMPL.patch
+Patch0004:  0004-KCM-reduce-log-severity-in-sec_get-in-case-entry-not.patch
+Patch0005:  0005-Fix-minor-typos-in-docs.patch
+Patch0006:  0006-KCM-Unset-_SSS_LOOPS.patch
+Patch0007:  0007-kcm-terminate-client-on-bad-message.patch
+Patch0008:  0008-DEBUG-don-t-reset-debug_timestamps-microseconds-to-D.patch
+Patch0009:  0009-SSSD-Log-invalid_argument-msg-mod.patch
+Patch0010:  0010-KCM-removed-unneeded-assignment.patch
 
 ### Dependencies ###
 
@@ -998,6 +1009,10 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Thu Jun 24 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.1-2
+- Multiple small fixes to reduce size of log files with debug_backtrace on
+- Fix a corner case bug in KCM renewals that makes user lookup in the daemon fail
+
 * Tue Jun 08 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.1-1
 - Rebase to SSSD 2.5.1
 

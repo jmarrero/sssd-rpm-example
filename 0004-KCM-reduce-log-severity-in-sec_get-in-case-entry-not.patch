@@ -1,0 +1,31 @@
+From 0646917cd826e14663691a2252be9853563331d2 Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Mon, 14 Jun 2021 22:04:21 +0200
+Subject: [PATCH 05/16] KCM: reduce log severity in sec_get() in case entry not
+ found
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/responder/kcm/kcmsrv_ccache_secdb.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ccache_secdb.c b/src/responder/kcm/kcmsrv_ccache_secdb.c
+index 6c8c35b865543fd47a13149a49a3be34aab31649..4631bfea09316b47a8c8b5aa6580f60536edea5b 100644
+--- a/src/responder/kcm/kcmsrv_ccache_secdb.c
++++ b/src/responder/kcm/kcmsrv_ccache_secdb.c
+@@ -58,7 +58,7 @@ static errno_t sec_get(TALLOC_CTX *mem_ctx,
+ 
+     ret = sss_sec_get(tmp_ctx, req, &data, &len, &datatype);
+     if (ret != EOK) {
+-        DEBUG(SSSDBG_OP_FAILURE,
++        DEBUG(SSSDBG_MINOR_FAILURE,
+               "Cannot retrieve the secret [%d]: %s\n", ret, sss_strerror(ret));
+         goto done;
+     }
+-- 
+2.20.1
+

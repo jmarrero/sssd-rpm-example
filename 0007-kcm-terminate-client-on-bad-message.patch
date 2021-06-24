@@ -1,0 +1,59 @@
+From a6e5d53a358f3871d8ae646b252250d215d09883 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Wed, 16 Jun 2021 15:28:28 +0200
+Subject: [PATCH 13/16] kcm: terminate client on bad message
+
+The debug message clearly says that the original intention was to
+abort the client, not send an error message.
+
+We may end up in a state where we get into an infinit loop, fo example
+when the client send an message that indicates 0 lenght, but there is
+actually more data written. In this case, we never read the rest of the
+message but the file descriptor is still readable so the fd handler gets
+fired again and again.
+
+More information can be seen in relevant FreeIPA ticket:
+https://pagure.io/freeipa/issue/8877
+
+Reviewed-by: Alexey Tikhonov <atikhono@redhat.com>
+Reviewed-by: Pawel Polawski <ppolawsk@redhat.com>
+---
+ src/responder/kcm/kcmsrv_cmd.c | 11 +++++------
+ 1 file changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/src/responder/kcm/kcmsrv_cmd.c b/src/responder/kcm/kcmsrv_cmd.c
+index 49518920bf8213d6c7a55f6c07aca11cbd86c406..9b27bbdcc4805238641ef7f9c6158a6ed784fbcc 100644
+--- a/src/responder/kcm/kcmsrv_cmd.c
++++ b/src/responder/kcm/kcmsrv_cmd.c
+@@ -548,7 +548,8 @@ static void kcm_recv(struct cli_ctx *cctx)
+         DEBUG(SSSDBG_FATAL_FAILURE,
+             "Failed to parse data (%d, %s), aborting client\n",
+             ret, sss_strerror(ret));
+-        goto fail;
++        talloc_free(cctx);
++        return;
+     }
+ 
+     /* do not read anymore, client is done sending */
+@@ -559,15 +560,13 @@ static void kcm_recv(struct cli_ctx *cctx)
+         DEBUG(SSSDBG_FATAL_FAILURE,
+               "Failed to dispatch KCM operation [%d]: %s\n",
+               ret, sss_strerror(ret));
+-        goto fail;
++        /* Fail with reply */
++        kcm_reply_error(cctx, ret, &req->repbuf);
++        return;
+     }
+ 
+     /* Dispatched request resumes in kcm_cmd_request_done */
+     return;
+-
+-fail:
+-    /* Fail with reply */
+-    kcm_reply_error(cctx, ret, &req->repbuf);
+ }
+ 
+ static int kcm_send_data(struct cli_ctx *cctx)
+-- 
+2.20.1
+
