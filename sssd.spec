@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 2.5.2
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -1000,6 +1000,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Fri Jul 23 2021 Fedora Release Engineering <releng@fedoraproject.org> - 2.5.2-3
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_35_Mass_Rebuild
+
 * Fri Jul 16 2021 Alexander Bokovoy <abokovoy@redhat.com> - 2.5.2-2
 - Rebuild against Samba 4.15.0 RC1
 
