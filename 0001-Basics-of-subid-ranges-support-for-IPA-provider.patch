@@ -1,0 +1,1817 @@
+From f546088226872f24722bdd94388816792bd5891a Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Sat, 1 May 2021 22:56:15 +0200
+Subject: [PATCH] Basics of 'subid ranges' support for IPA provider.
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+:feature: Basic support of user's 'subuid and subgid ranges' for IPA
+provider and corresponding plugin for shadow-utils were introduced.
+Limitations:
+ - single subid interval pair (subuid+subgid) per user
+ - idviews aren't supported
+ - only forward lookup (user -> subid ranges)
+Take a note, this is MVP of experimental feature. Significant changes
+might be required later, after initial feedback.
+Corresponding support in shadow-utils was merged upstream, but since there
+is no upstream release available yet, SSSD feature isn't built by default.
+Build can be enabled with `--with-subid` configure option.
+Plugin's install path can be configured with `--with-subid-lib-path=`
+("${libdir}" by default)
+
+For additional details about support in shadow-utils please see discussion
+in https://github.com/shadow-maint/shadow/issues/154 and in related PRs.
+
+:config: New IPA provider's option `ipa_subid_ranges_search_base` allows
+configuration of search base for user's subid ranges.
+Default: `cn=subids,%basedn`
+
+Resolves: https://github.com/SSSD/sssd/issues/5197
+
+Reviewed-by: Iker Pedrosa <ipedrosa@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+---
+ Makefile.am                                   |  34 +++
+ configure.ac                                  |   2 +
+ src/conf_macros.m4                            |  30 +++
+ src/config/SSSDConfig/sssdoptions.py          |   1 +
+ src/config/cfg_rules.ini                      |   1 +
+ src/config/etc/sssd.api.d/sssd-ipa.conf       |   1 +
+ src/db/sysdb.h                                |   6 +
+ src/db/sysdb_subid.c                          | 163 +++++++++++
+ src/db/sysdb_subid.h                          |  39 +++
+ src/man/sssd-ipa.5.xml                        |  14 +
+ src/providers/data_provider_req.c             |   2 +
+ src/providers/data_provider_req.h             |   1 +
+ src/providers/ipa/ipa_common.c                |  38 +++
+ src/providers/ipa/ipa_common.h                |   1 +
+ src/providers/ipa/ipa_id.c                    |  17 ++
+ src/providers/ipa/ipa_opts.c                  |  12 +
+ src/providers/ipa/ipa_opts.h                  |   2 +
+ src/providers/ldap/ldap_common.h              |  14 +
+ src/providers/ldap/ldap_id.c                  |  31 +++
+ src/providers/ldap/ldap_id_subid.c            | 255 ++++++++++++++++++
+ src/providers/ldap/sdap.h                     |  19 ++
+ src/responder/common/cache_req/cache_req.c    |   4 +
+ src/responder/common/cache_req/cache_req.h    |   4 +
+ .../common/cache_req/cache_req_data.c         |   3 +
+ .../common/cache_req/cache_req_plugin.h       |   3 +
+ .../plugins/cache_req_subid_ranges_by_name.c  | 143 ++++++++++
+ src/responder/common/responder.h              |   1 +
+ src/responder/common/responder_dp.c           |   4 +
+ src/responder/nss/nss_cmd.c                   |  20 ++
+ src/responder/nss/nss_protocol.h              |   8 +
+ src/responder/nss/nss_protocol_subid.c        |  60 +++++
+ src/sss_client/common.c                       |   2 +-
+ src/sss_client/sss_cli.h                      |  11 +
+ src/sss_client/subid/sss_subid.c              | 209 ++++++++++++++
+ src/sss_client/subid/sss_subid.exports        |  12 +
+ src/systemtap/sssd_functions.stp              |   2 +-
+ src/tests/cwrap/Makefile.am                   |   3 +
+ src/tests/dlopen-tests.c                      |   3 +
+ src/util/sss_cli_cmd.c                        |   5 +
+ src/util/util_errors.c                        |   1 +
+ src/util/util_errors.h                        |   1 +
+ 41 files changed, 1180 insertions(+), 2 deletions(-)
+ create mode 100644 src/db/sysdb_subid.c
+ create mode 100644 src/db/sysdb_subid.h
+ create mode 100644 src/providers/ldap/ldap_id_subid.c
+ create mode 100644 src/responder/common/cache_req/plugins/cache_req_subid_ranges_by_name.c
+ create mode 100644 src/responder/nss/nss_protocol_subid.c
+ create mode 100644 src/sss_client/subid/sss_subid.c
+ create mode 100644 src/sss_client/subid/sss_subid.exports
+
+diff --git a/Makefile.am b/Makefile.am
+index 1dd06d74c..577935e7e 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -65,6 +65,7 @@ localedir = @localedir@
+ nsslibdir = @nsslibdir@
+ pamlibdir = @pammoddir@
+ autofslibdir = @appmodpath@
++subidlibdir = @subidlibpath@
+ nfslibdir = @nfsidmaplibdir@
+ 
+ dbpath = @dbpath@
+@@ -596,6 +597,9 @@ SSSD_CACHE_REQ_OBJ = \
+ 	src/responder/common/cache_req/plugins/cache_req_ip_network_by_name.c \
+ 	src/responder/common/cache_req/plugins/cache_req_ip_network_by_addr.c \
+ 	$(NULL)
++if BUILD_SUBID
++    SSSD_CACHE_REQ_OBJ += src/responder/common/cache_req/plugins/cache_req_subid_ranges_by_name.c
++endif
+ 
+ SSSD_RESPONDER_IFACE_OBJ = \
+     src/responder/common/responder_iface.c \
+@@ -810,6 +814,7 @@ dist_noinst_HEADERS = \
+     src/db/sysdb_private.h \
+     src/db/sysdb_services.h \
+     src/db/sysdb_ssh.h \
++    src/db/sysdb_subid.h \
+     src/db/sysdb_domain_resolution_order.h \
+     src/db/sysdb_computer.h \
+     src/db/sysdb_iphosts.h \
+@@ -1247,6 +1252,7 @@ libsss_util_la_SOURCES = \
+     src/db/sysdb_ipnetworks.c \
+     src/util/sss_pam_data.c \
+     src/db/sysdb_computer.c \
++    src/db/sysdb_subid.c \
+     src/util/util.c \
+     src/util/util_ext.c \
+     src/util/util_preauth.c \
+@@ -1558,6 +1564,9 @@ sssd_nss_LDADD = \
+     libsss_iface.la \
+     libsss_sbus.la \
+     $(NULL)
++if BUILD_SUBID
++    sssd_nss_SOURCES += src/responder/nss/nss_protocol_subid.c
++endif
+ 
+ sssd_pam_SOURCES = \
+     src/responder/pam/pam_LOCAL_domain.c \
+@@ -2691,6 +2700,9 @@ nss_srv_tests_LDADD = \
+     libsss_iface.la \
+     libsss_sbus.la \
+     $(NULL)
++if BUILD_SUBID
++     nss_srv_tests_SOURCES += src/responder/nss/nss_protocol_subid.c
++endif
+ 
+ EXTRA_pam_srv_tests_DEPENDENCIES = \
+     $(ldblib_LTLIBRARIES) \
+@@ -4217,6 +4229,21 @@ libsss_autofs_la_LDFLAGS = \
+     -Wl,--version-script,$(srcdir)/src/sss_client/autofs/sss_autofs.exports
+ endif
+ 
++if BUILD_SUBID
++subidlib_LTLIBRARIES = libsubid_sss.la
++libsubid_sss_la_SOURCES = \
++    src/sss_client/common.c \
++    src/sss_client/sss_cli.h \
++    src/sss_client/subid/sss_subid.c
++
++libsubid_sss_la_LIBADD = \
++    $(CLIENT_LIBS)
++libsubid_sss_la_LDFLAGS = \
++    -module \
++    -avoid-version \
++    -Wl,--version-script,$(srcdir)/src/sss_client/subid/sss_subid.exports
++endif
++
+ dist_noinst_DATA += \
+     src/sss_client/sss_nss.exports \
+     src/sss_client/sss_pam.exports \
+@@ -4231,6 +4258,10 @@ if BUILD_AUTOFS
+ dist_noinst_DATA += src/sss_client/autofs/sss_autofs.exports
+ endif
+ 
++if BUILD_SUBID
++dist_noinst_DATA += src/sss_client/subid/sss_subid.exports
++endif
++
+ ####################
+ # Plugin Libraries #
+ ####################
+@@ -4315,6 +4346,9 @@ libsss_ldap_common_la_LDFLAGS = \
+ if BUILD_SYSTEMTAP
+ libsss_ldap_common_la_LIBADD += stap_generated_probes.lo
+ endif
++if BUILD_SUBID
++libsss_ldap_common_la_SOURCES += src/providers/ldap/ldap_id_subid.c
++endif
+ 
+ if BUILD_SSH
+ libsss_ldap_common_la_SOURCES += src/providers/ldap/sdap_hostid.c
+diff --git a/configure.ac b/configure.ac
+index e98487cae..c14a59eef 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -161,6 +161,8 @@ WITH_APP_LIBS
+ WITH_SUDO
+ WITH_SUDO_LIB_PATH
+ WITH_AUTOFS
++WITH_SUBID
++WITH_SUBID_LIB_PATH
+ WITH_SSH
+ WITH_IFP
+ WITH_SYSLOG
+diff --git a/src/conf_macros.m4 b/src/conf_macros.m4
+index cdffba11c..0a1e6dd8f 100644
+--- a/src/conf_macros.m4
++++ b/src/conf_macros.m4
+@@ -675,6 +675,36 @@ AC_DEFUN([WITH_AUTOFS],
+     AM_CONDITIONAL([BUILD_AUTOFS], [test x"$with_autofs" = xyes])
+   ])
+ 
++AC_DEFUN([WITH_SUBID],
++  [ AC_ARG_WITH([subid],
++                [AC_HELP_STRING([--with-subid],
++                                [Whether to build with subid ranges support [no]]
++                               )
++                ],
++                [with_subid=$withval],
++                with_subid=no
++               )
++
++    if test x"$with_subid" = xyes; then
++        AC_DEFINE(BUILD_SUBID, 1, [whether to build with SUBID ranges support])
++    fi
++    AM_CONDITIONAL([BUILD_SUBID], [test x"$with_subid" = xyes])
++  ])
++
++AC_DEFUN([WITH_SUBID_LIB_PATH],
++  [ AC_ARG_WITH([subid-lib-path],
++                [AC_HELP_STRING([--with-subid-lib-path=<path>],
++                                [Path to the subid library]
++                               )
++                ]
++               )
++    subidlibpath="${libdir}"
++    if test x"$with_subid_lib_path" != x; then
++        subidlibpath=$with_subid_lib_path
++    fi
++    AC_SUBST(subidlibpath)
++  ])
++
+ AC_DEFUN([WITH_SSH],
+   [ AC_ARG_WITH([ssh],
+                 [AC_HELP_STRING([--with-ssh],
+diff --git a/src/config/SSSDConfig/sssdoptions.py b/src/config/SSSDConfig/sssdoptions.py
+index c4ce2588b..39380c462 100644
+--- a/src/config/SSSDConfig/sssdoptions.py
++++ b/src/config/SSSDConfig/sssdoptions.py
+@@ -265,6 +265,7 @@ class SSSDOptions(object):
+         'ipa_deskprofile_request_interval': _("The amount of time in minutes between lookups of Desktop Profiles "
+                                               "rules against the IPA server when the last request did not find any "
+                                               "rule"),
++        'ipa_subid_ranges_search_base': _("Search base for SUBID ranges"),
+         'ipa_host_fqdn': _('The LDAP attribute that contains FQDN of the host.'),
+         'ipa_host_object_class': _('The object class of a host entry in LDAP.'),
+         'ipa_host_search_base': _('Use the given string as search base for host objects.'),
+diff --git a/src/config/cfg_rules.ini b/src/config/cfg_rules.ini
+index 0a3c32a97..d8190c2f4 100644
+--- a/src/config/cfg_rules.ini
++++ b/src/config/cfg_rules.ini
+@@ -538,6 +538,7 @@ option = ipa_backup_server
+ option = ipa_deskprofile_refresh
+ option = ipa_deskprofile_request_interval
+ option = ipa_deskprofile_search_base
++option = ipa_subid_ranges_search_base
+ option = ipa_domain
+ option = ipa_dyndns_iface
+ option = ipa_dyndns_ttl
+diff --git a/src/config/etc/sssd.api.d/sssd-ipa.conf b/src/config/etc/sssd.api.d/sssd-ipa.conf
+index 9a81389ca..02c9089fd 100644
+--- a/src/config/etc/sssd.api.d/sssd-ipa.conf
++++ b/src/config/etc/sssd.api.d/sssd-ipa.conf
+@@ -4,6 +4,7 @@ ipa_server = str, None, false
+ ipa_backup_server = str, None, false
+ ipa_hostname = str, None, false
+ ipa_deskprofile_search_base = str, None, false
++ipa_subid_ranges_search_base = str, None, false
+ ipa_dyndns_update = bool, None, false
+ ipa_dyndns_ttl = int, None, false
+ ipa_dyndns_iface = str, None, false
+diff --git a/src/db/sysdb.h b/src/db/sysdb.h
+index a29232f48..b638f4397 100644
+--- a/src/db/sysdb.h
++++ b/src/db/sysdb.h
+@@ -143,6 +143,12 @@
+ 
+ #define SYSDB_SSH_PUBKEY "sshPublicKey"
+ 
++#define SYSDB_SUBID_UID_COUND   "subUidCount"
++#define SYSDB_SUBID_GID_COUNT   "subGidCount"
++#define SYSDB_SUBID_UID_NUMBER  "subUidNumber"
++#define SYSDB_SUBID_GID_NUMBER  "subGidNumber"
++#define SYSDB_SUBID_OWNER       "subidOwner"
++
+ #define SYSDB_AUTH_TYPE "authType"
+ #define SYSDB_USER_CERT "userCertificate"
+ #define SYSDB_USER_MAPPED_CERT "userMappedCertificate"
+diff --git a/src/db/sysdb_subid.c b/src/db/sysdb_subid.c
+new file mode 100644
+index 000000000..519b0834c
+--- /dev/null
++++ b/src/db/sysdb_subid.c
+@@ -0,0 +1,163 @@
++/*
++    Copyright (C) 2021 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <talloc.h>
++
++#include "db/sysdb_private.h"
++#include "db/sysdb_subid.h"
++
++#define SUBID_SUBDIR "subid_ranges"
++
++
++errno_t sysdb_store_subid_range(struct sss_domain_info *domain,
++                                const char *name,
++                                int expiration_period,
++                                struct sysdb_attrs *attrs)
++{
++    TALLOC_CTX *tmp_ctx;
++    errno_t ret, sret;
++    bool in_transaction = false;
++    time_t now = time(NULL);
++
++    DEBUG(SSSDBG_TRACE_FUNC, "Storing subid ranges for %s, expiration period = %d\n",
++          name, expiration_period);
++
++    tmp_ctx = talloc_new(NULL);
++    if (!tmp_ctx) {
++        return ENOMEM;
++    }
++
++    ret = sysdb_transaction_start(domain->sysdb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to start transaction\n");
++        goto done;
++    }
++
++    in_transaction = true;
++
++    ret = sysdb_attrs_add_string(attrs, SYSDB_OBJECTCLASS, SYSDB_SUBID_RANGE_OC);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Could not set object class [%d]: %s\n", ret, strerror(ret));
++        goto done;
++    }
++
++    ret = sysdb_attrs_add_string(attrs, SYSDB_NAME, name);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Could not set name attribute [%d]: %s\n", ret, strerror(ret));
++        goto done;
++    }
++
++    ret = sysdb_attrs_add_time_t(attrs, SYSDB_LAST_UPDATE, now);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Could not set sysdb lastUpdate [%d]: %s\n",
++               ret, strerror(ret));
++        goto done;
++    }
++
++    ret = sysdb_attrs_add_time_t(attrs, SYSDB_CACHE_EXPIRE,
++                                 expiration_period ? (now + expiration_period) : 0);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_OP_FAILURE, "Could not set sysdb cache expire [%d]: %s\n",
++              ret, strerror(ret));
++        goto done;
++    }
++
++    ret = sysdb_store_custom(domain, name, SUBID_SUBDIR, attrs);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    ret = sysdb_transaction_commit(domain->sysdb);
++    if (ret != EOK) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Failed to commit transaction\n");
++        goto done;
++    }
++
++    in_transaction = false;
++
++    ret = EOK;
++
++done:
++    if (in_transaction) {
++        sret = sysdb_transaction_cancel(domain->sysdb);
++        if (sret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE, "Could not cancel transaction\n");
++        }
++    }
++
++    talloc_free(tmp_ctx);
++
++    return ret;
++}
++
++errno_t sysdb_get_subid_ranges(TALLOC_CTX *mem_ctx,
++                               struct sss_domain_info *domain,
++                               const char *name,
++                               const char **attrs,
++                               struct ldb_message **_range)
++{
++    TALLOC_CTX *tmp_ctx;
++    errno_t ret;
++    const char *filter;
++    struct ldb_message **ranges;
++    size_t num_ranges;
++
++    tmp_ctx = talloc_new(NULL);
++    if (!tmp_ctx) {
++        return ENOMEM;
++    }
++
++    filter = talloc_asprintf(tmp_ctx, "(&(%s=%s)(%s=%s))",
++                             SYSDB_OBJECTCLASS, SYSDB_SUBID_RANGE_OC,
++                             SYSDB_NAME, name);
++    if (!filter) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    ret = sysdb_search_custom(tmp_ctx, domain, filter,
++                              SUBID_SUBDIR, attrs,
++                              &num_ranges, &ranges);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    if (num_ranges > 1) {
++        ret = EINVAL;
++        DEBUG(SSSDBG_CRIT_FAILURE,
++              "Found more than one range with name %s\n", name);
++        goto done;
++    }
++
++    *_range = talloc_steal(mem_ctx, ranges[0]);
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++
++    return ret;
++}
++
++errno_t sysdb_delete_subid_range(struct sss_domain_info *domain,
++                                 const char *name)
++{
++    DEBUG(SSSDBG_TRACE_FUNC, "Deleting subid ranges for %s\n", name);
++    return sysdb_delete_custom(domain, name, SUBID_SUBDIR);
++}
+diff --git a/src/db/sysdb_subid.h b/src/db/sysdb_subid.h
+new file mode 100644
+index 000000000..4b4a86334
+--- /dev/null
++++ b/src/db/sysdb_subid.h
+@@ -0,0 +1,39 @@
++/*
++    Copyright (C) 2021 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#ifndef _SYSDB_SUBID_H_
++#define _SYSDB_SUBID_H_
++
++#include "db/sysdb.h"
++
++#define SYSDB_SUBID_RANGE_OC "subordinateid"
++
++errno_t sysdb_store_subid_range(struct sss_domain_info *domain,
++                                const char *name,
++                                int expiration_period,
++                                struct sysdb_attrs *attrs);
++
++errno_t sysdb_get_subid_ranges(TALLOC_CTX *mem_ctx,
++                               struct sss_domain_info *domain,
++                               const char *name,
++                               const char **attrs,
++                               struct ldb_message **range);
++
++errno_t sysdb_delete_subid_range(struct sss_domain_info *domain,
++                                 const char *name);
++
++#endif /* _SYSDB_SSH_H_ */
+diff --git a/src/man/sssd-ipa.5.xml b/src/man/sssd-ipa.5.xml
+index 7b630493d..2bbf67c83 100644
+--- a/src/man/sssd-ipa.5.xml
++++ b/src/man/sssd-ipa.5.xml
+@@ -356,6 +356,20 @@
+                     </listitem>
+                 </varlistentry>
+ 
++                <varlistentry condition="with_subid">
++                    <term>ipa_subid_ranges_search_base (string)</term>
++                    <listitem>
++                        <para>
++                            Optional. Use the given string as search base for
++                            subordinate ranges related objects.
++                        </para>
++                        <para>
++                            Default: the value of
++                            <emphasis>cn=subids,%basedn</emphasis>
++                        </para>
++                    </listitem>
++                </varlistentry>
++
+                 <varlistentry>
+                     <term>ipa_hbac_search_base (string)</term>
+                     <listitem>
+diff --git a/src/providers/data_provider_req.c b/src/providers/data_provider_req.c
+index e22cfd71a..b7f4d152e 100644
+--- a/src/providers/data_provider_req.c
++++ b/src/providers/data_provider_req.c
+@@ -44,6 +44,8 @@ const char *be_req2str(dbus_uint32_t req_type)
+         return be_req_to_str(BE_REQ_HOST);
+     case BE_REQ_IP_NETWORK:
+         return be_req_to_str(BE_REQ_IP_NETWORK);
++    case BE_REQ_SUBID_RANGES:
++        return be_req_to_str(BE_REQ_SUBID_RANGES);
+     case BE_REQ_BY_SECID:
+         return be_req_to_str(BE_REQ_BY_SECID);
+     case BE_REQ_USER_AND_GROUP:
+diff --git a/src/providers/data_provider_req.h b/src/providers/data_provider_req.h
+index 75f7f9713..4c6ab5a7e 100644
+--- a/src/providers/data_provider_req.h
++++ b/src/providers/data_provider_req.h
+@@ -35,6 +35,7 @@
+ #define BE_REQ_SUDO_RULES     0x0007
+ #define BE_REQ_HOST           0x0008
+ #define BE_REQ_IP_NETWORK     0x0009
++#define BE_REQ_SUBID_RANGES   0x0010
+ #define BE_REQ_BY_SECID       0x0011
+ #define BE_REQ_USER_AND_GROUP 0x0012
+ #define BE_REQ_BY_UUID        0x0013
+diff --git a/src/providers/ipa/ipa_common.c b/src/providers/ipa/ipa_common.c
+index 23b358819..1509cb1ce 100644
+--- a/src/providers/ipa/ipa_common.c
++++ b/src/providers/ipa/ipa_common.c
+@@ -152,6 +152,9 @@ static errno_t ipa_parse_search_base(TALLOC_CTX *mem_ctx,
+     case IPA_DESKPROFILE_SEARCH_BASE:
+         class_name = "IPA_DESKPROFILE";
+         break;
++    case IPA_SUBID_RANGES_SEARCH_BASE:
++        class_name = "IPA_SUBID_RANGES";
++        break;
+     default:
+         DEBUG(SSSDBG_CONF_SETTINGS,
+               "Unknown search base type: [%d]\n", class);
+@@ -481,6 +484,41 @@ int ipa_get_id_options(struct ipa_options *ipa_opts,
+                                 &ipa_opts->deskprofile_search_bases);
+     if (ret != EOK) goto done;
+ 
++#ifdef BUILD_SUBID
++    if (NULL == dp_opt_get_string(ipa_opts->basic,
++                                  IPA_SUBID_RANGES_SEARCH_BASE)) {
++        value = talloc_asprintf(tmpctx, "cn=subids,%s",
++                                ipa_opts->id->sdom->search_bases[0]->basedn);
++        if (!value) {
++            ret = ENOMEM;
++            goto done;
++        }
++
++        ret = dp_opt_set_string(ipa_opts->basic, IPA_SUBID_RANGES_SEARCH_BASE, value);
++        if (ret != EOK) {
++            goto done;
++        }
++
++        DEBUG(SSSDBG_TRACE_FUNC, "Option %s set to %s\n",
++                  ipa_opts->basic[IPA_SUBID_RANGES_SEARCH_BASE].opt_name,
++                  dp_opt_get_string(ipa_opts->basic,
++                                    IPA_SUBID_RANGES_SEARCH_BASE));
++    }
++    ret = ipa_parse_search_base(ipa_opts->basic, ipa_opts->basic,
++                                IPA_SUBID_RANGES_SEARCH_BASE,
++                                &ipa_opts->id->sdom->subid_ranges_search_bases);
++    if (ret != EOK) goto done;
++
++    ret = sdap_get_map(ipa_opts->id,
++                       cdb, conf_path,
++                       ipa_subid_map,
++                       SDAP_OPTS_SUBID_RANGE,
++                       &ipa_opts->id->subid_map);
++    if (ret != EOK) {
++        goto done;
++    }
++#endif
++
+     value = dp_opt_get_string(ipa_opts->id->basic, SDAP_DEREF);
+     if (value != NULL) {
+         ret = deref_string_to_val(value, &i);
+diff --git a/src/providers/ipa/ipa_common.h b/src/providers/ipa/ipa_common.h
+index 480f7b664..eb0eda8eb 100644
+--- a/src/providers/ipa/ipa_common.h
++++ b/src/providers/ipa/ipa_common.h
+@@ -68,6 +68,7 @@ enum ipa_basic_opt {
+     IPA_DESKPROFILE_SEARCH_BASE,
+     IPA_DESKPROFILE_REFRESH,
+     IPA_DESKPROFILE_REQUEST_INTERVAL,
++    IPA_SUBID_RANGES_SEARCH_BASE,
+ 
+     IPA_OPTS_BASIC /* opts counter */
+ };
+diff --git a/src/providers/ipa/ipa_id.c b/src/providers/ipa/ipa_id.c
+index 2cbe0c9c7..636e07965 100644
+--- a/src/providers/ipa/ipa_id.c
++++ b/src/providers/ipa/ipa_id.c
+@@ -728,6 +728,22 @@ static errno_t ipa_id_get_account_info_get_original_step(struct tevent_req *req,
+                                           struct ipa_id_get_account_info_state);
+     struct tevent_req *subreq;
+ 
++#ifdef BUILD_SUBID
++    if ((ar->entry_type & BE_REQ_TYPE_MASK) == BE_REQ_SUBID_RANGES) {
++        if (!state->ctx->opts->sdom->subid_ranges_search_bases ||
++            !state->ctx->opts->sdom->subid_ranges_search_bases[0] ||
++            !state->ctx->opts->sdom->subid_ranges_search_bases[0]->basedn) {
++            DEBUG(SSSDBG_OP_FAILURE, "subid_ranges_search_bases isn't set\n");
++            return EINVAL;
++        }
++        ar->extra_value = talloc_asprintf(ar,
++            "%s=%s,"SYSDB_USERS_CONTAINER",%s",
++            state->ctx->opts->user_map[SDAP_AT_USER_NAME].name,
++            ar->filter_value,
++            state->ctx->opts->sdom->user_search_bases[0]->basedn);
++    }
++#endif
++
+     subreq = sdap_handle_acct_req_send(state, state->ctx->be, ar,
+                                        state->ipa_ctx->sdap_id_ctx,
+                                        state->ipa_ctx->sdap_id_ctx->opts->sdom,
+@@ -769,6 +785,7 @@ static void ipa_id_get_account_info_orig_done(struct tevent_req *subreq)
+     }
+ 
+     if (! is_object_overridable(state->ar)) {
++        DEBUG(SSSDBG_FUNC_DATA, "Object not overridable, ending request\n");
+         state->dp_error = DP_ERR_OK;
+         tevent_req_done(req);
+         return;
+diff --git a/src/providers/ipa/ipa_opts.c b/src/providers/ipa/ipa_opts.c
+index 09e360a43..dc0a2201b 100644
+--- a/src/providers/ipa/ipa_opts.c
++++ b/src/providers/ipa/ipa_opts.c
+@@ -26,6 +26,7 @@
+ #include "db/sysdb_autofs.h"
+ #include "db/sysdb_services.h"
+ #include "db/sysdb_selinux.h"
++#include "db/sysdb_subid.h"
+ #include "providers/ldap/ldap_common.h"
+ 
+ struct dp_option ipa_basic_opts[] = {
+@@ -51,6 +52,7 @@ struct dp_option ipa_basic_opts[] = {
+     { "ipa_deskprofile_search_base", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     { "ipa_deskprofile_refresh", DP_OPT_NUMBER, { .number = 5 }, NULL_NUMBER },
+     { "ipa_deskprofile_request_interval", DP_OPT_NUMBER, { .number = 60 }, NULL_NUMBER },
++    { "ipa_subid_ranges_search_base", DP_OPT_STRING, NULL_STRING, NULL_STRING },
+     DP_OPTION_TERMINATOR
+ };
+ 
+@@ -250,6 +252,16 @@ struct sdap_attr_map ipa_netgroup_map[] = {
+     SDAP_ATTR_MAP_TERMINATOR
+ };
+ 
++struct sdap_attr_map ipa_subid_map[] = {
++    { "ipa_subuid_object_class", "ipasubordinateid", SYSDB_SUBID_RANGE_OC, NULL },
++    { "ipa_subuid_count", "ipaSubUidCount", SYSDB_SUBID_UID_COUND, NULL },
++    { "ipa_subgid_count", "ipaSubGidCount", SYSDB_SUBID_GID_COUNT, NULL },
++    { "ipa_subuid_number", "ipaSubUidNumber", SYSDB_SUBID_UID_NUMBER, NULL },
++    { "ipa_subgid_number", "ipaSubGidNumber", SYSDB_SUBID_GID_NUMBER, NULL },
++    { "ipa_owner", "ipaOwner", SYSDB_SUBID_OWNER, NULL },
++    SDAP_ATTR_MAP_TERMINATOR
++};
++
+ struct sdap_attr_map ipa_host_map[] = {
+     { "ipa_host_object_class", "ipaHost", SYSDB_HOST_CLASS, NULL },
+     { "ipa_host_name", "cn", SYSDB_NAME, NULL },
+diff --git a/src/providers/ipa/ipa_opts.h b/src/providers/ipa/ipa_opts.h
+index 378a9922c..6f54e57a9 100644
+--- a/src/providers/ipa/ipa_opts.h
++++ b/src/providers/ipa/ipa_opts.h
+@@ -40,6 +40,8 @@ extern struct sdap_attr_map ipa_group_map[];
+ 
+ extern struct sdap_attr_map ipa_netgroup_map[];
+ 
++extern struct sdap_attr_map ipa_subid_map[];
++
+ extern struct sdap_attr_map ipa_host_map[];
+ 
+ extern struct sdap_attr_map ipa_hostgroup_map[];
+diff --git a/src/providers/ldap/ldap_common.h b/src/providers/ldap/ldap_common.h
+index 13e6d4871..c78338b5d 100644
+--- a/src/providers/ldap/ldap_common.h
++++ b/src/providers/ldap/ldap_common.h
+@@ -446,4 +446,18 @@ errno_t users_get_handle_no_user(TALLOC_CTX *mem_ctx,
+ errno_t groups_get_handle_no_group(TALLOC_CTX *mem_ctx,
+                                    struct sss_domain_info *domain,
+                                    int filter_type, const char *filter_value);
++
++#ifdef BUILD_SUBID
++struct tevent_req *subid_ranges_get_send(TALLOC_CTX *memctx,
++                                         struct tevent_context *ev,
++                                         struct sdap_id_ctx *ctx,
++                                         struct sdap_domain *sdom,
++                                         struct sdap_id_conn_ctx *conn,
++                                         const char* filter_value,
++                                         const char *extra_value);
++
++int subid_ranges_get_recv(struct tevent_req *req, int *dp_error_out,
++                          int *sdap_ret);
++#endif
++
+ #endif /* _LDAP_COMMON_H_ */
+diff --git a/src/providers/ldap/ldap_id.c b/src/providers/ldap/ldap_id.c
+index ebc0ab8e4..9b67773a8 100644
+--- a/src/providers/ldap/ldap_id.c
++++ b/src/providers/ldap/ldap_id.c
+@@ -1449,6 +1449,24 @@ sdap_handle_acct_req_send(TALLOC_CTX *mem_ctx,
+                                      noexist_delete);
+         break;
+ 
++    case BE_REQ_SUBID_RANGES:
++#ifdef BUILD_SUBID
++        if (!ar->extra_value) {
++            ret = ERR_GET_ACCT_SUBID_RANGES_NOT_SUPPORTED;
++            state->err = "This id_provider doesn't support subid ranges";
++            goto done;
++        }
++        subreq = subid_ranges_get_send(state, be_ctx->ev, id_ctx,
++                                       sdom, conn,
++                                       ar->filter_value,
++                                       ar->extra_value);
++#else
++        ret = ERR_GET_ACCT_SUBID_RANGES_NOT_SUPPORTED;
++        state->err = "Subid ranges are not supported";
++        goto done;
++#endif
++        break;
++
+     case BE_REQ_NETGROUP:
+         if (ar->filter_type != BE_FILTER_NAME) {
+             ret = EINVAL;
+@@ -1533,6 +1551,11 @@ sdap_handle_acct_req_send(TALLOC_CTX *mem_ctx,
+     default: /*fail*/
+         ret = EINVAL;
+         state->err = "Invalid request type";
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Unexpected request type: 0x%X [%s:%s] in %s\n",
++              ar->entry_type, ar->filter_value,
++              ar->extra_value?ar->extra_value:"-",
++              ar->domain);
+         goto done;
+     }
+ 
+@@ -1578,6 +1601,14 @@ sdap_handle_acct_req_done(struct tevent_req *subreq)
+         err = "Init group lookup failed";
+         ret = groups_by_user_recv(subreq, &state->dp_error, &state->sdap_ret);
+         break;
++    case BE_REQ_SUBID_RANGES:
++        err = "Subid ranges lookup failed";
++#ifdef BUILD_SUBID
++        ret = subid_ranges_get_recv(subreq, &state->dp_error, &state->sdap_ret);
++#else
++        ret = EINVAL;
++#endif
++        break;
+     case BE_REQ_NETGROUP:
+         err = "Netgroup lookup failed";
+         ret = ldap_netgroup_get_recv(subreq, &state->dp_error, &state->sdap_ret);
+diff --git a/src/providers/ldap/ldap_id_subid.c b/src/providers/ldap/ldap_id_subid.c
+new file mode 100644
+index 000000000..d25c6aaac
+--- /dev/null
++++ b/src/providers/ldap/ldap_id_subid.c
+@@ -0,0 +1,255 @@
++/*
++    SSSD
++
++    LDAP Identity Backend Module - subid ranges support
++
++    Copyright (C) 2021 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <errno.h>
++
++#include "db/sysdb_subid.h"
++#include "providers/ldap/ldap_common.h"
++#include "providers/ldap/sdap_async.h"
++#include "providers/ldap/sdap_ops.h"
++
++static int subid_ranges_get_retry(struct tevent_req *req);
++static void subid_ranges_get_connect_done(struct tevent_req *subreq);
++static void subid_ranges_get_search(struct tevent_req *req);
++static void subid_ranges_get_done(struct tevent_req *subreq);
++
++
++struct subid_ranges_get_state {
++    struct tevent_context *ev;
++    struct sdap_id_ctx *ctx;
++    struct sdap_domain *sdom;
++    struct sdap_id_conn_ctx *conn;
++    struct sdap_id_op *op;
++    struct sss_domain_info *domain;
++
++    char *filter;
++    char *name;
++    const char **attrs;
++
++    int dp_error;
++    int sdap_ret;
++};
++
++struct tevent_req *subid_ranges_get_send(TALLOC_CTX *memctx,
++                                         struct tevent_context *ev,
++                                         struct sdap_id_ctx *ctx,
++                                         struct sdap_domain *sdom,
++                                         struct sdap_id_conn_ctx *conn,
++                                         const char *filter_value,
++                                         const char *extra_value)
++{
++    struct tevent_req *req;
++    struct subid_ranges_get_state *state;
++    int ret;
++
++    req = tevent_req_create(memctx, &state, struct subid_ranges_get_state);
++    if (!req) return NULL;
++
++    state->ev = ev;
++    state->ctx = ctx;
++    state->sdom = sdom;
++    state->conn = conn;
++    state->dp_error = DP_ERR_FATAL;
++    state->name = talloc_strdup(state, filter_value);
++    if (!state->name) {
++        DEBUG(SSSDBG_OP_FAILURE, "talloc_strdup failed\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    state->op = sdap_id_op_create(state, state->conn->conn_cache);
++    if (!state->op) {
++        DEBUG(SSSDBG_OP_FAILURE, "sdap_id_op_create failed\n");
++        ret = ENOMEM;
++        goto done;
++    }
++
++    state->domain = sdom->dom;
++
++    state->filter = talloc_asprintf(state,
++                                    "(&(%s=%s)(%s=%s))",
++                                    SYSDB_OBJECTCLASS,
++                                    ctx->opts->subid_map[SDAP_OC_SUBID_RANGE].name,
++                                    ctx->opts->subid_map[SDAP_AT_SUBID_RANGE_OWNER].name,
++                                    extra_value);
++
++    ret = subid_ranges_get_retry(req);
++    if (ret != EOK) {
++        goto done;
++    }
++
++    return req;
++
++done:
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++    } else {
++        tevent_req_done(req);
++    }
++    return tevent_req_post(req, ev);
++}
++
++static int subid_ranges_get_retry(struct tevent_req *req)
++{
++    struct subid_ranges_get_state *state = tevent_req_data(req,
++                                                    struct subid_ranges_get_state);
++    struct tevent_req *subreq;
++    int ret = EOK;
++
++    subreq = sdap_id_op_connect_send(state->op, state, &ret);
++    if (!subreq) {
++        return ret;
++    }
++
++    tevent_req_set_callback(subreq, subid_ranges_get_connect_done, req);
++    return EOK;
++}
++
++static void subid_ranges_get_connect_done(struct tevent_req *subreq)
++{
++    struct tevent_req *req = tevent_req_callback_data(subreq,
++                                                      struct tevent_req);
++    struct subid_ranges_get_state *state = tevent_req_data(req,
++                                                     struct subid_ranges_get_state);
++    int dp_error = DP_ERR_FATAL;
++    int ret;
++
++    ret = sdap_id_op_connect_recv(subreq, &dp_error);
++    talloc_zfree(subreq);
++
++    if (ret != EOK) {
++        state->dp_error = dp_error;
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    subid_ranges_get_search(req);
++}
++
++static void subid_ranges_get_search(struct tevent_req *req)
++{
++    struct subid_ranges_get_state *state = tevent_req_data(req,
++                                                     struct subid_ranges_get_state);
++    struct tevent_req *subreq = NULL;
++    const char **attrs;
++    int ret;
++
++    ret = build_attrs_from_map(state, state->ctx->opts->subid_map,
++                               SDAP_OPTS_SUBID_RANGE, NULL, &attrs, NULL);
++    if (ret != EOK) {
++        tevent_req_error(req, ENOMEM);
++        return;
++    }
++
++    subreq = sdap_search_bases_send(state, state->ev, state->ctx->opts,
++                                    sdap_id_op_handle(state->op),
++                                    state->sdom->subid_ranges_search_bases,
++                                    state->ctx->opts->subid_map,
++                                    false, /* allow_paging */
++                                    dp_opt_get_int(state->ctx->opts->basic,
++                                                   SDAP_SEARCH_TIMEOUT),
++                                    state->filter,
++                                    attrs,
++                                    NULL);
++    talloc_free(attrs);
++    if (!subreq) {
++        tevent_req_error(req, ENOMEM);
++        return;
++    }
++    tevent_req_set_callback(subreq, subid_ranges_get_done, req);
++}
++
++static void subid_ranges_get_done(struct tevent_req *subreq)
++{
++    struct tevent_req *req = tevent_req_callback_data(subreq,
++                                                      struct tevent_req);
++    struct subid_ranges_get_state *state = tevent_req_data(req,
++                                                     struct subid_ranges_get_state);
++    int dp_error = DP_ERR_FATAL;
++    int ret;
++    struct sysdb_attrs **results;
++    size_t num_results;
++
++    ret = sdap_search_bases_recv(subreq, state, &num_results, &results);
++    talloc_zfree(subreq);
++    if (ret != EOK) {
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    ret = sdap_id_op_done(state->op, ret, &dp_error);
++    if (dp_error == DP_ERR_OK && ret != EOK) {
++        /* retry */
++        ret = subid_ranges_get_retry(req);
++        if (ret != EOK) {
++            tevent_req_error(req, ret);
++            return;
++        }
++        return;
++    }
++    state->sdap_ret = ret;
++
++    if (ret && ret != ENOENT) {
++        DEBUG(SSSDBG_OP_FAILURE, "Failed to retrieve subid ranges.\n");
++        state->dp_error = dp_error;
++        tevent_req_error(req, ret);
++        return;
++    }
++
++    if (num_results == 0 || !results) {
++        DEBUG(SSSDBG_MINOR_FAILURE,
++              "No such user '%s' or user doesn't have subid range\n",
++              state->name);
++        sysdb_delete_subid_range(state->domain, state->name);
++    } else {
++        if (num_results > 1) {
++            DEBUG(SSSDBG_OP_FAILURE,
++                  "Multiple subid ranges, only first will be processed\n");
++        }
++
++        /* store range */
++        sysdb_store_subid_range(state->domain, state->name,
++                                state->domain->user_timeout,
++                                results[0]);
++    }
++
++    state->dp_error = DP_ERR_OK;
++    tevent_req_done(req);
++}
++
++int subid_ranges_get_recv(struct tevent_req *req, int *dp_error_out,
++                          int *sdap_ret)
++{
++    struct subid_ranges_get_state *state = tevent_req_data(req,
++                                                    struct subid_ranges_get_state);
++
++    if (dp_error_out) {
++        *dp_error_out = state->dp_error;
++    }
++
++    if (sdap_ret) {
++        *sdap_ret = state->sdap_ret;
++    }
++
++    TEVENT_REQ_RETURN_ON_ERROR(req);
++
++    return EOK;
++}
+diff --git a/src/providers/ldap/sdap.h b/src/providers/ldap/sdap.h
+index ffcbee8a5..6382bec25 100644
+--- a/src/providers/ldap/sdap.h
++++ b/src/providers/ldap/sdap.h
+@@ -389,6 +389,19 @@ enum sdap_ipnetwork_entry_attrs {
+     SDAP_OPTS_IPNETWORK /* attrs counter */
+ };
+ 
++#ifdef BUILD_SUBID
++enum sdap_subid_range_attrs {
++    SDAP_OC_SUBID_RANGE = 0,
++    SDAP_AT_SUBID_RANGE_UID_COUNT,
++    SDAP_AT_SUBID_RANGE_GID_COUNT,
++    SDAP_AT_SUBID_RANGE_UID_NUMBER,
++    SDAP_AT_SUBID_RANGE_GID_NUMBER,
++    SDAP_AT_SUBID_RANGE_OWNER,
++
++    SDAP_OPTS_SUBID_RANGE /* attrs counter */
++};
++#endif
++
+ enum sdap_autofs_map_attrs {
+     SDAP_OC_AUTOFS_MAP,
+     SDAP_AT_AUTOFS_MAP_NAME,
+@@ -453,6 +466,9 @@ struct sdap_domain {
+     struct sdap_search_base **iphost_search_bases;
+     struct sdap_search_base **ipnetwork_search_bases;
+     struct sdap_search_base **autofs_search_bases;
++#ifdef BUILD_SUBID
++    struct sdap_search_base **subid_ranges_search_bases;
++#endif
+ 
+     struct sdap_domain *next, *prev;
+     /* Need to modify the list from a talloc destructor */
+@@ -495,6 +511,9 @@ struct sdap_options {
+     struct sdap_attr_map *service_map;
+     struct sdap_attr_map *iphost_map;
+     struct sdap_attr_map *ipnetwork_map;
++#ifdef BUILD_SUBID
++    struct sdap_attr_map *subid_map;
++#endif
+ 
+     /* ID-mapping support */
+     struct sdap_idmap_ctx *idmap_ctx;
+diff --git a/src/responder/common/cache_req/cache_req.c b/src/responder/common/cache_req/cache_req.c
+index 889547ba7..750d655c1 100644
+--- a/src/responder/common/cache_req/cache_req.c
++++ b/src/responder/common/cache_req/cache_req.c
+@@ -45,6 +45,10 @@ cache_req_get_plugin(enum cache_req_type type)
+         &cache_req_initgroups_by_name,
+         &cache_req_initgroups_by_upn,
+ 
++#ifdef BUILD_SUBID
++        &cache_req_subid_ranges_by_name,
++#endif
++
+         &cache_req_object_by_sid,
+         &cache_req_object_by_name,
+         &cache_req_object_by_id,
+diff --git a/src/responder/common/cache_req/cache_req.h b/src/responder/common/cache_req/cache_req.h
+index d5c25ccf0..055fb405b 100644
+--- a/src/responder/common/cache_req/cache_req.h
++++ b/src/responder/common/cache_req/cache_req.h
+@@ -39,6 +39,10 @@ enum cache_req_type {
+     CACHE_REQ_INITGROUPS,
+     CACHE_REQ_INITGROUPS_BY_UPN,
+ 
++#ifdef BUILD_SUBID
++    CACHE_REQ_SUBID_RANGES_BY_NAME,
++#endif
++
+     CACHE_REQ_OBJECT_BY_SID,
+     CACHE_REQ_OBJECT_BY_NAME,
+     CACHE_REQ_OBJECT_BY_ID,
+diff --git a/src/responder/common/cache_req/cache_req_data.c b/src/responder/common/cache_req/cache_req_data.c
+index e82dc8ab6..3c60eb484 100644
+--- a/src/responder/common/cache_req/cache_req_data.c
++++ b/src/responder/common/cache_req/cache_req_data.c
+@@ -90,6 +90,9 @@ cache_req_data_create(TALLOC_CTX *mem_ctx,
+     case CACHE_REQ_GROUP_BY_FILTER:
+     case CACHE_REQ_INITGROUPS:
+     case CACHE_REQ_INITGROUPS_BY_UPN:
++#ifdef BUILD_SUBID
++    case CACHE_REQ_SUBID_RANGES_BY_NAME:
++#endif
+     case CACHE_REQ_NETGROUP_BY_NAME:
+     case CACHE_REQ_OBJECT_BY_NAME:
+     case CACHE_REQ_AUTOFS_MAP_ENTRIES:
+diff --git a/src/responder/common/cache_req/cache_req_plugin.h b/src/responder/common/cache_req/cache_req_plugin.h
+index 9e4986f93..f86a02042 100644
+--- a/src/responder/common/cache_req/cache_req_plugin.h
++++ b/src/responder/common/cache_req/cache_req_plugin.h
+@@ -302,6 +302,9 @@ extern const struct cache_req_plugin cache_req_group_by_name;
+ extern const struct cache_req_plugin cache_req_group_by_id;
+ extern const struct cache_req_plugin cache_req_initgroups_by_name;
+ extern const struct cache_req_plugin cache_req_initgroups_by_upn;
++#ifdef BUILD_SUBID
++extern const struct cache_req_plugin cache_req_subid_ranges_by_name;
++#endif
+ extern const struct cache_req_plugin cache_req_user_by_cert;
+ extern const struct cache_req_plugin cache_req_user_by_filter;
+ extern const struct cache_req_plugin cache_req_group_by_filter;
+diff --git a/src/responder/common/cache_req/plugins/cache_req_subid_ranges_by_name.c b/src/responder/common/cache_req/plugins/cache_req_subid_ranges_by_name.c
+new file mode 100644
+index 000000000..54852711f
+--- /dev/null
++++ b/src/responder/common/cache_req/plugins/cache_req_subid_ranges_by_name.c
+@@ -0,0 +1,143 @@
++/*
++    Copyright (C) 2021 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <talloc.h>
++#include <ldb.h>
++
++#include "db/sysdb.h"
++#include "db/sysdb_subid.h"
++#include "util/util.h"
++#include "providers/data_provider.h"
++#include "responder/common/cache_req/cache_req_plugin.h"
++
++static errno_t
++cache_req_subid_ranges_by_name_prepare_domain_data(struct cache_req *cr,
++                                                   struct cache_req_data *data,
++                                                   struct sss_domain_info *domain)
++{
++    TALLOC_CTX *tmp_ctx;
++    const char *name;
++    errno_t ret;
++
++    if (cr->data->name.name == NULL) {
++        DEBUG(SSSDBG_CRIT_FAILURE, "Bug: parsed name is NULL?\n");
++        return ERR_INTERNAL;
++    }
++
++    tmp_ctx = talloc_new(NULL);
++    if (tmp_ctx == NULL) {
++        return ENOMEM;
++    }
++
++    name = sss_get_cased_name(tmp_ctx, cr->data->name.name,
++                              domain->case_sensitive);
++    if (name == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    name = sss_reverse_replace_space(tmp_ctx, name, cr->rctx->override_space);
++    if (name == NULL) {
++        ret = ENOMEM;
++        goto done;
++    }
++
++    talloc_zfree(data->name.lookup);
++    data->name.lookup = talloc_steal(data, name);
++
++    ret = EOK;
++
++done:
++    talloc_free(tmp_ctx);
++    return ret;
++}
++
++static const char *
++cache_req_subid_ranges_by_name_create_debug_name(TALLOC_CTX *mem_ctx,
++                                                 struct cache_req_data *data,
++                                                 struct sss_domain_info *domain)
++{
++    return talloc_strdup(mem_ctx, data->name.lookup);
++}
++
++static errno_t
++cache_req_subid_ranges_by_name_lookup(TALLOC_CTX *mem_ctx,
++                                      struct cache_req *cr,
++                                      struct cache_req_data *data,
++                                      struct sss_domain_info *domain,
++                                      struct ldb_result **_result)
++{
++    struct ldb_result *result;
++    struct ldb_message *msg;
++    errno_t ret;
++
++    ret = sysdb_get_subid_ranges(mem_ctx, domain, data->name.name,
++                                 data->attrs, &msg);
++    if (ret != EOK) {
++        return ret;
++    }
++
++    result = cache_req_create_ldb_result_from_msg(mem_ctx, msg);
++    if (result == NULL) {
++        return ENOMEM;
++    }
++
++    *_result = result;
++
++    return EOK;
++}
++
++static struct tevent_req *
++cache_req_subid_ranges_by_name_dp_send(TALLOC_CTX *mem_ctx,
++                                       struct cache_req *cr,
++                                       struct cache_req_data *data,
++                                       struct sss_domain_info *domain,
++                                       struct ldb_result *result)
++{
++    /* Views aren't yet supported */
++    return sss_dp_get_account_send(mem_ctx, cr->rctx, domain, true,
++                                   SSS_DP_SUBID_RANGES, cr->data->name.lookup, 0, NULL);
++}
++
++const struct cache_req_plugin cache_req_subid_ranges_by_name = {
++    .name = "SubID ranges by name",
++    .attr_expiration = SYSDB_CACHE_EXPIRE,
++    .parse_name = true,
++    .ignore_default_domain = false,
++    .bypass_cache = false,
++    .only_one_result = false,
++    .search_all_domains = false,
++    .require_enumeration = false,
++    .allow_missing_fqn = false,
++    .allow_switch_to_upn = false,
++    .upn_equivalent = CACHE_REQ_SENTINEL,
++    .get_next_domain_flags = SSS_GND_DESCEND,
++
++    .is_well_known_fn = NULL,
++    .prepare_domain_data_fn = cache_req_subid_ranges_by_name_prepare_domain_data,
++    .create_debug_name_fn = cache_req_subid_ranges_by_name_create_debug_name,
++    .global_ncache_add_fn = NULL,
++    .ncache_check_fn = NULL,
++    .ncache_add_fn = NULL,
++    .ncache_filter_fn = NULL,
++    .lookup_fn = cache_req_subid_ranges_by_name_lookup,
++    .dp_send_fn = cache_req_subid_ranges_by_name_dp_send,
++    .dp_recv_fn = cache_req_common_dp_recv,
++    .dp_get_domain_check_fn = NULL,
++    .dp_get_domain_send_fn = NULL,
++    .dp_get_domain_recv_fn = NULL,
++};
+diff --git a/src/responder/common/responder.h b/src/responder/common/responder.h
+index a5d6359a0..fbe46f335 100644
+--- a/src/responder/common/responder.h
++++ b/src/responder/common/responder.h
+@@ -273,6 +273,7 @@ enum sss_dp_acct_type {
+     SSS_DP_USER = 1,
+     SSS_DP_GROUP,
+     SSS_DP_INITGROUPS,
++    SSS_DP_SUBID_RANGES,
+     SSS_DP_NETGR,
+     SSS_DP_SERVICES,
+     SSS_DP_SECID,
+diff --git a/src/responder/common/responder_dp.c b/src/responder/common/responder_dp.c
+index 8076e1e43..1b016dba1 100644
+--- a/src/responder/common/responder_dp.c
++++ b/src/responder/common/responder_dp.c
+@@ -70,6 +70,7 @@ sss_dp_account_files_params(struct sss_domain_info *dom,
+         *_opt_name_out = opt_name_in;
+         return EAGAIN;
+     /* These are not handled by the files provider, just fall back */
++    case SSS_DP_SUBID_RANGES:
+     case SSS_DP_NETGR:
+     case SSS_DP_SERVICES:
+     case SSS_DP_SECID:
+@@ -109,6 +110,9 @@ sss_dp_get_account_filter(TALLOC_CTX *mem_ctx,
+         case SSS_DP_INITGROUPS:
+             entry_type = BE_REQ_INITGROUPS;
+             break;
++        case SSS_DP_SUBID_RANGES:
++            entry_type = BE_REQ_SUBID_RANGES;
++            break;
+         case SSS_DP_NETGR:
+             entry_type = BE_REQ_NETGROUP;
+             break;
+diff --git a/src/responder/nss/nss_cmd.c b/src/responder/nss/nss_cmd.c
+index a487e1c24..ef59daea8 100644
+--- a/src/responder/nss/nss_cmd.c
++++ b/src/responder/nss/nss_cmd.c
+@@ -1041,6 +1041,25 @@ static errno_t nss_cmd_initgroups_ex(struct cli_ctx *cli_ctx)
+                           SSS_MC_INITGROUPS, nss_protocol_fill_initgr);
+ }
+ 
++static errno_t nss_cmd_subid_ranges(struct cli_ctx *cli_ctx)
++{
++#ifdef BUILD_SUBID
++    const char *attrs[] =
++        {
++          SYSDB_SUBID_UID_COUND,
++          SYSDB_SUBID_GID_COUNT,
++          SYSDB_SUBID_UID_NUMBER,
++          SYSDB_SUBID_GID_NUMBER,
++          NULL
++        };
++
++    return nss_getby_name(cli_ctx, false, CACHE_REQ_SUBID_RANGES_BY_NAME, attrs,
++                          SSS_MC_NONE, nss_protocol_fill_subid_ranges);
++#else
++    return ENOTSUP;
++#endif
++}
++
+ static errno_t nss_cmd_setnetgrent(struct cli_ctx *cli_ctx)
+ {
+     struct nss_state_ctx *state_ctx;
+@@ -1332,6 +1351,7 @@ struct sss_cmd_table *get_nss_cmds(void)
+         { SSS_NSS_GETGRENT, nss_cmd_getgrent },
+         { SSS_NSS_ENDGRENT, nss_cmd_endgrent },
+         { SSS_NSS_INITGR, nss_cmd_initgroups },
++        { SSS_NSS_GET_SUBID_RANGES, nss_cmd_subid_ranges },
+         { SSS_NSS_SETNETGRENT, nss_cmd_setnetgrent },
+      /* { SSS_NSS_GETNETGRENT, "not needed" }, */
+      /* { SSS_NSS_ENDNETGRENT, "not needed" }, */
+diff --git a/src/responder/nss/nss_protocol.h b/src/responder/nss/nss_protocol.h
+index 364f19c83..949b6291a 100644
+--- a/src/responder/nss/nss_protocol.h
++++ b/src/responder/nss/nss_protocol.h
+@@ -147,6 +147,14 @@ nss_protocol_fill_initgr(struct nss_ctx *nss_ctx,
+                          struct sss_packet *packet,
+                          struct cache_req_result *result);
+ 
++#ifdef BUILD_SUBID
++errno_t
++nss_protocol_fill_subid_ranges(struct nss_ctx *nss_ctx,
++                               struct nss_cmd_ctx *cmd_ctx,
++                               struct sss_packet *packet,
++                               struct cache_req_result *result);
++#endif
++
+ errno_t
+ nss_protocol_fill_netgrent(struct nss_ctx *nss_ctx,
+                            struct nss_cmd_ctx *cmd_ctx,
+diff --git a/src/responder/nss/nss_protocol_subid.c b/src/responder/nss/nss_protocol_subid.c
+new file mode 100644
+index 000000000..29a957762
+--- /dev/null
++++ b/src/responder/nss/nss_protocol_subid.c
+@@ -0,0 +1,60 @@
++/*
++    Copyright (C) 2021 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "responder/nss/nss_protocol.h"
++
++errno_t
++nss_protocol_fill_subid_ranges(struct nss_ctx *nss_ctx,
++                               struct nss_cmd_ctx *cmd_ctx,
++                               struct sss_packet *packet,
++                               struct cache_req_result *result)
++{
++    static const uint32_t one = 1;
++    errno_t ret;
++    uint8_t *body;
++    size_t body_len;
++    size_t rp = 0;
++    uint32_t gid, uid, gidCount, uidCount;
++
++    if (!result->count || !result->msgs) {
++        return ENOENT;
++    }
++
++    uid      = ldb_msg_find_attr_as_uint(result->msgs[0], SYSDB_SUBID_UID_NUMBER, 0);
++    uidCount = ldb_msg_find_attr_as_uint(result->msgs[0], SYSDB_SUBID_UID_COUND,  0);
++    gid      = ldb_msg_find_attr_as_uint(result->msgs[0], SYSDB_SUBID_GID_NUMBER, 0);
++    gidCount = ldb_msg_find_attr_as_uint(result->msgs[0], SYSDB_SUBID_GID_COUNT,  0);
++    if (!uid || !gid || !gidCount || !uidCount) {
++        return ENOENT;
++    }
++
++    /* only single uid & gid range is expected currently */
++    ret = sss_packet_grow(packet, (2 + 2*2) * sizeof(uint32_t));
++    if (ret != EOK) {
++        return ret;
++    }
++
++    sss_packet_get_body(packet, &body, &body_len);
++    SAFEALIGN_COPY_UINT32(&body[rp], &one, &rp);
++    SAFEALIGN_COPY_UINT32(&body[rp], &one, &rp);
++    SAFEALIGN_COPY_UINT32(&body[rp], &uid, &rp);
++    SAFEALIGN_COPY_UINT32(&body[rp], &uidCount, &rp);
++    SAFEALIGN_COPY_UINT32(&body[rp], &gid, &rp);
++    SAFEALIGN_COPY_UINT32(&body[rp], &gidCount, &rp);
++
++    return EOK;
++}
+diff --git a/src/sss_client/common.c b/src/sss_client/common.c
+index d29332939..9416e21d1 100644
+--- a/src/sss_client/common.c
++++ b/src/sss_client/common.c
+@@ -1008,7 +1008,7 @@ void sss_pam_close_fd(void)
+     sss_pam_unlock();
+ }
+ 
+-static enum sss_status
++enum sss_status
+ sss_cli_make_request_with_checks(enum sss_cli_command cmd,
+                                  struct sss_cli_req_data *rd,
+                                  int timeout,
+diff --git a/src/sss_client/sss_cli.h b/src/sss_client/sss_cli.h
+index 2c3c71bc4..1347ce71d 100644
+--- a/src/sss_client/sss_cli.h
++++ b/src/sss_client/sss_cli.h
+@@ -284,6 +284,10 @@ SSS_NSS_GETSIDBYGID   = 0x0119, /**< Takes an unsigned 32bit integer (POSIX GID)
+                                      and return the zero terminated string
+                                      representation of the SID of the object
+                                      with the given UID. */
++
++/* subid */
++    SSS_NSS_GET_SUBID_RANGES = 0x0130, /**< Requests both subuid and subgid ranges
++                                            defined for a user. */
+ };
+ 
+ /**
+@@ -631,6 +635,13 @@ enum sss_cli_error_codes {
+ 
+ const char *ssscli_err2string(int err);
+ 
++enum sss_status sss_cli_make_request_with_checks(enum sss_cli_command cmd,
++                                                 struct sss_cli_req_data *rd,
++                                                 int timeout,
++                                                 uint8_t **repbuf, size_t *replen,
++                                                 int *errnop,
++                                                 const char *socket_name);
++
+ enum nss_status sss_nss_make_request(enum sss_cli_command cmd,
+                                      struct sss_cli_req_data *rd,
+                                      uint8_t **repbuf, size_t *replen,
+diff --git a/src/sss_client/subid/sss_subid.c b/src/sss_client/subid/sss_subid.c
+new file mode 100644
+index 000000000..ae74ece3c
+--- /dev/null
++++ b/src/sss_client/subid/sss_subid.c
+@@ -0,0 +1,209 @@
++/*
++    Copyright (C) 2021 Red Hat
++
++    This program is free software; you can redistribute it and/or modify
++    it under the terms of the GNU General Public License as published by
++    the Free Software Foundation; either version 3 of the License, or
++    (at your option) any later version.
++
++    This program is distributed in the hope that it will be useful,
++    but WITHOUT ANY WARRANTY; without even the implied warranty of
++    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++    GNU General Public License for more details.
++
++    You should have received a copy of the GNU General Public License
++    along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include <stdlib.h>
++#include <string.h>
++#include <shadow/subid.h>
++#include "sss_cli.h"
++
++/* This shadow-utils plugin contains partial SSSD implementation
++ * of `subid_nss_ops` API as described in
++ * https://github.com/shadow-maint/shadow/blob/d4b6d1549b2af48ce3cb6ff78d9892095fb8fdd9/lib/prototypes.h#L271
++ */
++
++/* Find all subid ranges delegated to a user.
++ *
++ * Usage in shadow-utils:
++ *      libsubid: get_sub?id_ranges() -> list_owner_ranges()
++ *
++ * SUBID_RANGES Reply:
++ *
++ * 0-3: 32bit unsigned number of UID results
++ * 4-7: 32bit unsigned number of GID results
++ * For each result (sub-uid ranges first):
++ * 0-3: 32bit number with "start" id
++ * 4-7: 32bit number with "count" (range size)
++ */
++enum subid_status shadow_subid_list_owner_ranges(const char *user,
++                                                 enum subid_type id_type,
++                                                 struct subid_range **ranges,
++                                                 int *count)
++{
++    size_t user_len;
++    enum sss_status ret;
++    uint8_t *repbuf = NULL;
++    size_t index = 0;
++    size_t replen;
++    int errnop;
++    struct sss_cli_req_data rd;
++    uint32_t num_results = 0;
++    uint32_t val;
++
++    if ( !user || !ranges || !count ||
++          ((id_type != ID_TYPE_UID) && (id_type != ID_TYPE_GID)) ) {
++        return SUBID_STATUS_ERROR;
++    }
++
++    ret = sss_strnlen(user, SSS_NAME_MAX, &user_len);
++    if (ret != 0) {
++        return SUBID_STATUS_UNKNOWN_USER;
++    }
++    rd.len = user_len + 1;
++    rd.data = user;
++
++    sss_nss_lock();
++    /* Anticipated workflow will always request both
++     * sub-uid and sub-gid ranges anyway.
++     * So don't bother with dedicated commands -
++     * just request everything in one shot.
++     * The second request will get data from the cache.
++     */
++    ret = sss_cli_make_request_with_checks(SSS_NSS_GET_SUBID_RANGES, &rd,
++                                           SSS_CLI_SOCKET_TIMEOUT,
++                                           &repbuf, &replen, &errnop,
++                                           SSS_NSS_SOCKET_NAME);
++    sss_nss_unlock();
++
++    if ((ret != SSS_STATUS_SUCCESS) || (errnop != EOK)) {
++        free(repbuf);
++        if (ret == SSS_STATUS_UNAVAIL) {
++            return SUBID_STATUS_ERROR_CONN;
++        }
++        return SUBID_STATUS_ERROR;
++    }
++
++    SAFEALIGN_COPY_UINT32(&num_results, repbuf, NULL);
++    if (id_type == ID_TYPE_UID) {
++        index = 2 * sizeof(uint32_t);
++    } else {
++        index = (2 + 2*num_results) * sizeof(uint32_t);
++        SAFEALIGN_COPY_UINT32(&num_results, repbuf + sizeof(uint32_t), NULL);
++    }
++    if (num_results == 0) {
++        /* TODO: how to distinguish "user not found" vs "user doesn't have ranges defined" here?
++         * Options:
++         *  - special "fake" entry in the cache
++         *  - provide 'nss_protocol_done_fn' to 'nss_getby_name' to avoid "ENOENT -> "empty packet" logic
++         *  - add custom error code for this case and handle in generic 'nss_protocol_done'
++         *
++         * Note: at the moment this is not important, since shadow-utils doesn't use return code internally
++         * and returns -1 from libsubid on any error  anyway.
++         */
++        free(repbuf);
++        return SUBID_STATUS_UNKNOWN_USER;
++    }
++
++    *count = num_results;
++    if (*count < 0) {
++        free(repbuf);
++        return SUBID_STATUS_ERROR;
++    }
++
++    *ranges = malloc(num_results * sizeof(struct subid_range));
++    if (!*ranges) {
++        free(repbuf);
++        return SUBID_STATUS_ERROR;
++    }
++
++    for (uint32_t c = 0; c < num_results; ++c) {
++        SAFEALIGN_COPY_UINT32(&val, repbuf + index, &index);
++        (*ranges)[c].start = val;
++        SAFEALIGN_COPY_UINT32(&val, repbuf + index, &index);
++        (*ranges)[c].count = val;
++    }
++    free(repbuf);
++
++    return SUBID_STATUS_SUCCESS;
++}
++
++/* Does a user own a given subid range?
++ *
++ * Usage in shadow-utils:
++ *      newuidmap/user busy : have_sub_uids() -> has_range()
++ */
++enum subid_status shadow_subid_has_range(const char *owner,
++                                         unsigned long start,
++                                         unsigned long count,
++                                         enum subid_type id_type,
++                                         bool *result)
++{
++    enum subid_status ret;
++    struct subid_range *range;
++    int amount;
++    unsigned long end = start + count;
++
++    if (!result || (end < start)) {
++        return SUBID_STATUS_ERROR;
++    }
++
++    if (count == 0) {
++        *result = true;
++        return SUBID_STATUS_SUCCESS;
++    }
++
++    /* Anticipated workflow is the following:
++     *
++     * 1) Podman figures out ranges available for a user:
++     *     libsubid::get_subid_ranges() -> ... -> list_owner_ranges()
++     *
++     * 2) Podman maps available ranges:
++     *     newuidmap -> have_sub_uids() -> has_range()
++     * At this point all ranges are available in a cache from step (1)
++     * so it doesn't make sense to try "smart" LDAP searches (even if possible)
++     * Let's just reuse list_owner_ranges() and do a check.
++     *
++     * It might have some sense to do a check at responder's side (i.e. without
++     * fetching all ranges), but range is just a couple of numbers (and FreeIPA
++     * only supports a single range per user anyway), so this optimization
++     * wouldn't save much traffic anyway, but would introduce new
++     * `sss_cli_command`/responder handler.
++     */
++
++    ret = shadow_subid_list_owner_ranges(owner, id_type, &range, &amount);
++    if (ret != SUBID_STATUS_SUCCESS) {
++        return ret;
++    }
++
++    *result = false;
++
++    for (int i = 0; i < amount; ++i) {
++        if ((range[i].start <= start) &&
++            (range[i].start + range[i].count >= end)) {
++            *result = true;
++        }
++        /* TODO: handle coverage via multiple ranges (once IPA supports this) */
++    }
++
++    free(range);
++    return ret;
++}
++
++/* Find uids who own a given subid.
++ *
++ * Usage in shadow-utils:
++ *      libsubid: get_sub?id_owners() -> find_subid_owners()
++ */
++enum subid_status shadow_subid_find_subid_owners(unsigned long subid,
++                                                 enum subid_type id_type,
++                                                 uid_t **uids,
++                                                 int *count)
++{
++    /* Not yet implemented.
++     * Currently there are no users of this function.
++     */
++    return SUBID_STATUS_ERROR;
++}
+diff --git a/src/sss_client/subid/sss_subid.exports b/src/sss_client/subid/sss_subid.exports
+new file mode 100644
+index 000000000..87c073b48
+--- /dev/null
++++ b/src/sss_client/subid/sss_subid.exports
+@@ -0,0 +1,12 @@
++EXPORTED {
++
++    # public functions
++    global:
++        shadow_subid_has_range;
++        shadow_subid_list_owner_ranges;
++        shadow_subid_find_subid_owners;
++
++    # everything else is local
++    local:
++        *;
++};
+diff --git a/src/systemtap/sssd_functions.stp b/src/systemtap/sssd_functions.stp
+index 01f553177..513029046 100644
+--- a/src/systemtap/sssd_functions.stp
++++ b/src/systemtap/sssd_functions.stp
+@@ -29,8 +29,8 @@ function acct_req_desc(entry_type)
+         str_entry_type = "host"
+     } else if (entry_type == 0x0009) {
+         str_entry_type = "ip_network"
+-    # See src/providers/data_provider_req.h, no 0x0010 there..
+     } else if (entry_type == 0x0010) {
++        str_entry_type = "subid_ranges"
+     } else if (entry_type == 0x0011) {
+         str_entry_type = "by_secid"
+     } else if (entry_type == 0x0012) {
+diff --git a/src/tests/cwrap/Makefile.am b/src/tests/cwrap/Makefile.am
+index 60f71036e..6d3dc45e5 100644
+--- a/src/tests/cwrap/Makefile.am
++++ b/src/tests/cwrap/Makefile.am
+@@ -74,6 +74,9 @@ SSSD_CACHE_REQ_OBJ = \
+     ../../../src/responder/common/cache_req/plugins/cache_req_ip_network_by_name.c \
+     ../../../src/responder/common/cache_req/plugins/cache_req_ip_network_by_addr.c \
+     $(NULL)
++if BUILD_SUBID
++    SSSD_CACHE_REQ_OBJ += ../../../src/responder/common/cache_req/plugins/cache_req_subid_ranges_by_name.c
++endif
+ 
+ SSSD_RESPONDER_IFACE_OBJ = \
+     ../../../src/responder/common/responder_iface.c \
+diff --git a/src/tests/dlopen-tests.c b/src/tests/dlopen-tests.c
+index ab44c213c..6d3345cbe 100644
+--- a/src/tests/dlopen-tests.c
++++ b/src/tests/dlopen-tests.c
+@@ -60,6 +60,9 @@ struct so {
+ #ifdef BUILD_AUTOFS
+     { "libsss_autofs.so", { LIBPFX"libsss_autofs.so", NULL } },
+ #endif
++#ifdef BUILD_SUBID
++    { "libsubid_sss.so", { LIBPFX"libsubid_sss.so", NULL } },
++#endif
+ #ifdef HAVE_KRB5_LOCATOR_PLUGIN
+     { "sssd_krb5_locator_plugin.so", { LIBPFX"sssd_krb5_locator_plugin.so",
+                                        NULL } },
+diff --git a/src/util/sss_cli_cmd.c b/src/util/sss_cli_cmd.c
+index 82dc33b33..bc9332aaa 100644
+--- a/src/util/sss_cli_cmd.c
++++ b/src/util/sss_cli_cmd.c
+@@ -230,6 +230,11 @@ const char *sss_cmd2str(enum sss_cli_command cmd)
+         return "SSS_NSS_GETIDBYSID";
+     case SSS_NSS_GETORIGBYNAME:
+         return "SSS_NSS_GETORIGBYNAME";
++
++    /* SUBID ranges */
++    case SSS_NSS_GET_SUBID_RANGES:
++        return "SSS_NSS_GET_SUBID_RANGES";
++
+     default:
+         DEBUG(SSSDBG_MINOR_FAILURE,
+               "Translation's string is missing for command [%#x].\n", cmd);
+diff --git a/src/util/util_errors.c b/src/util/util_errors.c
+index 7ba2621d1..f2d1d5dfc 100644
+--- a/src/util/util_errors.c
++++ b/src/util/util_errors.c
+@@ -120,6 +120,7 @@ struct err_string error_to_str[] = {
+     { "Unable to verify peer" }, /* ERR_UNABLE_TO_VERIFY_PEER */
+     { "Unable to resolve host" }, /* ERR_UNABLE_TO_RESOLVE_HOST */
+     { "GetAccountDomain() not supported" }, /* ERR_GET_ACCT_DOM_NOT_SUPPORTED */
++    { "Subid ranges are not supported by this provider" }, /* ERR_GET_ACCT_SUBID_RANGES_NOT_SUPPORTED */
+     { "The last GetAccountDomain() result is still valid" }, /* ERR_GET_ACCT_DOM_CACHED */
+     { "ID is outside the allowed range" }, /* ERR_ID_OUTSIDE_RANGE */
+     { "Group ID is duplicated" }, /* ERR_GID_DUPLICATED */
+diff --git a/src/util/util_errors.h b/src/util/util_errors.h
+index 37ce2de23..4098e818d 100644
+--- a/src/util/util_errors.h
++++ b/src/util/util_errors.h
+@@ -141,6 +141,7 @@ enum sssd_errors {
+     ERR_UNABLE_TO_VERIFY_PEER,
+     ERR_UNABLE_TO_RESOLVE_HOST,
+     ERR_GET_ACCT_DOM_NOT_SUPPORTED,
++    ERR_GET_ACCT_SUBID_RANGES_NOT_SUPPORTED,
+     ERR_GET_ACCT_DOM_CACHED,
+     ERR_ID_OUTSIDE_RANGE,
+     ERR_GID_DUPLICATED,
+-- 
+2.26.3
+

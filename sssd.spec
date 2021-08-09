@@ -27,13 +27,14 @@
 
 Name: sssd
 Version: 2.5.2
-Release: 3%{?dist}
+Release: 4%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/2.5.2/sssd-2.5.2.tar.gz
 
 ### Patches ###
+Patch0001: 0001-Basics-of-subid-ranges-support-for-IPA-provider.patch
 
 ### Dependencies ###
 
@@ -999,6 +1000,10 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Mon Aug 09 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.2-4
+- Disable running files provider by default
+- Support subid ranges managed by FreeIPA
+
 * Fri Jul 23 2021 Fedora Release Engineering <releng@fedoraproject.org> - 2.5.2-3
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_35_Mass_Rebuild
 
