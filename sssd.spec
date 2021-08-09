@@ -503,7 +503,6 @@ autoreconf -ivf
     --with-syslog=journald \
     --with-test-dir=/dev/shm \
 %if 0%{?fedora}
-    --enable-files-domain \
     --disable-polkit-rules-path \
 %endif
     %{nil}
