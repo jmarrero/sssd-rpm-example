@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 2.5.2
-Release: 4%{?dist}
+Release: 5%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -35,6 +35,7 @@ Source0: https://github.com/SSSD/sssd/releases/download/2.5.2/sssd-2.5.2.tar.gz
 
 ### Patches ###
 Patch0001: 0001-Basics-of-subid-ranges-support-for-IPA-provider.patch
+Patch0002: 0002-TOOLS-replace-system-with-execvp.patch
 
 ### Dependencies ###
 
@@ -1000,6 +1001,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Mon Aug 16 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.2-5
+- Fix CVE-2021-3621
+
 * Mon Aug 09 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.2-4
 - Disable running files provider by default
 - Support subid ranges managed by FreeIPA
