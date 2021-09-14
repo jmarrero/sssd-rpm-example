@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 2.5.2
-Release: 5%{?dist}
+Release: 6%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -1001,6 +1001,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Sep 14 2021 Sahana Prasad <sahana@redhat.com>
+- Rebuilt with OpenSSL 3.0.0
+
 * Mon Aug 16 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.2-5
 - Fix CVE-2021-3621
 
