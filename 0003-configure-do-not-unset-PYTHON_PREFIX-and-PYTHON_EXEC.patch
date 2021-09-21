@@ -1,0 +1,43 @@
+From 9e47b63e4fe5c17b1fb308ce98a5f04ce5b5624b Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Mon, 6 Sep 2021 13:48:06 +0200
+Subject: [PATCH] configure: do not unset PYTHON_PREFIX and PYTHON_EXEC_PREFIX
+
+Recent changes in autoconf changed location of directories from:
+
+```
+checking for /usr/bin/python3 script directory... ${prefix}/lib/python3.9/site-packages
+checking for /usr/bin/python3 extension module directory... ${exec_prefix}/lib64/python3.9/site-packages
+```
+
+to
+
+```
+checking for /usr/bin/python3 script directory... ${PYTHON_PREFIX}/lib/python3.10/site-packages
+checking for /usr/bin/python3 extension module directory... ${PYTHON_EXEC_PREFIX}/lib64/python3.10/site-packages
+```
+
+However, we unset these variables in SSS_CLEAN_PYTHON_VARIABLES and
+therefore the correct prefix is not applied anymore during installation.
+
+Reviewed-by: Pawel Polawski <ppolawsk@redhat.com>
+---
+ src/external/python.m4 | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/external/python.m4 b/src/external/python.m4
+index 1738f9f8f..6a6283511 100644
+--- a/src/external/python.m4
++++ b/src/external/python.m4
+@@ -73,7 +73,7 @@ AC_DEFUN([SSS_CLEAN_PYTHON_VARIABLES],
+ [
+     unset pyexecdir pkgpyexecdir pythondir pgkpythondir
+     unset PYTHON PYTHON_CFLAGS PYTHON_LIBS PYTHON_INCLUDES
+-    unset PYTHON_PREFIX PYTHON_EXEC_PREFIX PYTHON_VERSION PYTHON_CONFIG
++    unset PYTHON_VERSION PYTHON_CONFIG
+ 
+     dnl removed cached variables, required for reusing of AM_PATH_PYTHON
+     unset am_cv_pathless_PYTHON ac_cv_path_PYTHON am_cv_python_version
+-- 
+2.31.1
+

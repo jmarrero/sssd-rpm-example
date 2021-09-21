@@ -27,7 +27,7 @@
 
 Name: sssd
 Version: 2.5.2
-Release: 6%{?dist}
+Release: 7%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -36,6 +36,7 @@ Source0: https://github.com/SSSD/sssd/releases/download/2.5.2/sssd-2.5.2.tar.gz
 ### Patches ###
 Patch0001: 0001-Basics-of-subid-ranges-support-for-IPA-provider.patch
 Patch0002: 0002-TOOLS-replace-system-with-execvp.patch
+Patch0003: 0003-configure-do-not-unset-PYTHON_PREFIX-and-PYTHON_EXEC.patch
 
 ### Dependencies ###
 
@@ -1001,7 +1002,10 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
-* Tue Sep 14 2021 Sahana Prasad <sahana@redhat.com>
+* Tue Sep 21 2021 Iker Pedrosa <ipedrosa@redhat.com> - 2.5.2-7
+- Solve compilation problem with autoconf
+
+* Tue Sep 14 2021 Sahana Prasad <sahana@redhat.com> - 2.5.2-6
 - Rebuilt with OpenSSL 3.0.0
 
 * Mon Aug 16 2021 Pavel Březina <pbrezina@redhat.com> - 2.5.2-5
