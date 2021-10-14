@@ -14,6 +14,16 @@
 %global child_attrs 4750
 %endif
 
+%if 0%{?fedora} >= 34
+%global build_kcm_renewals 1
+%global krb5_version 1.19.1
+%elif 0%{?rhel} >= 8
+%global build_kcm_renewals 1
+%global krb5_version 1.18.2
+%else
+%global build_kcm_renewals 0
+%endif
+
 # we don't want to provide private python extension libs
 %define __provides_exclude_from %{python3_sitearch}/.*\.so$
 
@@ -26,17 +36,14 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.5.2
-Release: 7%{?dist}
+Version: 2.6.0
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.5.2/sssd-2.5.2.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.6.0/sssd-2.6.0.tar.gz
 
 ### Patches ###
-Patch0001: 0001-Basics-of-subid-ranges-support-for-IPA-provider.patch
-Patch0002: 0002-TOOLS-replace-system-with-execvp.patch
-Patch0003: 0003-configure-do-not-unset-PYTHON_PREFIX-and-PYTHON_EXEC.patch
 
 ### Dependencies ###
 
@@ -76,10 +83,8 @@ BuildRequires: findutils
 BuildRequires: gcc
 BuildRequires: gdm-pam-extensions-devel
 BuildRequires: gettext-devel
-BuildRequires: glib2-devel
 # required for p11_child smartcard tests
 BuildRequires: gnutls-utils
-BuildRequires: jansson-devel
 BuildRequires: keyutils-libs-devel
 BuildRequires: krb5-devel
 BuildRequires: libcmocka-devel >= 1.0.0
@@ -95,6 +100,8 @@ BuildRequires: libtalloc-devel
 BuildRequires: libtdb-devel
 BuildRequires: libtevent-devel
 BuildRequires: libtool
+BuildRequires: libunistring
+BuildRequires: libunistring-devel
 BuildRequires: libuuid-devel
 BuildRequires: libxml2
 BuildRequires: libxslt
@@ -123,6 +130,9 @@ BuildRequires: systemd-devel
 BuildRequires: systemtap-sdt-devel
 BuildRequires: uid_wrapper
 BuildRequires: po4a
+%if %{build_kcm_renewals}
+BuildRequires: krb5-libs >= %{krb5_version}
+%endif
 
 %description
 Provides a set of daemons to manage access to remote directories and
@@ -197,13 +207,13 @@ Requires: sssd-common = %{version}-%{release}
 Requires: python3-sss = %{version}-%{release}
 Requires: python3-sssdconfig = %{version}-%{release}
 Requires: libsss_certmap = %{version}-%{release}
+# required by sss_analyze
+Requires: python3-systemd
+Requires: python3-click
 Recommends: sssd-dbus
 
 %description tools
-Provides userspace tools for manipulating users, groups, and nested groups in
-SSSD when using id_provider = local in /etc/sssd/sssd.conf.
-
-Also provides several other administrative tools:
+Provides several administrative tools:
     * sss_debuglevel to change the debug level on the fly
     * sss_seed which pre-creates a user entry for use in kickstarts
     * sss_obfuscate for generating an obfuscated LDAP password
@@ -225,11 +235,8 @@ Requires: sssd-common = %{version}-%{release}
 %{?python_provide:%python_provide python3-sss}
 
 %description -n python3-sss
-Provides python3 module for manipulating users, groups, and nested groups in
-SSSD when using id_provider = local in /etc/sssd/sssd.conf.
-
-Also provides several other useful python3 bindings:
-    * function for retrieving list of groups user belongs to.
+Provides python3 bindings:
+    * function for retrieving list of groups user belongs to
     * class for obfuscation of passwords
 
 %package -n python3-sss-murmur
@@ -470,7 +477,9 @@ Library to map certificates to users based on rules
 Summary: An implementation of a Kerberos KCM server
 License: GPLv3+
 Requires: sssd-common = %{version}-%{release}
-Requires: krb5-libs >= 1.19.1
+%if %{build_kcm_renewals}
+Requires: krb5-libs >= %{krb5_version}
+%endif
 %{?systemd_requires}
 
 %description kcm
@@ -512,6 +521,7 @@ autoreconf -ivf
 
 %make_build all docs runstatedir=%{_rundir}
 
+%py3_shebang_fix src/tools/analyzer/sss_analyze.py
 sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
 
 %check
@@ -841,6 +851,7 @@ done
 %{_sbindir}/sss_debuglevel
 %{_sbindir}/sss_seed
 %{_sbindir}/sssctl
+%{python3_sitelib}/sssd/
 %{_mandir}/man8/sss_obfuscate.8*
 %{_mandir}/man8/sss_override.8*
 %{_mandir}/man8/sss_debuglevel.8*
@@ -926,7 +937,6 @@ done
 %{_unitdir}/sssd-kcm.socket
 %{_unitdir}/sssd-kcm.service
 %{_mandir}/man8/sssd-kcm.8*
-%{_libdir}/%{name}/libsss_secrets.so
 
 %if 0%{?rhel}
 %pre common
@@ -1002,6 +1012,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Thu Oct 14 2021 Pavel Březina <pbrezina@redhat.com> - 2.6.0-1
+- Rebase to SSSD 2.6.0
+
 * Tue Sep 21 2021 Iker Pedrosa <ipedrosa@redhat.com> - 2.5.2-7
 - Solve compilation problem with autoconf
 
