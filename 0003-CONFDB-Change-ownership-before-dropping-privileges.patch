@@ -1,0 +1,44 @@
+From 7db6cfd0674d45a4e769b0beeb551c89cc89f92f Mon Sep 17 00:00:00 2001
+From: Tomas Halman <thalman@redhat.com>
+Date: Fri, 15 Oct 2021 11:04:05 +0200
+Subject: [PATCH 04/17] CONFDB: Change ownership before dropping privileges
+
+From previous SSSD version, config file can exist and can be
+owned by root. To allow smooth transition we can change
+the ownership.
+
+This commit can be reverted later.
+
+Resolves: https://github.com/SSSD/sssd/issues/5781
+
+Reviewed-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ src/confdb/confdb.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/src/confdb/confdb.c b/src/confdb/confdb.c
+index 7a718cc628343570d484135da639250ad83e8b01..80203c0f640975471df31c522ca91f94099cbcf9 100644
+--- a/src/confdb/confdb.c
++++ b/src/confdb/confdb.c
+@@ -641,6 +641,8 @@ int confdb_init(TALLOC_CTX *mem_ctx,
+     struct confdb_ctx *cdb;
+     int ret = EOK;
+     mode_t old_umask;
++    uid_t sssd_uid;
++    gid_t sssd_gid;
+ 
+     cdb = talloc_zero(mem_ctx, struct confdb_ctx);
+     if (!cdb)
+@@ -673,6 +675,9 @@ int confdb_init(TALLOC_CTX *mem_ctx,
+     }
+ 
+     old_umask = umask(SSS_DFL_UMASK);
++    /* file may exists and could be owned by root from previous version */
++    sss_sssd_user_uid_and_gid(&sssd_uid, &sssd_gid);
++    chown(confdb_location, sssd_uid, sssd_gid);
+     sss_set_sssd_user_eid();
+ 
+     ret = ldb_connect(cdb->ldb, confdb_location, 0, NULL);
+-- 
+2.31.1
+

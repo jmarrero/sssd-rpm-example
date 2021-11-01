@@ -1,0 +1,200 @@
+From 3c17a57e7cb30263b73e7b9456b896503be6bd45 Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Fri, 15 Oct 2021 22:29:12 +0200
+Subject: [PATCH 11/17] 'strto*()': usage sanitization
+
+To properly check for an error during string to number conversion
+one needs to:
+ - check `errno`
+ - check that something was really converted (i.e. start != end)
+ - (if this is expected) check that entire string was consumed
+
+Some of those error conditions weren't checked in various locations
+over the code.
+
+Reviewed-by: Pawel Polawski <ppolawsk@redhat.com>
+---
+ src/confdb/confdb.c                            | 16 ++++++++++++----
+ src/providers/ldap/sdap.c                      |  6 ++++--
+ src/providers/ldap/sdap_async_enum.c           |  7 ++++---
+ src/providers/ldap/sdap_async_iphost.c         |  4 ++--
+ src/providers/ldap/sdap_async_ipnetwork.c      |  4 ++--
+ src/providers/ldap/sdap_async_services.c       |  4 ++--
+ src/util/crypto/libcrypto/crypto_sha512crypt.c |  3 ++-
+ 7 files changed, 28 insertions(+), 16 deletions(-)
+
+diff --git a/src/confdb/confdb.c b/src/confdb/confdb.c
+index 80203c0f640975471df31c522ca91f94099cbcf9..6a6fac916e5f45b64c7402da3f35bb46e2bf4906 100644
+--- a/src/confdb/confdb.c
++++ b/src/confdb/confdb.c
+@@ -439,6 +439,7 @@ int confdb_get_int(struct confdb_ctx *cdb,
+     char **values = NULL;
+     long val;
+     int ret;
++    char *endptr;
+     TALLOC_CTX *tmp_ctx;
+ 
+     tmp_ctx = talloc_new(NULL);
+@@ -460,12 +461,15 @@ int confdb_get_int(struct confdb_ctx *cdb,
+         }
+ 
+         errno = 0;
+-        val = strtol(values[0], NULL, 0);
++        val = strtol(values[0], &endptr, 0);
+         ret = errno;
+         if (ret != 0) {
+             goto failed;
+         }
+-
++        if (*endptr || (values[0] == endptr)) {
++            ret = EINVAL;
++            goto failed;
++        }
+         if (val < INT_MIN || val > INT_MAX) {
+             ret = ERANGE;
+             goto failed;
+@@ -495,6 +499,7 @@ long confdb_get_long(struct confdb_ctx *cdb,
+     char **values = NULL;
+     long val;
+     int ret;
++    char *endptr;
+     TALLOC_CTX *tmp_ctx;
+ 
+     tmp_ctx = talloc_new(NULL);
+@@ -516,12 +521,15 @@ long confdb_get_long(struct confdb_ctx *cdb,
+         }
+ 
+         errno = 0;
+-        val = strtol(values[0], NULL, 0);
++        val = strtol(values[0], &endptr, 0);
+         ret = errno;
+         if (ret != 0) {
+             goto failed;
+         }
+-
++        if (*endptr || (values[0] == endptr)) {
++            ret = EINVAL;
++            goto failed;
++        }
+     } else {
+         val = defval;
+     }
+diff --git a/src/providers/ldap/sdap.c b/src/providers/ldap/sdap.c
+index 32c0144b929b702a2a3ba70b6f477d80a59eb083..72d6a7281291581341f9df878729a38ff3da04fa 100644
+--- a/src/providers/ldap/sdap.c
++++ b/src/providers/ldap/sdap.c
+@@ -1418,8 +1418,9 @@ int sdap_get_server_opts_from_rootdse(TALLOC_CTX *memctx,
+                               opts->gen_map[SDAP_AT_ENTRY_USN].opt_name);
+                 } else {
+                     so->supports_usn = true;
++                    errno = 0;
+                     so->last_usn = strtoul(last_usn_value, &endptr, 10);
+-                    if (endptr != NULL && (*endptr != '\0' || endptr == last_usn_value)) {
++                    if (errno || !endptr || *endptr || (endptr == last_usn_value)) {
+                         DEBUG(SSSDBG_MINOR_FAILURE,
+                               "USN is not valid (value: %s)\n", last_usn_value);
+                         so->last_usn = 0;
+@@ -1442,8 +1443,9 @@ int sdap_get_server_opts_from_rootdse(TALLOC_CTX *memctx,
+                     opts->gen_map[SDAP_AT_ENTRY_USN].name =
+                         talloc_strdup(opts->gen_map, usn_attrs[i].entry_name);
+                     so->supports_usn = true;
++                    errno = 0;
+                     so->last_usn = strtoul(last_usn_value, &endptr, 10);
+-                    if (endptr != NULL && (*endptr != '\0' || endptr == last_usn_value)) {
++                    if (errno || !endptr || *endptr || (endptr == last_usn_value)) {
+                         DEBUG(SSSDBG_MINOR_FAILURE,
+                               "USN is not valid (value: %s)\n", last_usn_value);
+                         so->last_usn = 0;
+diff --git a/src/providers/ldap/sdap_async_enum.c b/src/providers/ldap/sdap_async_enum.c
+index 2a12e59b749ded0c486b16fc5af58ef968dbfb2c..44cec84adb7b078696ed8744e050b738c0963eea 100644
+--- a/src/providers/ldap/sdap_async_enum.c
++++ b/src/providers/ldap/sdap_async_enum.c
+@@ -571,9 +571,9 @@ static void enum_users_done(struct tevent_req *subreq)
+         talloc_zfree(state->ctx->srv_opts->max_user_value);
+         state->ctx->srv_opts->max_user_value =
+                                         talloc_steal(state->ctx, usn_value);
+-
++        errno = 0;
+         usn_number = strtoul(usn_value, &endptr, 10);
+-        if ((endptr == NULL || (*endptr == '\0' && endptr != usn_value))
++        if (!errno && endptr && (*endptr == '\0') && (endptr != usn_value)
+             && (usn_number > state->ctx->srv_opts->last_usn)) {
+             state->ctx->srv_opts->last_usn = usn_number;
+         }
+@@ -751,8 +751,9 @@ static void enum_groups_done(struct tevent_req *subreq)
+         talloc_zfree(state->ctx->srv_opts->max_group_value);
+         state->ctx->srv_opts->max_group_value =
+                                         talloc_steal(state->ctx, usn_value);
++        errno = 0;
+         usn_number = strtoul(usn_value, &endptr, 10);
+-        if ((endptr == NULL || (*endptr == '\0' && endptr != usn_value))
++        if (!errno && endptr && (*endptr == '\0') && (endptr != usn_value)
+             && (usn_number > state->ctx->srv_opts->last_usn)) {
+             state->ctx->srv_opts->last_usn = usn_number;
+         }
+diff --git a/src/providers/ldap/sdap_async_iphost.c b/src/providers/ldap/sdap_async_iphost.c
+index e798a32c26ef97c3081d8a33ac9ab74b1b7d0f5d..33b8e21672c81714bfce612a5726e153baba0fd7 100644
+--- a/src/providers/ldap/sdap_async_iphost.c
++++ b/src/providers/ldap/sdap_async_iphost.c
+@@ -618,9 +618,9 @@ enum_iphosts_op_done(struct tevent_req *subreq)
+         talloc_zfree(state->id_ctx->srv_opts->max_iphost_value);
+         state->id_ctx->srv_opts->max_iphost_value =
+                 talloc_steal(state->id_ctx, usn_value);
+-
++        errno = 0;
+         usn_number = strtoul(usn_value, &endptr, 10);
+-        if ((endptr == NULL || (*endptr == '\0' && endptr != usn_value))
++        if (!errno && endptr && (*endptr == '\0') && (endptr != usn_value)
+             && (usn_number > state->id_ctx->srv_opts->last_usn)) {
+             state->id_ctx->srv_opts->last_usn = usn_number;
+         }
+diff --git a/src/providers/ldap/sdap_async_ipnetwork.c b/src/providers/ldap/sdap_async_ipnetwork.c
+index e34bf58d4a8eb2610f76fd3f6543b5f59538286a..e057566c1609a9277a66992ed5270cf4556f2ef7 100644
+--- a/src/providers/ldap/sdap_async_ipnetwork.c
++++ b/src/providers/ldap/sdap_async_ipnetwork.c
+@@ -603,9 +603,9 @@ enum_ipnetworks_op_done(struct tevent_req *subreq)
+         talloc_zfree(state->id_ctx->srv_opts->max_ipnetwork_value);
+         state->id_ctx->srv_opts->max_ipnetwork_value =
+                 talloc_steal(state->id_ctx, usn_value);
+-
++        errno = 0;
+         usn_number = strtoul(usn_value, &endptr, 10);
+-        if ((endptr == NULL || (*endptr == '\0' && endptr != usn_value))
++        if (!errno && endptr && (*endptr == '\0') && (endptr != usn_value)
+             && (usn_number > state->id_ctx->srv_opts->last_usn)) {
+             state->id_ctx->srv_opts->last_usn = usn_number;
+         }
+diff --git a/src/providers/ldap/sdap_async_services.c b/src/providers/ldap/sdap_async_services.c
+index eebe23913399bd0c3c451f4009d7ddb3a172838d..cccc4f94c29e83aed767d2afecf80df94d1c2f69 100644
+--- a/src/providers/ldap/sdap_async_services.c
++++ b/src/providers/ldap/sdap_async_services.c
+@@ -623,9 +623,9 @@ enum_services_op_done(struct tevent_req *subreq)
+         talloc_zfree(state->id_ctx->srv_opts->max_service_value);
+         state->id_ctx->srv_opts->max_service_value =
+                 talloc_steal(state->id_ctx, usn_value);
+-
++        errno = 0;
+         usn_number = strtoul(usn_value, &endptr, 10);
+-        if ((endptr == NULL || (*endptr == '\0' && endptr != usn_value))
++        if (!errno && endptr && (*endptr == '\0') && (endptr != usn_value)
+             && (usn_number > state->id_ctx->srv_opts->last_usn)) {
+             state->id_ctx->srv_opts->last_usn = usn_number;
+         }
+diff --git a/src/util/crypto/libcrypto/crypto_sha512crypt.c b/src/util/crypto/libcrypto/crypto_sha512crypt.c
+index 1e57b04d131b9224fc0ef7947095cfa21e0d4f31..c816d26f184bda62811723c36ba4a009f6473e21 100644
+--- a/src/util/crypto/libcrypto/crypto_sha512crypt.c
++++ b/src/util/crypto/libcrypto/crypto_sha512crypt.c
+@@ -101,8 +101,9 @@ static int sha512_crypt_r(const char *key,
+         char *endp;
+ 
+         num = salt + ROUNDS_SIZE;
++        errno = 0;
+         srounds = strtoul(num, &endp, 10);
+-        if (*endp == '$') {
++        if (!errno && (*endp == '$')) {
+             salt = endp + 1;
+             if (srounds < ROUNDS_MIN) srounds = ROUNDS_MIN;
+             if (srounds > ROUNDS_MAX) srounds = ROUNDS_MAX;
+-- 
+2.31.1
+

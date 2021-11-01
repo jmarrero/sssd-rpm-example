@@ -1,0 +1,67 @@
+From 7cba8ed6ae965ffcae9c14269cde02ddc24eaa53 Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Tue, 26 Oct 2021 22:16:49 +0200
+Subject: [PATCH 16/17] KCM: delete malformed 'cn=default' entries
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This is needed to cleanup outdated entries in old (encrypted)
+format that are no longer supported.
+
+Steps to reproduce:
+
+With an old SSSD version that still writes encrypted content in secrets db:
+ - obtain any ticket (even one ticket is enough)
+ - `kswitch -c ...` to any cache (any successful execution of `kswitch`
+   will use `SET_DEFAULT_CACHE` KCM op and create
+   'cn=default,cn=$uid,cn=persistent,cn=kcm' entry)
+
+Then update SSSD and try `klist`:
+ - 2.6.0 version will fail with "[ccdb_secdb_get_default_send] (0x0040): Unexpected UUID size ..."
+ - 2.6.0 + this patch will remove this entry:
+```
+[ccdb_secdb_get_default_send] (0x0040): Unexpected UUID size 152, deleting this entry
+[sss_sec_delete] (0x0400): Removing a secret from [persistent/1000/default]
+```
+and continue as if default isn't set (since all encrypted entries will be purged,
+cache will appear empty)
+
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+Reviewed-by: Pawel Polawski <ppolawsk@redhat.com>
+---
+ src/responder/kcm/kcmsrv_ccache_secdb.c | 18 ++++++++++++++++--
+ 1 file changed, 16 insertions(+), 2 deletions(-)
+
+diff --git a/src/responder/kcm/kcmsrv_ccache_secdb.c b/src/responder/kcm/kcmsrv_ccache_secdb.c
+index 05146b1553ad514934f709959036c5335f8c7adc..875eb3c900e5d894591810ff117d1601910e030f 100644
+--- a/src/responder/kcm/kcmsrv_ccache_secdb.c
++++ b/src/responder/kcm/kcmsrv_ccache_secdb.c
+@@ -764,8 +764,22 @@ static struct tevent_req *ccdb_secdb_get_default_send(TALLOC_CTX *mem_ctx,
+ 
+     uuid_size = sss_iobuf_get_size(dfl_iobuf);
+     if (uuid_size != UUID_STR_SIZE) {
+-        DEBUG(SSSDBG_OP_FAILURE, "Unexpected UUID size %zu\n", uuid_size);
+-        ret = EIO;
++        DEBUG(SSSDBG_OP_FAILURE,
++              "Unexpected UUID size %zu, deleting this entry\n", uuid_size);
++        ret = sss_sec_delete(sreq);
++        if (ret != EOK) {
++            DEBUG(SSSDBG_CRIT_FAILURE,
++                  "Failed to delete entry: [%d]: %s, "
++                  "consider manual removal of "SECRETS_DB_PATH"/secrets.ldb\n",
++                  ret, sss_strerror(ret));
++            sss_log(SSS_LOG_CRIT,
++                    "Can't delete an entry from "SECRETS_DB_PATH"/secrets.ldb, "
++                    "content seems to be corrupted. Consider file removal. "
++                    "(Take a note, this will delete all credentials managed "
++                    "via sssd_kcm)");
++        }
++        uuid_clear(state->uuid);
++        ret = EOK;
+         goto immediate;
+     }
+ 
+-- 
+2.31.1
+

@@ -1,0 +1,62 @@
+From bb94a18f0f0cba1e9fb5abf78b995d69e5f3c559 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Mon, 18 Oct 2021 12:29:06 +0200
+Subject: [PATCH 07/17] cache_req: return success for autofs when ENOENT is
+ returned from provider
+
+The receive function should return true if data provider lookup was
+successfull and false if there was an error. "Not found" result is
+considered a successful lookup, only failure to perform a search
+should result in false return code.
+
+Resolves: https://github.com/SSSD/sssd/issues/5832
+
+Reviewed-by: Pawel Polawski <ppolawsk@redhat.com>
+---
+ .../common/cache_req/plugins/cache_req_autofs_entry_by_name.c   | 2 +-
+ .../common/cache_req/plugins/cache_req_autofs_map_by_name.c     | 2 +-
+ .../common/cache_req/plugins/cache_req_autofs_map_entries.c     | 2 +-
+ 3 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/src/responder/common/cache_req/plugins/cache_req_autofs_entry_by_name.c b/src/responder/common/cache_req/plugins/cache_req_autofs_entry_by_name.c
+index 0dc6a585ab8b90ebf8bc43a061172a6d8e3bc3ad..788b6708ce343f7acdf4a9a8388c4eb8732129f8 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_autofs_entry_by_name.c
++++ b/src/responder/common/cache_req/plugins/cache_req_autofs_entry_by_name.c
+@@ -97,7 +97,7 @@ cache_req_autofs_entry_by_name_dp_recv(struct tevent_req *subreq,
+ 
+     ret = sbus_call_dp_autofs_GetEntry_recv(subreq);
+ 
+-    if (ret == ERR_MISSING_DP_TARGET) {
++    if (ret == ERR_MISSING_DP_TARGET || ret == ENOENT) {
+         ret = EOK;
+     }
+ 
+diff --git a/src/responder/common/cache_req/plugins/cache_req_autofs_map_by_name.c b/src/responder/common/cache_req/plugins/cache_req_autofs_map_by_name.c
+index 6a665c58ec83eb2471d8be823eef9e61ab6d443a..5d82641ccab1f42e4596102d95f64ed166857d56 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_autofs_map_by_name.c
++++ b/src/responder/common/cache_req/plugins/cache_req_autofs_map_by_name.c
+@@ -93,7 +93,7 @@ cache_req_autofs_map_by_name_dp_recv(struct tevent_req *subreq,
+ 
+     ret = sbus_call_dp_autofs_GetMap_recv(subreq);
+ 
+-    if (ret == ERR_MISSING_DP_TARGET) {
++    if (ret == ERR_MISSING_DP_TARGET || ret == ENOENT) {
+         ret = EOK;
+     }
+ 
+diff --git a/src/responder/common/cache_req/plugins/cache_req_autofs_map_entries.c b/src/responder/common/cache_req/plugins/cache_req_autofs_map_entries.c
+index 46776b980804ace3188f14375256d205b2610037..29f289723f233c1b357eefcb6d1fd75c493b950e 100644
+--- a/src/responder/common/cache_req/plugins/cache_req_autofs_map_entries.c
++++ b/src/responder/common/cache_req/plugins/cache_req_autofs_map_entries.c
+@@ -125,7 +125,7 @@ cache_req_autofs_map_entries_dp_recv(struct tevent_req *subreq,
+ 
+     ret = sbus_call_dp_autofs_Enumerate_recv(subreq);
+ 
+-    if (ret == ERR_MISSING_DP_TARGET) {
++    if (ret == ERR_MISSING_DP_TARGET || ret == ENOENT) {
+         ret = EOK;
+     }
+ 
+-- 
+2.31.1
+
