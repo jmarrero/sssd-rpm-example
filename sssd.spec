@@ -14,6 +14,12 @@
 %global child_attrs 4750
 %endif
 
+%if 0%{?fedora} >= 35 || 0%{?rhel} >= 9
+%global build_subid 1
+%else
+%global build_subid 0
+%endif
+
 %if 0%{?fedora} >= 34
 %global build_kcm_renewals 1
 %global krb5_version 1.19.1
@@ -36,29 +42,14 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.6.0
-Release: 2%{?dist}
+Version: 2.6.1
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.6.0/sssd-2.6.0.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.6.1/sssd-2.6.1.tar.gz
 
 ### Patches ###
-
-Patch0001:  0001-DEBUG-fix-missing-va_end.patch
-Patch0002:  0002-CONFDB-Change-ownership-of-config.ldb.patch
-Patch0003:  0003-CONFDB-Change-ownership-before-dropping-privileges.patch
-Patch0004:  0004-GPO-fixed-compilation-warning.patch
-Patch0005:  0005-KCM-fixed-uninitialized-value.patch
-Patch0006:  0006-cache_req-return-success-for-autofs-when-ENOENT-is-r.patch
-Patch0007:  0007-sbus-maintain-correct-refcount-before-sending-a-repl.patch
-Patch0008:  0008-Removed-excessive-includes-around-strtonum.patch
-Patch0009:  0009-strtonum-helpers-usage-sanitization.patch
-Patch0010:  0010-strto-usage-sanitization.patch
-Patch0011:  0011-SUDO-decrease-log-level-in-case-object-wasn-t-found.patch
-Patch0012:  0012-KCM-delete-malformed-cn-default-entries.patch
-Patch0013:  0013-proxy-allow-removing-group-members.patch
-Patch0014:  0014-TESTS-fixed-a-bug-in-define-string-conversion.patch
 
 ### Dependencies ###
 
@@ -139,13 +130,15 @@ BuildRequires: samba-devel
 # required for idmap_sss.so
 BuildRequires: samba-winbind
 BuildRequires: selinux-policy-targeted
-BuildRequires: shadow-utils-subid-devel
 # required for p11_child smartcard tests
 BuildRequires: softhsm >= 2.1.0
 BuildRequires: systemd-devel
 BuildRequires: systemtap-sdt-devel
 BuildRequires: uid_wrapper
 BuildRequires: po4a
+%if %{build_subid}
+BuildRequires: shadow-utils-subid-devel
+%endif
 %if %{build_kcm_renewals}
 BuildRequires: krb5-libs >= %{krb5_version}
 %endif
@@ -530,7 +523,9 @@ autoreconf -ivf
     --with-sssd-user=%{sssd_user} \
     --with-syslog=journald \
     --with-test-dir=/dev/shm \
+%if %{build_subid}
     --with-subid \
+%endif
 %if 0%{?fedora}
     --disable-polkit-rules-path \
 %endif
@@ -837,7 +832,9 @@ done
 %files client -f sssd_client.lang
 %license src/sss_client/COPYING src/sss_client/COPYING.LESSER
 %{_libdir}/libnss_sss.so.2
+%if %{build_subid}
 %{_libdir}/libsubid_sss.so
+%endif
 %{_libdir}/security/pam_sss.so
 %{_libdir}/security/pam_sss_gss.so
 %{_libdir}/krb5/plugins/libkrb5/sssd_krb5_locator_plugin.so
@@ -1030,6 +1027,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Nov 08 2021 Pavel Březina <pbrezina@redhat.com> - 2.6.1-1
+- Rebase to SSSD 2.6.1
+
 * Mon Nov 01 2021 Pavel Březina <pbrezina@redhat.com> - 2.6.0-2
 - Add additional patches on top of 2.6.0
 - Fix KCM upgrade from older releases
