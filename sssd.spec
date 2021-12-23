@@ -42,12 +42,12 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.6.1
+Version: 2.6.2
 Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.6.1/sssd-2.6.1.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.6.2/sssd-2.6.2.tar.gz
 
 ### Patches ###
 
@@ -58,8 +58,8 @@ Requires: sssd-common = %{version}-%{release}
 Requires: sssd-ipa = %{version}-%{release}
 Requires: sssd-krb5 = %{version}-%{release}
 Requires: sssd-ldap = %{version}-%{release}
-Recommends: sssd-proxy = %{version}-%{release}
-Recommends: logrotate
+Requires: sssd-proxy = %{version}-%{release}
+Suggests: logrotate
 Suggests: python3-sssdconfig = %{version}-%{release}
 Suggests: sssd-dbus = %{version}-%{release}
 
@@ -161,9 +161,9 @@ License: GPLv3+
 Requires: libldb >= %{ldb_version}
 Requires: libtevent >= 0.11.0
 Requires: sssd-client%{?_isa} = %{version}-%{release}
-Recommends: libsss_sudo = %{version}-%{release}
-Recommends: libsss_autofs%{?_isa} = %{version}-%{release}
-Recommends: sssd-nfs-idmap = %{version}-%{release}
+Requires: (libsss_sudo = %{version}-%{release} if sudo)
+Requires: (libsss_autofs%{?_isa} = %{version}-%{release} if autofs)
+Requires: (sssd-nfs-idmap = %{version}-%{release} if libnfsidmap)
 Requires: libsss_idmap = %{version}-%{release}
 Requires: libsss_certmap = %{version}-%{release}
 %if 0%{?rhel}
@@ -216,10 +216,9 @@ Requires: sssd-common = %{version}-%{release}
 Requires: python3-sss = %{version}-%{release}
 Requires: python3-sssdconfig = %{version}-%{release}
 Requires: libsss_certmap = %{version}-%{release}
-# required by sss_analyze
+# for logger=journald support with sss_analyze
 Requires: python3-systemd
-Requires: python3-click
-Recommends: sssd-dbus
+Requires: sssd-dbus
 
 %description tools
 Provides several administrative tools:
@@ -533,7 +532,7 @@ autoreconf -ivf
 
 %make_build all docs runstatedir=%{_rundir}
 
-%py3_shebang_fix src/tools/analyzer/sss_analyze.py
+%py3_shebang_fix src/tools/analyzer/sss_analyze
 sed -i -e 's:/usr/bin/python:/usr/bin/python3:' src/tools/sss_obfuscate
 
 %check
@@ -560,6 +559,10 @@ install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d
 cp $RPM_BUILD_ROOT/%{_datadir}/sssd-kcm/kcm_default_ccache \
    $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d/kcm_default_ccache
+
+# krb5 configuration snippet
+cp $RPM_BUILD_ROOT/%{_datadir}/sssd/krb5-snippets/enable_sssd_conf_dir \
+   $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d/enable_sssd_conf_dir
 
 # Create directory for cifs-idmap alternative
 # Otherwise this directory could not be owned by sssd-client
@@ -787,6 +790,9 @@ done
 %license COPYING
 %{_libdir}/%{name}/libsss_krb5.so
 %{_mandir}/man5/sssd-krb5.5*
+%config(noreplace) %{_sysconfdir}/krb5.conf.d/enable_sssd_conf_dir
+%dir %{_datadir}/sssd/krb5-snippets
+%{_datadir}/sssd/krb5-snippets/enable_sssd_conf_dir
 
 %files common-pac
 %license COPYING
@@ -866,6 +872,7 @@ done
 %{_sbindir}/sss_debuglevel
 %{_sbindir}/sss_seed
 %{_sbindir}/sssctl
+%{_libexecdir}/%{servicename}/sss_analyze
 %{python3_sitelib}/sssd/
 %{_mandir}/man8/sss_obfuscate.8*
 %{_mandir}/man8/sss_override.8*
@@ -1027,7 +1034,10 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
-* Tue Nov 08 2021 Pavel Březina <pbrezina@redhat.com> - 2.6.1-1
+* Thu Dec 23 2021 Iker Pedrosa <ipedrosa@redhat.com> - 2.6.2-1
+- Rebase to SSSD 2.6.2
+
+* Tue Nov 09 2021 Pavel Březina <pbrezina@redhat.com> - 2.6.1-1
 - Rebase to SSSD 2.6.1
 
 * Mon Nov 01 2021 Pavel Březina <pbrezina@redhat.com> - 2.6.0-2
