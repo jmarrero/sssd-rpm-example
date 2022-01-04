@@ -43,13 +43,14 @@
 
 Name: sssd
 Version: 2.6.2
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/2.6.2/sssd-2.6.2.tar.gz
 
 ### Patches ###
+Patch0001: 0001-ipa-fix-reply-socket-of-selinux_child.patch
 
 ### Dependencies ###
 
@@ -1034,6 +1035,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Jan 04 2022 Iker Pedrosa <ipedrosa@redhat.com> - 2.6.2-2
+- Fix IPA reply socket of selinux_child
+
 * Thu Dec 23 2021 Iker Pedrosa <ipedrosa@redhat.com> - 2.6.2-1
 - Rebase to SSSD 2.6.2
 
