@@ -42,15 +42,14 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.6.2
-Release: 3%{?dist}
+Version: 2.6.3
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.6.2/sssd-2.6.2.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.6.3/sssd-2.6.3.tar.gz
 
 ### Patches ###
-Patch0001: 0001-ipa-fix-reply-socket-of-selinux_child.patch
 
 ### Dependencies ###
 
