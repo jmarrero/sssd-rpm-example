@@ -1034,6 +1034,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Jan 25 2022 Pavel Březina <pbrezina@redhat.com> - 2.6.3-1
+- Rebase to SSSD 2.6.3
+
 * Sat Jan 22 2022 Fedora Release Engineering <releng@fedoraproject.org> - 2.6.2-3
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_36_Mass_Rebuild
 
