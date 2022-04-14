@@ -42,12 +42,12 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.6.3
+Version: 2.7.0
 Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.6.3/sssd-2.6.3.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.7.0/sssd-2.7.0.tar.gz
 
 ### Patches ###
 
@@ -91,6 +91,9 @@ BuildRequires: gdm-pam-extensions-devel
 BuildRequires: gettext-devel
 # required for p11_child smartcard tests
 BuildRequires: gnutls-utils
+BuildRequires: jansson-devel
+BuildRequires: libcurl-devel
+BuildRequires: libjose-devel
 BuildRequires: keyutils-libs-devel
 BuildRequires: krb5-devel
 BuildRequires: libcmocka-devel >= 1.0.0
@@ -303,6 +306,7 @@ License: GPLv3+
 Requires: samba-client-libs >= %{samba_package_version}
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
+Requires: sssd-idp = %{version}-%{release}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
 Requires: libsss_certmap = %{version}-%{release}
 Recommends: bind-utils
@@ -494,6 +498,15 @@ Requires: krb5-libs >= %{krb5_version}
 An implementation of a Kerberos KCM server. Use this package if you want to
 use the KCM: Kerberos credentials cache.
 
+%package idp
+Summary: Kerberos plugins for external identity providers.
+License: GPLv3+
+Requires: sssd-common = %{version}-%{release}
+
+%description idp
+This package provides Kerberos plugins that are required to enable
+authentication against external identity providers.
+
 %prep
 %autosetup -p1
 
@@ -559,6 +572,10 @@ install -m644 src/examples/rwtab $RPM_BUILD_ROOT%{_sysconfdir}/rwtab.d/sssd
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d
 cp $RPM_BUILD_ROOT/%{_datadir}/sssd-kcm/kcm_default_ccache \
    $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d/kcm_default_ccache
+
+# Enable krb5 idp plugins by default (when sssd-idp package is installed)
+cp $RPM_BUILD_ROOT/%{_datadir}/sssd/krb5-snippets/sssd_enable_idp \
+   $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d/sssd_enable_idp
 
 # krb5 configuration snippet
 cp $RPM_BUILD_ROOT/%{_datadir}/sssd/krb5-snippets/enable_sssd_conf_dir \
@@ -960,6 +977,12 @@ done
 %{_unitdir}/sssd-kcm.service
 %{_mandir}/man8/sssd-kcm.8*
 
+%files idp
+%{_libexecdir}/%{servicename}/oidc_child
+%{_libdir}/%{name}/modules/sssd_krb5_idp_plugin.so
+%{_datadir}/sssd/krb5-snippets/sssd_enable_idp
+%config(noreplace) %{_sysconfdir}/krb5.conf.d/sssd_enable_idp
+
 %if 0%{?rhel}
 %pre common
 getent group sssd >/dev/null || groupadd -r sssd
@@ -1034,6 +1057,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Thu Apr 14 2022 Pavel Březina <pbrezina@redhat.com> - 2.7.0-1
+- Rebase to SSSD 2.7.0
+
 * Tue Jan 25 2022 Pavel Březina <pbrezina@redhat.com> - 2.6.3-1
 - Rebase to SSSD 2.6.3
 
