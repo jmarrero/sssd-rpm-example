@@ -42,12 +42,12 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.7.0
+Version: 2.7.1
 Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.7.0/sssd-2.7.0.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.7.1/sssd-2.7.1.tar.gz
 
 ### Patches ###
 
@@ -306,7 +306,6 @@ License: GPLv3+
 Requires: samba-client-libs >= %{samba_package_version}
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
-Requires: sssd-idp = %{version}-%{release}
 Requires: libipa_hbac%{?_isa} = %{version}-%{release}
 Requires: libsss_certmap = %{version}-%{release}
 Recommends: bind-utils
@@ -499,13 +498,14 @@ An implementation of a Kerberos KCM server. Use this package if you want to
 use the KCM: Kerberos credentials cache.
 
 %package idp
-Summary: Kerberos plugins for external identity providers.
+Summary: Kerberos plugins and OIDC helper for external identity providers.
 License: GPLv3+
 Requires: sssd-common = %{version}-%{release}
 
 %description idp
 This package provides Kerberos plugins that are required to enable
-authentication against external identity providers.
+authentication against external identity providers. Additionally a helper
+program to handle the OAuth 2.0 Device Authorization Grant is provided.
 
 %prep
 %autosetup -p1
@@ -593,7 +593,7 @@ rm -Rf ${RPM_BUILD_ROOT}/%{_docdir}/%{name}
 
 # Older versions of rpmbuild can only handle one -f option
 # So we need to append to the sssd*.lang file
-for file in `ls $RPM_BUILD_ROOT/%{python3_sitelib}/*.egg-info 2> /dev/null`
+for file in `find $RPM_BUILD_ROOT/%{python3_sitelib} -maxdepth 1 -name "*.egg-info" 2> /dev/null`
 do
     echo %{python3_sitelib}/`basename $file` >> python3_sssdconfig.lang
 done
@@ -872,6 +872,7 @@ done
 %{_mandir}/man8/pam_sss.8*
 %{_mandir}/man8/pam_sss_gss.8*
 %{_mandir}/man8/sssd_krb5_locator_plugin.8*
+%{_mandir}/man8/sssd_krb5_localauth_plugin.8*
 
 %files -n libsss_sudo
 %license src/sss_client/COPYING
@@ -1057,6 +1058,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Thu Jun 2 2022 Pavel Březina <pbrezina@redhat.com> - 2.7.1-1
+- Rebase to SSSD 2.7.1
+
 * Thu Apr 14 2022 Pavel Březina <pbrezina@redhat.com> - 2.7.0-1
 - Rebase to SSSD 2.7.0
 
