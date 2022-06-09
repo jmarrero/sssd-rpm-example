@@ -43,13 +43,14 @@
 
 Name: sssd
 Version: 2.7.1
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/2.7.1/sssd-2.7.1.tar.gz
 
 ### Patches ###
+Patch0001: 0001-pac-relax-default-for-pac_check-option.patch
 
 ### Dependencies ###
 
@@ -1058,6 +1059,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Thu Jun 9 2022 Pavel Březina <pbrezina@redhat.com> - 2.7.1-2
+- Fix regression in IPA provider (#2094685)
+
 * Thu Jun 2 2022 Pavel Březina <pbrezina@redhat.com> - 2.7.1-1
 - Rebase to SSSD 2.7.1
 
