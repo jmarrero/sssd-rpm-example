@@ -42,15 +42,14 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.7.1
-Release: 3%{?dist}
+Version: 2.7.3
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.7.1/sssd-2.7.1.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.7.3/sssd-2.7.3.tar.gz
 
 ### Patches ###
-Patch0001: 0001-pac-relax-default-for-pac_check-option.patch
 
 ### Dependencies ###
 
@@ -1059,6 +1058,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Thu Jul 4 2022 Pavel Březina <pbrezina@redhat.com> - 2.7.3-1
+- Rebase to SSSD 2.7.3
+
 * Wed Jun 15 2022 Python Maint <python-maint@redhat.com> - 2.7.1-3
 - Rebuilt for Python 3.11
 
