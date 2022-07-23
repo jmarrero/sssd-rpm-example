@@ -43,7 +43,7 @@
 
 Name: sssd
 Version: 2.7.3
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
@@ -1058,6 +1058,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Sat Jul 23 2022 Fedora Release Engineering <releng@fedoraproject.org> - 2.7.3-2
+- Rebuilt for https://fedoraproject.org/wiki/Fedora_37_Mass_Rebuild
+
 * Thu Jul 4 2022 Pavel Březina <pbrezina@redhat.com> - 2.7.3-1
 - Rebase to SSSD 2.7.3
 
