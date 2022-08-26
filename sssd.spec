@@ -1064,7 +1064,7 @@ fi
 * Sat Jul 23 2022 Fedora Release Engineering <releng@fedoraproject.org> - 2.7.3-2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_37_Mass_Rebuild
 
-* Thu Jul 4 2022 Pavel Březina <pbrezina@redhat.com> - 2.7.3-1
+* Mon Jul 4 2022 Pavel Březina <pbrezina@redhat.com> - 2.7.3-1
 - Rebase to SSSD 2.7.3
 
 * Wed Jun 15 2022 Python Maint <python-maint@redhat.com> - 2.7.1-3
