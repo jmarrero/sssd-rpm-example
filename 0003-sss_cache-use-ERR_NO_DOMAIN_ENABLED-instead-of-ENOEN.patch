@@ -1,0 +1,39 @@
+From 64c22dd1c4f79f953b879fc167b535de928f4bfd Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 11 Oct 2022 14:51:53 +0200
+Subject: [PATCH 3/6] sss_cache: use ERR_NO_DOMAIN_ENABLED instead of ENOENT
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Reviewed-by: Alejandro López <allopez@redhat.com>
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/tools/sss_cache.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/src/tools/sss_cache.c b/src/tools/sss_cache.c
+index 6740e83b0359911824805d565c7c3e5a6d36f68c..79de13ac8725acd4cdde92a8869fcf1a3c289bb3 100644
+--- a/src/tools/sss_cache.c
++++ b/src/tools/sss_cache.c
+@@ -165,7 +165,7 @@ int main(int argc, const char *argv[])
+     }
+ 
+     ret = init_context(argc, argv, &tctx);
+-    if (ret == ENOENT) {
++    if (ret == ERR_NO_DOMAIN_ENABLED) {
+         /* nothing to invalidate; no reason to fail */
+         ret = EOK;
+         goto done;
+@@ -909,7 +909,7 @@ static errno_t init_context(int argc, const char *argv[],
+     }
+ 
+     ret = init_domains(ctx, values.domain);
+-    if (ret == ENOENT && values.domain == NULL) {
++    if (ret == ERR_NO_DOMAIN_ENABLED && values.domain == NULL) {
+         /* Nothing to invalidate; do not log confusing messages. */
+         goto fini;
+     } else if (ret != EOK) {
+-- 
+2.37.3
+

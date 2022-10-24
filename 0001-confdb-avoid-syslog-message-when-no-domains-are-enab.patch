@@ -1,0 +1,96 @@
+From b38fdc8185fcd6a2e5d4b483d3119964f9922070 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Pavel=20B=C5=99ezina?= <pbrezina@redhat.com>
+Date: Tue, 11 Oct 2022 12:10:25 +0200
+Subject: [PATCH 1/6] confdb: avoid syslog message when no domains are enabled
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+This syslog message would also appear when calling other tools like
+sss_cache which is confusing. We return specific error code instead
+and let the error be syslogged in the monitor in monitor.c:main (this
+is already implemented).
+
+Resolves: https://github.com/SSSD/sssd/issues/6387
+
+:fixes: A regression when running sss_cache when no SSSD domain is
+  enabled would produce a syslog critical message was fixed.
+
+Reviewed-by: Alejandro López <allopez@redhat.com>
+Reviewed-by: Sumit Bose <sbose@redhat.com>
+---
+ src/confdb/confdb.c    | 8 ++++----
+ src/monitor/monitor.c  | 2 +-
+ src/util/util_errors.c | 1 +
+ src/util/util_errors.h | 1 +
+ 4 files changed, 7 insertions(+), 5 deletions(-)
+
+diff --git a/src/confdb/confdb.c b/src/confdb/confdb.c
+index ae2d90bf5e4bc231e878c0d5e2c84e46abd9f999..9465bffe394ebed783b8217f96049f3d07ba7e77 100644
+--- a/src/confdb/confdb.c
++++ b/src/confdb/confdb.c
+@@ -1800,10 +1800,10 @@ int confdb_get_domains(struct confdb_ctx *cdb,
+     ret = confdb_get_enabled_domain_list(cdb, tmp_ctx, &domlist);
+     if (ret == ENOENT) {
+         DEBUG(SSSDBG_FATAL_FAILURE, "No domains configured, fatal error!\n");
+-        sss_log(SSS_LOG_CRIT, "No domains configured, fatal error!\n");
++        ret = ERR_NO_DOMAIN_ENABLED;
+         goto done;
+     }
+-    if (ret != EOK ) {
++    if (ret != EOK) {
+         DEBUG(SSSDBG_FATAL_FAILURE, "Fatal error retrieving domains list!\n");
+         goto done;
+     }
+@@ -2472,9 +2472,9 @@ int confdb_expand_app_domains(struct confdb_ctx *cdb)
+     ret = confdb_get_enabled_domain_list(cdb, tmp_ctx, &domlist);
+     if (ret == ENOENT) {
+         DEBUG(SSSDBG_FATAL_FAILURE, "No domains configured, fatal error!\n");
+-        sss_log(SSS_LOG_CRIT, "No domains configured, fatal error!\n");
++        ret = ERR_NO_DOMAIN_ENABLED;
+         goto done;
+-    } else if (ret != EOK ) {
++    } else if (ret != EOK) {
+         DEBUG(SSSDBG_FATAL_FAILURE, "Fatal error retrieving domains list!\n");
+         goto done;
+     }
+diff --git a/src/monitor/monitor.c b/src/monitor/monitor.c
+index 17bb1d6685257f204e56baad43919366b75a140d..7670114d37646ebcacd1d0f8c6876e40ff03938e 100644
+--- a/src/monitor/monitor.c
++++ b/src/monitor/monitor.c
+@@ -2566,7 +2566,7 @@ int main(int argc, const char *argv[])
+                  "SSSD couldn't load the configuration database.\n");
+             sss_log(SSS_LOG_CRIT,
+                    "SSSD couldn't load the configuration database [%d]: %s.\n",
+-                    ret, strerror(ret));
++                    ret, sss_strerror(ret));
+             break;
+         }
+         return 4;
+diff --git a/src/util/util_errors.c b/src/util/util_errors.c
+index 647bc70a77ec8697e287f61d5895143f0a575157..899bef2f40e4f1c503c843b8307120e18c6c2d52 100644
+--- a/src/util/util_errors.c
++++ b/src/util/util_errors.c
+@@ -64,6 +64,7 @@ struct err_string error_to_str[] = {
+     { "Cannot parse input" }, /* ERR_INPUT_PARSE */
+     { "Entry not found" }, /* ERR_NOT_FOUND */
+     { "Domain not found" }, /* ERR_DOMAIN_NOT_FOUND */
++    { "No domain is enabled" }, /* ERR_NO_DOMAIN_ENABLED */
+     { "Malformed search filter" }, /* ERR_INVALID_FILTER, */
+     { "No POSIX attributes detected" }, /* ERR_NO_POSIX */
+     { "Extra attribute is a duplicate" }, /* ERR_DUP_EXTRA_ATTR */
+diff --git a/src/util/util_errors.h b/src/util/util_errors.h
+index 1a752753e4df2a9de5913920bb75ebf49a8f60a6..b55b340fcdcfd9b01a9053b6b2a24b68243f14f5 100644
+--- a/src/util/util_errors.h
++++ b/src/util/util_errors.h
+@@ -85,6 +85,7 @@ enum sssd_errors {
+     ERR_INPUT_PARSE,
+     ERR_NOT_FOUND,
+     ERR_DOMAIN_NOT_FOUND,
++    ERR_NO_DOMAIN_ENABLED,
+     ERR_INVALID_FILTER,
+     ERR_NO_POSIX,
+     ERR_DUP_EXTRA_ATTR,
+-- 
+2.37.3
+
