@@ -42,14 +42,15 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.8.2
-Release: 4%{?dist}
+Version: 2.9.0
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPLv3+
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.8.2/sssd-2.8.2.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.9.0/sssd-2.9.0.tar.gz
 
 ### Patches ###
+Patch0001:  0001-FILE-WATCH-Callback-not-executed-on-link-or-relative.patch
 
 ### Dependencies ###
 
@@ -98,6 +99,7 @@ BuildRequires: keyutils-libs-devel
 BuildRequires: krb5-devel
 BuildRequires: libcmocka-devel >= 1.0.0
 BuildRequires: libdhash-devel >= 0.4.2
+BuildRequires: libfido2-devel
 BuildRequires: libini_config-devel >= 1.1
 BuildRequires: libldb-devel >= %{ldb_version}
 BuildRequires: libnfsidmap-devel
@@ -161,6 +163,9 @@ the existing back ends.
 %package common
 Summary: Common files for the SSSD
 License: GPLv3+
+# libsss_simpleifp is removed starting 2.9.0
+Obsoletes: libsss_simpleifp < 2.9.0
+Obsoletes: libsss_simpleifp-debuginfo < 2.9.0
 # Requires
 # due to ABI changes in 1.1.30/1.2.0
 Requires: libldb >= %{ldb_version}
@@ -432,23 +437,6 @@ Provides rules for polkit integration with SSSD. This is required
 for smartcard support.
 %endif
 
-%package -n libsss_simpleifp
-Summary: The SSSD D-Bus responder helper library
-License: GPLv3+
-Requires: sssd-dbus = %{version}-%{release}
-
-%description -n libsss_simpleifp
-Provides library that simplifies D-Bus API for the SSSD InfoPipe responder.
-
-%package -n libsss_simpleifp-devel
-Summary: The SSSD D-Bus responder helper library
-License: GPLv3+
-Requires: dbus-devel
-Requires: libsss_simpleifp = %{version}-%{release}
-
-%description -n libsss_simpleifp-devel
-Provides library that simplifies D-Bus API for the SSSD InfoPipe responder.
-
 %package winbind-idmap
 Summary: SSSD's idmap_sss Backend for Winbind
 License: GPLv3+ and LGPLv3+
@@ -509,6 +497,16 @@ This package provides Kerberos plugins that are required to enable
 authentication against external identity providers. Additionally a helper
 program to handle the OAuth 2.0 Device Authorization Grant is provided.
 
+%package passkey
+Summary: SSSD helpers and plugins needed for authentication with passkey token
+License: GPLv3+
+Requires: sssd-common = %{version}-%{release}
+Requires: libfido2
+
+%description passkey
+This package provides helper processes and Kerberos plugins that are required to
+enable authentication with passkey token.
+
 %prep
 %autosetup -p1
 
@@ -537,12 +535,14 @@ autoreconf -ivf
     --with-sssd-user=%{sssd_user} \
     --with-syslog=journald \
     --with-test-dir=/dev/shm \
+    --with-files-provider \
 %if %{build_subid}
     --with-subid \
 %endif
 %if 0%{?fedora}
     --disable-polkit-rules-path \
 %endif
+    --with-passkey \
     %{nil}
 
 %make_build all docs runstatedir=%{_rundir}
@@ -578,6 +578,10 @@ cp $RPM_BUILD_ROOT/%{_datadir}/sssd-kcm/kcm_default_ccache \
 # Enable krb5 idp plugins by default (when sssd-idp package is installed)
 cp $RPM_BUILD_ROOT/%{_datadir}/sssd/krb5-snippets/sssd_enable_idp \
    $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d/sssd_enable_idp
+
+# Enable krb5 passkey plugins by default (when sssd-passkey package is installed)
+cp $RPM_BUILD_ROOT/%{_datadir}/sssd/krb5-snippets/sssd_enable_passkey \
+   $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d/sssd_enable_passkey
 
 # krb5 configuration snippet
 cp $RPM_BUILD_ROOT/%{_datadir}/sssd/krb5-snippets/enable_sssd_conf_dir \
@@ -714,7 +718,6 @@ done
 %{_libexecdir}/%{servicename}/sssd_check_socket_activated_responders
 
 %dir %{_libdir}/%{name}
-# The files provider is intentionally packaged in -common
 %{_libdir}/%{name}/libsss_files.so
 %{_libdir}/%{name}/libsss_simple.so
 
@@ -841,18 +844,8 @@ done
 %{_mandir}/man5/sssd-ifp.5*
 %{_unitdir}/sssd-ifp.service
 # InfoPipe DBus plumbing
-%{_sysconfdir}/dbus-1/system.d/org.freedesktop.sssd.infopipe.conf
+%{_datadir}/dbus-1/system.d/org.freedesktop.sssd.infopipe.conf
 %{_datadir}/dbus-1/system-services/org.freedesktop.sssd.infopipe.service
-
-%files -n libsss_simpleifp
-%{_libdir}/libsss_simpleifp.so.*
-
-%files -n libsss_simpleifp-devel
-%doc sss_simpleifp_doc/html
-%{_includedir}/sss_sifp.h
-%{_includedir}/sss_sifp_dbus.h
-%{_libdir}/libsss_simpleifp.so
-%{_libdir}/pkgconfig/sss_simpleifp.pc
 
 %files client -f sssd_client.lang
 %license src/sss_client/COPYING src/sss_client/COPYING.LESSER
@@ -986,6 +979,12 @@ done
 %{_datadir}/sssd/krb5-snippets/sssd_enable_idp
 %config(noreplace) %{_sysconfdir}/krb5.conf.d/sssd_enable_idp
 
+%files passkey
+%attr(755,%{sssd_user},%{sssd_user}) %{_libexecdir}/%{servicename}/passkey_child
+%{_libdir}/%{name}/modules/sssd_krb5_passkey_plugin.so
+%{_datadir}/sssd/krb5-snippets/sssd_enable_passkey
+%config(noreplace) %{_sysconfdir}/krb5.conf.d/sssd_enable_passkey
+
 %if 0%{?rhel}
 %pre common
 getent group sssd >/dev/null || groupadd -r sssd
@@ -1060,6 +1059,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Fri May 5 2023 Pavel Březina <pbrezina@redhat.com> - 2.9.0-1
+- Rebase to SSSD 2.9.0
+
 * Thu Jan 26 2023 Stephen Gallagher <sgallagh@redhat.com> - 2.8.2-4
 - Rebuild against libunistring 1.1
 
