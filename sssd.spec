@@ -45,7 +45,7 @@ Name: sssd
 Version: 2.9.0
 Release: 1%{?dist}
 Summary: System Security Services Daemon
-License: GPLv3+
+License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
 Source0: https://github.com/SSSD/sssd/releases/download/2.9.0/sssd-2.9.0.tar.gz
 
@@ -162,7 +162,7 @@ the existing back ends.
 
 %package common
 Summary: Common files for the SSSD
-License: GPLv3+
+License: GPL-3.0-or-later
 # libsss_simpleifp is removed starting 2.9.0
 Obsoletes: libsss_simpleifp < 2.9.0
 Obsoletes: libsss_simpleifp-debuginfo < 2.9.0
@@ -192,7 +192,7 @@ subpackages such as sssd-ldap.
 
 %package client
 Summary: SSSD Client libraries for NSS and PAM
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Requires: libsss_nss_idmap = %{version}-%{release}
 Requires: libsss_idmap = %{version}-%{release}
 Requires(post):  /usr/sbin/alternatives
@@ -204,7 +204,7 @@ service.
 
 %package -n libsss_sudo
 Summary: A library to allow communication between SUDO and SSSD
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Conflicts: sssd-common < %{version}-%{release}
 
 %description -n libsss_sudo
@@ -212,7 +212,7 @@ A utility library to allow communication between SUDO and SSSD
 
 %package -n libsss_autofs
 Summary: A library to allow communication between Autofs and SSSD
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Conflicts: sssd-common < %{version}-%{release}
 
 %description -n libsss_autofs
@@ -220,7 +220,7 @@ A utility library to allow communication between Autofs and SSSD
 
 %package tools
 Summary: Userspace tools for use with the SSSD
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 # required by sss_obfuscate
 Requires: python3-sss = %{version}-%{release}
@@ -239,7 +239,7 @@ Provides several administrative tools:
 
 %package -n python3-sssdconfig
 Summary: SSSD and IPA configuration file manipulation classes and functions
-License: GPLv3+
+License: GPL-3.0-or-later
 BuildArch: noarch
 %{?python_provide:%python_provide python3-sssdconfig}
 
@@ -248,7 +248,7 @@ Provides python3 files for manipulation SSSD and IPA configuration files.
 
 %package -n python3-sss
 Summary: Python3 bindings for sssd
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 %{?python_provide:%python_provide python3-sss}
 
@@ -259,7 +259,7 @@ Provides python3 bindings:
 
 %package -n python3-sss-murmur
 Summary: Python3 bindings for murmur hash function
-License: LGPLv3+
+License: LGPL-3.0-or-later
 %{?python_provide:%python_provide python3-sss-murmur}
 
 %description -n python3-sss-murmur
@@ -267,7 +267,7 @@ Provides python3 module for calculating the murmur hash version 3
 
 %package ldap
 Summary: The LDAP back end of the SSSD
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
 Requires: libsss_idmap = %{version}-%{release}
@@ -279,7 +279,7 @@ from and authenticate against an LDAP server.
 
 %package krb5-common
 Summary: SSSD helpers needed for Kerberos and GSSAPI authentication
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: cyrus-sasl-gssapi%{?_isa}
 Requires: sssd-common = %{version}-%{release}
 
@@ -289,7 +289,7 @@ Kerberos user or host authentication.
 
 %package krb5
 Summary: The Kerberos authentication back end for the SSSD
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
 
@@ -299,7 +299,7 @@ against a Kerberos server.
 
 %package common-pac
 Summary: Common files needed for supporting PAC processing
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 Requires: libsss_idmap = %{version}-%{release}
 
@@ -309,7 +309,7 @@ for handling Kerberos PACs.
 
 %package ipa
 Summary: The IPA back end of the SSSD
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: samba-client-libs >= %{samba_package_version}
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
@@ -325,7 +325,7 @@ from and authenticate against an IPA server.
 
 %package ad
 Summary: The AD back end of the SSSD
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: samba-client-libs >= %{samba_package_version}
 Requires: sssd-common = %{version}-%{release}
 Requires: sssd-krb5-common = %{version}-%{release}
@@ -342,7 +342,7 @@ identity data from and authenticate against an Active Directory server.
 
 %package proxy
 Summary: The proxy back end of the SSSD
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 
 %description proxy
@@ -351,14 +351,14 @@ PAM modules to leverage SSSD caching.
 
 %package -n libsss_idmap
 Summary: FreeIPA Idmap library
-License: LGPLv3+
+License: LGPL-3.0-or-later
 
 %description -n libsss_idmap
 Utility library to convert SIDs to Unix uids and gids
 
 %package -n libsss_idmap-devel
 Summary: FreeIPA Idmap library
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Requires: libsss_idmap = %{version}-%{release}
 
 %description -n libsss_idmap-devel
@@ -366,14 +366,14 @@ Utility library to SIDs to Unix uids and gids
 
 %package -n libipa_hbac
 Summary: FreeIPA HBAC Evaluator library
-License: LGPLv3+
+License: LGPL-3.0-or-later
 
 %description -n libipa_hbac
 Utility library to validate FreeIPA HBAC rules for authorization requests
 
 %package -n libipa_hbac-devel
 Summary: FreeIPA HBAC Evaluator library
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Requires: libipa_hbac = %{version}-%{release}
 
 %description -n libipa_hbac-devel
@@ -381,7 +381,7 @@ Utility library to validate FreeIPA HBAC rules for authorization requests
 
 %package -n python3-libipa_hbac
 Summary: Python3 bindings for the FreeIPA HBAC Evaluator library
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Requires: libipa_hbac = %{version}-%{release}
 %{?python_provide:%python_provide python3-libipa_hbac}
 
@@ -391,14 +391,14 @@ used by Python applications.
 
 %package -n libsss_nss_idmap
 Summary: Library for SID and certificate based lookups
-License: LGPLv3+
+License: LGPL-3.0-or-later
 
 %description -n libsss_nss_idmap
 Utility library for SID and certificate based lookups
 
 %package -n libsss_nss_idmap-devel
 Summary: Library for SID and certificate based lookups
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Requires: libsss_nss_idmap = %{version}-%{release}
 
 %description -n libsss_nss_idmap-devel
@@ -406,7 +406,7 @@ Utility library for SID and certificate based lookups
 
 %package -n python3-libsss_nss_idmap
 Summary: Python3 bindings for libsss_nss_idmap
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Requires: libsss_nss_idmap = %{version}-%{release}
 %{?python_provide:%python_provide python3-libsss_nss_idmap}
 
@@ -416,7 +416,7 @@ be used by Python applications.
 
 %package dbus
 Summary: The D-Bus responder of the SSSD
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 %{?systemd_requires}
 
@@ -428,7 +428,7 @@ the information from the SSSD to be transmitted over the system bus.
 %package polkit-rules
 Summary: Rules for polkit integration for SSSD
 Group: Applications/System
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: polkit >= 0.106
 Requires: sssd-common = %{version}-%{release}
 
@@ -439,7 +439,7 @@ for smartcard support.
 
 %package winbind-idmap
 Summary: SSSD's idmap_sss Backend for Winbind
-License: GPLv3+ and LGPLv3+
+License: GPL-3.0-or-later AND LGPL-3.0-or-later
 Requires: libsss_nss_idmap = %{version}-%{release}
 Requires: libsss_idmap = %{version}-%{release}
 Conflicts: sssd-common < %{version}-%{release}
@@ -450,7 +450,7 @@ and SIDs.
 
 %package nfs-idmap
 Summary: SSSD plug-in for NFSv4 rpc.idmapd
-License: GPLv3+
+License: GPL-3.0-or-later
 Conflicts: sssd-common < %{version}-%{release}
 
 %description nfs-idmap
@@ -460,7 +460,7 @@ UIDs/GIDs to names and vice versa. It can be also used for mapping principal
 
 %package -n libsss_certmap
 Summary: SSSD Certificate Mapping Library
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Conflicts: sssd-common < %{version}-%{release}
 
 %description -n libsss_certmap
@@ -468,7 +468,7 @@ Library to map certificates to users based on rules
 
 %package -n libsss_certmap-devel
 Summary: SSSD Certificate Mapping Library
-License: LGPLv3+
+License: LGPL-3.0-or-later
 Requires: libsss_certmap = %{version}-%{release}
 
 %description -n libsss_certmap-devel
@@ -476,7 +476,7 @@ Library to map certificates to users based on rules
 
 %package kcm
 Summary: An implementation of a Kerberos KCM server
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 %if %{build_kcm_renewals}
 Requires: krb5-libs >= %{krb5_version}
@@ -489,7 +489,7 @@ use the KCM: Kerberos credentials cache.
 
 %package idp
 Summary: Kerberos plugins and OIDC helper for external identity providers.
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 
 %description idp
@@ -499,7 +499,7 @@ program to handle the OAuth 2.0 Device Authorization Grant is provided.
 
 %package passkey
 Summary: SSSD helpers and plugins needed for authentication with passkey token
-License: GPLv3+
+License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 Requires: libfido2
 
@@ -1061,6 +1061,7 @@ fi
 %changelog
 * Fri May 5 2023 Pavel Březina <pbrezina@redhat.com> - 2.9.0-1
 - Rebase to SSSD 2.9.0
+- SPDX migration
 
 * Thu Jan 26 2023 Stephen Gallagher <sgallagh@redhat.com> - 2.8.2-4
 - Rebuild against libunistring 1.1
