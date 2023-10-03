@@ -1,0 +1,199 @@
+From 6cedcf217a10ff8b7bfc2d5a0af65e85a5434082 Mon Sep 17 00:00:00 2001
+From: Justin Stephenson <jstephen@redhat.com>
+Date: Fri, 8 Sep 2023 10:36:17 -0400
+Subject: [PATCH 1/2] Passkey: Allow kerberos preauth for "false" UV
+
+When IPA passkey configuration sets require-user-verification=false
+then the user verification value will be 0. We need to allow this
+configuration within the plugin.
+---
+ src/krb5_plugin/passkey/passkey_utils.c     |  2 +-
+ src/tests/cmocka/test_krb5_passkey_plugin.c | 10 ----------
+ 2 files changed, 1 insertion(+), 11 deletions(-)
+
+diff --git a/src/krb5_plugin/passkey/passkey_utils.c b/src/krb5_plugin/passkey/passkey_utils.c
+index 3e777aedc6..c41b9c00e7 100644
+--- a/src/krb5_plugin/passkey/passkey_utils.c
++++ b/src/krb5_plugin/passkey/passkey_utils.c
+@@ -211,7 +211,7 @@ sss_passkey_challenge_to_json_object(const struct sss_passkey_challenge *data)
+ 
+     /* These are required fields. */
+     if (data->domain == NULL || data->credential_id_list == NULL
+-        || data->user_verification == 0 || data->cryptographic_challenge == NULL) {
++        || data->cryptographic_challenge == NULL) {
+         return NULL;
+     }
+ 
+diff --git a/src/tests/cmocka/test_krb5_passkey_plugin.c b/src/tests/cmocka/test_krb5_passkey_plugin.c
+index 1a0c87adcb..9593a65468 100644
+--- a/src/tests/cmocka/test_krb5_passkey_plugin.c
++++ b/src/tests/cmocka/test_krb5_passkey_plugin.c
+@@ -120,16 +120,6 @@ void test_sss_passkey_message_encode__challenge(void **state)
+     str = sss_passkey_message_encode(&message);
+     assert_null(str);
+ 
+-    challenge.domain = discard_const("domain");
+-    challenge.credential_id_list = discard_const(id_list);
+-    challenge.user_verification = 0;
+-    challenge.cryptographic_challenge = discard_const("crypto-challenge");
+-    message.phase = SSS_PASSKEY_PHASE_CHALLENGE;
+-    message.state = discard_const("abcd");
+-    message.data.challenge = &challenge;
+-    str = sss_passkey_message_encode(&message);
+-    assert_null(str);
+-
+     challenge.domain = discard_const("domain");
+     challenge.credential_id_list = discard_const(id_list);
+     challenge.user_verification = 1;
+
+From dd8b46933858ab0fc1b11504ff88e0c74193cc2b Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Mon, 18 Sep 2023 10:22:17 +0200
+Subject: [PATCH 2/2] passkey: omit user-verification
+
+If user-verification is disabled and the key doesn't support it, then
+omit it. Otherwise, the authentication will produce an error and the
+user will be unable to authenticate.
+
+I have also added a unit-test to check this condition.
+
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+(cherry picked from commit a8daf9790906b7321024fef8e636f9c1b14343ab)
+---
+ Makefile.am                               |  1 +
+ src/passkey_child/passkey_child_devices.c | 12 +++++++++
+ src/tests/cmocka/test_passkey_child.c     | 32 +++++++++++++++++++++++
+ 3 files changed, 45 insertions(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index 4bac10d86d..640acbd953 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -3860,6 +3860,7 @@ test_passkey_LDFLAGS = \
+     -Wl,-wrap,fido_dev_open \
+     -Wl,-wrap,fido_dev_has_uv \
+     -Wl,-wrap,fido_dev_has_pin \
++    -Wl,-wrap,fido_dev_supports_uv \
+     -Wl,-wrap,fido_dev_make_cred \
+     -Wl,-wrap,fido_cred_x5c_ptr \
+     -Wl,-wrap,fido_cred_verify \
+diff --git a/src/passkey_child/passkey_child_devices.c b/src/passkey_child/passkey_child_devices.c
+index a91ab9ca11..2011b12f66 100644
+--- a/src/passkey_child/passkey_child_devices.c
++++ b/src/passkey_child/passkey_child_devices.c
+@@ -201,10 +201,12 @@ get_device_options(fido_dev_t *dev, struct passkey_data *_data)
+ {
+     bool has_pin;
+     bool has_uv;
++    bool supports_uv;
+     errno_t ret;
+ 
+     has_uv = fido_dev_has_uv(dev);
+     has_pin = fido_dev_has_pin(dev);
++    supports_uv = fido_dev_supports_uv(dev);
+ 
+     if (_data->user_verification == FIDO_OPT_TRUE && has_pin != true
+         && has_uv != true) {
+@@ -226,6 +228,16 @@ get_device_options(fido_dev_t *dev, struct passkey_data *_data)
+         goto done;
+     }
+ 
++    if (_data->user_verification == FIDO_OPT_FALSE
++        && supports_uv == false) {
++        DEBUG(SSSDBG_CONF_SETTINGS,
++              "Policy disabled user-verification but the key doesn't support "
++              "it. Thus, omitting the user-verification.\n");
++        _data->user_verification = FIDO_OPT_OMIT;
++        ret = EOK;
++        goto done;
++    }
++
+     ret = EOK;
+ 
+ done:
+diff --git a/src/tests/cmocka/test_passkey_child.c b/src/tests/cmocka/test_passkey_child.c
+index 187b3c49ea..5003152c45 100644
+--- a/src/tests/cmocka/test_passkey_child.c
++++ b/src/tests/cmocka/test_passkey_child.c
+@@ -278,6 +278,16 @@ __wrap_fido_dev_has_pin(fido_dev_t *dev)
+     return ret;
+ }
+ 
++bool
++__wrap_fido_dev_supports_uv(fido_dev_t *dev)
++{
++    bool ret;
++
++    ret = mock();
++
++    return ret;
++}
++
+ int
+ __wrap_fido_dev_make_cred(fido_dev_t *dev, fido_cred_t *cred, const char *pin)
+ {
+@@ -1090,6 +1100,7 @@ void test_get_device_options(void **state)
+     ts->data.user_verification = FIDO_OPT_TRUE;
+     will_return(__wrap_fido_dev_has_uv, true);
+     will_return(__wrap_fido_dev_has_pin, true);
++    will_return(__wrap_fido_dev_supports_uv, true);
+ 
+     ret = get_device_options(dev, &ts->data);
+ 
+@@ -1106,12 +1117,30 @@ void test_get_device_options_user_verification_unmatch(void **state)
+     ts->data.user_verification = FIDO_OPT_TRUE;
+     will_return(__wrap_fido_dev_has_uv, false);
+     will_return(__wrap_fido_dev_has_pin, false);
++    will_return(__wrap_fido_dev_supports_uv, false);
+ 
+     ret = get_device_options(dev, &ts->data);
+ 
+     assert_int_equal(ret, EINVAL);
+ }
+ 
++void test_get_device_options_user_verification_false_not_supported(void **state)
++{
++    struct test_state *ts = talloc_get_type_abort(*state, struct test_state);
++    fido_dev_t *dev = NULL;
++    errno_t ret;
++
++    ts->data.user_verification = FIDO_OPT_FALSE;
++    will_return(__wrap_fido_dev_has_uv, false);
++    will_return(__wrap_fido_dev_has_pin, false);
++    will_return(__wrap_fido_dev_supports_uv, false);
++
++    ret = get_device_options(dev, &ts->data);
++
++    assert_int_equal(ret, FIDO_OK);
++    assert_int_equal(ts->data.user_verification, FIDO_OPT_OMIT);
++}
++
+ void test_request_assert(void **state)
+ {
+     struct test_state *ts = talloc_get_type_abort(*state, struct test_state);
+@@ -1206,6 +1235,7 @@ void test_authenticate_integration(void **state)
+     }
+     will_return(__wrap_fido_dev_has_uv, false);
+     will_return(__wrap_fido_dev_has_pin, false);
++    will_return(__wrap_fido_dev_supports_uv, false);
+     will_return(__wrap_fido_assert_set_uv, FIDO_OK);
+     will_return(__wrap_fido_assert_set_clientdata_hash, FIDO_OK);
+     will_return(__wrap_fido_dev_has_uv, false);
+@@ -1256,6 +1286,7 @@ void test_get_assert_data_integration(void **state)
+     }
+     will_return(__wrap_fido_dev_has_uv, false);
+     will_return(__wrap_fido_dev_has_pin, false);
++    will_return(__wrap_fido_dev_supports_uv, false);
+     will_return(__wrap_fido_assert_set_uv, FIDO_OK);
+     will_return(__wrap_fido_dev_has_uv, false);
+     will_return(__wrap_fido_dev_has_pin, false);
+@@ -1358,6 +1389,7 @@ int main(int argc, const char *argv[])
+         cmocka_unit_test_setup_teardown(test_get_authenticator_data_multiple_keys_assert_not_found, setup, teardown),
+         cmocka_unit_test_setup_teardown(test_get_device_options, setup, teardown),
+         cmocka_unit_test_setup_teardown(test_get_device_options_user_verification_unmatch, setup, teardown),
++        cmocka_unit_test_setup_teardown(test_get_device_options_user_verification_false_not_supported, setup, teardown),
+         cmocka_unit_test_setup_teardown(test_request_assert, setup, teardown),
+         cmocka_unit_test_setup_teardown(test_verify_assert, setup, teardown),
+         cmocka_unit_test_setup_teardown(test_verify_assert_failed, setup, teardown),
+
+
