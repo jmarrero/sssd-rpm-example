@@ -75,9 +75,11 @@ Suggests: sssd-dbus = %{version}-%{release}
 %global secdbpath %{sssdstatedir}/secrets
 %global deskprofilepath %{sssdstatedir}/deskprofile
 
-# https://fedoraproject.org/wiki/Changes/EncourageI686LeafRemoval
-# gdm-pam-extensions-devel is no longer built on i686
-ExcludeArch: %{ix86}
+# https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/thread/URKAWVPEINE4CREFO4L22MGKN6TNUGQK/
+# https://github.com/containers/composefs/pull/229#issuecomment-1838735764
+%if 0%{?rhel} >= 10
+ExcludeArch:    %{ix86}
+%endif
 
 ### Build Dependencies ###
 
