@@ -43,7 +43,7 @@
 
 Name: sssd
 Version: 2.9.4
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
@@ -1063,6 +1063,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Mon Jan 15 2024 Colin Walters <walters@verbum.org> - 2.9.4-2
+- Scope ExcludeArch: ix86 to RHEL10+
+
 * Fri Jan 12 2024 Pavel Březina <pbrezina@redhat.com> - 2.9.4-1
 - Rebase to SSSD 2.9.4
 - Files provider suport remove (rhbz#2253183)
