@@ -1,0 +1,244 @@
+From b42cc3d2bf4ea1751cacb63e53536c8ad1782632 Mon Sep 17 00:00:00 2001
+From: Alexey Tikhonov <atikhono@redhat.com>
+Date: Fri, 23 Jun 2023 16:33:09 +0200
+Subject: [PATCH] ENUMERATION: conditional build of enumeration support for
+ providers other than LDAP
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+:relnote:Support of 'enumeration' feature (i.e. ability to list all
+users/groups using 'getent passwd/group' without argument) for AD/IPA
+providers is deprecated and might be removed in further releases.
+Those who are interested to keep using it awhile should configure
+its build explicitly using '--with-extended-enumeration-support'
+./configure option.
+
+Reviewed-by: Iker Pedrosa <ipedrosa@redhat.com>
+Reviewed-by: Tomáš Halman <thalman@redhat.com>
+(cherry picked from commit 9240bca7dcc28371ae5dce31c01e85d28409cd04)
+---
+ configure.ac              |  1 +
+ src/conf_macros.m4        | 17 +++++++++++++++++
+ src/confdb/confdb.c       | 23 ++++++++++++++++++-----
+ src/db/sysdb_subdomains.c |  4 ++++
+ src/man/Makefile.am       |  7 ++++++-
+ src/man/sssd-ldap.5.xml   |  4 ++--
+ src/man/sssd.conf.5.xml   | 14 +++++++++-----
+ 7 files changed, 57 insertions(+), 13 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 470c04949..adb2c5447 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -185,6 +185,7 @@ WITH_SUDO
+ WITH_SUDO_LIB_PATH
+ WITH_AUTOFS
+ WITH_FILES_PROVIDER
++WITH_EXTENDED_ENUMERATION_SUPPORT
+ WITH_SUBID
+ WITH_SUBID_LIB_PATH
+ WITH_PASSKEY
+diff --git a/src/conf_macros.m4 b/src/conf_macros.m4
+index cb97eeb78..5ef257908 100644
+--- a/src/conf_macros.m4
++++ b/src/conf_macros.m4
+@@ -651,6 +651,23 @@ AC_DEFUN([WITH_FILES_PROVIDER],
+     AM_CONDITIONAL([BUILD_FILES_PROVIDER], [test x"$with_files_provider" = xyes])
+   ])
+
++AC_DEFUN([WITH_EXTENDED_ENUMERATION_SUPPORT],
++  [ AC_ARG_WITH([extended-enumeration-support],
++                [AC_HELP_STRING([--with-extended-enumeration-support],
++                                [Whether to build enumeration support for
++                                 IPA and AD providers [no].]
++                               )
++                ],
++                [with_extended_enumeration_support=$withval],
++                with_extended_enumeration_support=no
++               )
++
++    if test x"$with_extended_enumeration_support" = xyes; then
++        AC_DEFINE(BUILD_EXTENDED_ENUMERATION_SUPPORT, 1, [Whether to build extended enumeration support])
++    fi
++    AM_CONDITIONAL([BUILD_EXTENDED_ENUMERATION_SUPPORT], [test x"$with_extended_enumeration_support" = xyes])
++  ])
++
+ AC_DEFUN([WITH_SUBID],
+   [ AC_ARG_WITH([subid],
+                 [AC_HELP_STRING([--with-subid],
+diff --git a/src/confdb/confdb.c b/src/confdb/confdb.c
+index a7344e166..1760ea6b5 100644
+--- a/src/confdb/confdb.c
++++ b/src/confdb/confdb.c
+@@ -1068,6 +1068,9 @@ static errno_t confdb_init_domain_provider_and_enum(struct sss_domain_info *doma
+     errno_t ret;
+     const char *tmp, *tmp_pam_target, *tmp_auth;
+
++#ifndef BUILD_EXTENDED_ENUMERATION_SUPPORT
++    if (domain->provider != NULL && strcasecmp(domain->provider, "ldap") == 0) {
++#endif
+     /* TEMP: test if the old bitfield conf value is used and warn it has been
+      * superseded. */
+     val = ldb_msg_find_attr_as_int(res->msgs[0], CONFDB_DOMAIN_ENUMERATE, 0);
+@@ -1086,6 +1089,11 @@ static errno_t confdb_init_domain_provider_and_enum(struct sss_domain_info *doma
+             goto done;
+         }
+     }
++#ifndef BUILD_EXTENDED_ENUMERATION_SUPPORT
++    } else {
++        domain->enumerate = false;
++    }
++#endif
+
+     if (is_files_provider(domain)) {
+         /* The password field must be reported as 'x', else pam_unix won't
+@@ -1122,11 +1130,7 @@ static errno_t confdb_init_domain_provider_and_enum(struct sss_domain_info *doma
+     }
+
+     if (!domain->enumerate) {
+-        DEBUG(SSSDBG_TRACE_FUNC, "No enumeration for [%s]!\n", domain->name);
+-        DEBUG(SSSDBG_TRACE_FUNC,
+-              "Please note that when enumeration is disabled `getent "
+-              "passwd` does not return all users by design. See "
+-              "sssd.conf man page for more detailed information\n");
++        DEBUG(SSSDBG_TRACE_FUNC, "No enumeration for [%s]\n", domain->name);
+     }
+
+     ret = EOK;
+@@ -1537,6 +1541,7 @@ static errno_t confdb_init_domain_subdomains(struct sss_domain_info *domain,
+     errno_t ret;
+     const char *tmp;
+
++#ifdef BUILD_EXTENDED_ENUMERATION_SUPPORT
+     tmp = ldb_msg_find_attr_as_string(res->msgs[0],
+                                       CONFDB_SUBDOMAIN_ENUMERATE,
+                                       CONFDB_DEFAULT_SUBDOMAIN_ENUMERATE);
+@@ -1549,6 +1554,14 @@ static errno_t confdb_init_domain_subdomains(struct sss_domain_info *domain,
+             goto done;
+         }
+     }
++#else
++    ret = split_on_separator(domain, "none", ',', true, true,
++                             &domain->sd_enumerate, NULL);
++    if (ret != 0) {
++        DEBUG(SSSDBG_FATAL_FAILURE, "Cannot set 'sd_enumerate'\n");
++        goto done;
++    }
++#endif
+
+     tmp = ldb_msg_find_attr_as_string(res->msgs[0],
+                                       CONFDB_DOMAIN_SUBDOMAIN_INHERIT,
+diff --git a/src/db/sysdb_subdomains.c b/src/db/sysdb_subdomains.c
+index 61cf48c31..149e9a161 100644
+--- a/src/db/sysdb_subdomains.c
++++ b/src/db/sysdb_subdomains.c
+@@ -494,8 +494,12 @@ errno_t sysdb_update_subdomains(struct sss_domain_info *domain,
+         }
+         mpg_mode = str_to_domain_mpg_mode(str_mpg_mode);
+
++#ifdef BUILD_EXTENDED_ENUMERATION_SUPPORT
+         enumerate = ldb_msg_find_attr_as_bool(res->msgs[i],
+                                               SYSDB_SUBDOMAIN_ENUM, false);
++#else
++        enumerate = false;
++#endif
+
+         forest = ldb_msg_find_attr_as_string(res->msgs[i],
+                                              SYSDB_SUBDOMAIN_FOREST, NULL);
+diff --git a/src/man/Makefile.am b/src/man/Makefile.am
+index 1e51aebfd..77b08e84c 100644
+--- a/src/man/Makefile.am
++++ b/src/man/Makefile.am
+@@ -55,12 +55,17 @@ FILES_PROVIDER_CONDS = ;with_files_provider
+ else
+ FILES_PROVIDER_CONDS = ;without_files_provider
+ endif
++if BUILD_EXTENDED_ENUMERATION_SUPPORT
++ENUM_CONDS = ;with_ext_enumeration
++else
++ENUM_CONDS = ;without_ext_enumeration
++endif
+ if SSSD_NON_ROOT_USER
+ SSSD_NON_ROOT_USER_CONDS = ;with_non_root_user_support
+ endif
+
+
+-CONDS = with_false$(SUDO_CONDS)$(AUTOFS_CONDS)$(SSH_CONDS)$(PAC_RESPONDER_CONDS)$(IFP_CONDS)$(GPO_CONDS)$(SYSTEMD_CONDS)$(KCM_CONDS)$(STAP_CONDS)$(KCM_RENEWAL_CONDS)$(LOCKFREE_CLIENT_CONDS)$(HAVE_INOTIFY_CONDS)$(PASSKEY_CONDS)$(FILES_PROVIDER_CONDS)$(SSSD_NON_ROOT_USER_CONDS)
++CONDS = with_false$(SUDO_CONDS)$(AUTOFS_CONDS)$(SSH_CONDS)$(PAC_RESPONDER_CONDS)$(IFP_CONDS)$(GPO_CONDS)$(SYSTEMD_CONDS)$(KCM_CONDS)$(STAP_CONDS)$(KCM_RENEWAL_CONDS)$(LOCKFREE_CLIENT_CONDS)$(HAVE_INOTIFY_CONDS)$(PASSKEY_CONDS)$(FILES_PROVIDER_CONDS)$(SSSD_NON_ROOT_USER_CONDS)$(ENUM_CONDS)
+
+
+ #Special Rules:
+diff --git a/src/man/sssd-ldap.5.xml b/src/man/sssd-ldap.5.xml
+index 0a814ec35..ccf284abb 100644
+--- a/src/man/sssd-ldap.5.xml
++++ b/src/man/sssd-ldap.5.xml
+@@ -323,7 +323,7 @@
+                             before refreshing its cache of enumerated
+                             records.
+                         </para>
+-                        <para>
++                        <para condition="with_ext_enumeration">
+                             This option can be also set per subdomain or
+                             inherited via
+                             <emphasis>subdomain_inherit</emphasis>.
+@@ -486,7 +486,7 @@
+                             cached results are returned (and offline mode is
+                             entered)
+                         </para>
+-                        <para>
++                        <para condition="with_ext_enumeration">
+                             This option can be also set per subdomain or
+                             inherited via
+                             <emphasis>subdomain_inherit</emphasis>.
+diff --git a/src/man/sssd.conf.5.xml b/src/man/sssd.conf.5.xml
+index e7a8cbd9a..7276d233f 100644
+--- a/src/man/sssd.conf.5.xml
++++ b/src/man/sssd.conf.5.xml
+@@ -2673,8 +2673,12 @@ pam_gssapi_indicators_map = sudo:pkinit, sudo-i:pkinit
+                             and store ALL user and group entries from the
+                             remote server.
+                         </para>
++                        <para condition="without_ext_enumeration">
++                            Feature is only supported for domains with
++                            id_provider = ldap.
++                        </para>
+                         <para>
+-                            Note: Enabling enumeration has a moderate
++                            Note: Enabling enumeration has a severe
+                             performance impact on SSSD while enumeration
+                             is running. It may take up to several minutes
+                             after SSSD startup to fully complete enumerations.
+@@ -2709,7 +2713,7 @@ pam_gssapi_indicators_map = sudo:pkinit, sudo-i:pkinit
+                     </listitem>
+                 </varlistentry>
+
+-                <varlistentry>
++                <varlistentry condition="with_ext_enumeration">
+                     <term>subdomain_enumerate (string)</term>
+                     <listitem>
+                         <para>
+@@ -3857,10 +3861,10 @@ pam_gssapi_indicators_map = sudo:pkinit, sudo-i:pkinit
+                         <para>
+                             ldap_offline_timeout
+                         </para>
+-                        <para>
++                        <para condition="with_ext_enumeration">
+                             ldap_enumeration_refresh_timeout
+                         </para>
+-                        <para>
++                        <para condition="with_ext_enumeration">
+                             ldap_enumeration_refresh_offset
+                         </para>
+                         <para>
+@@ -3876,7 +3880,7 @@ pam_gssapi_indicators_map = sudo:pkinit, sudo-i:pkinit
+                         <para>
+                             ldap_krb5_ticket_lifetime
+                         </para>
+-                        <para>
++                        <para condition="with_ext_enumeration">
+                             ldap_enumeration_search_timeout
+                         </para>
+                         <para>
+--
+2.41.0
