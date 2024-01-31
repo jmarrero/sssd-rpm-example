@@ -1,0 +1,25 @@
+From 6b0cbea2f643269c5af6333b59979de9c0ad6ce5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Wed, 31 Jan 2024 10:42:40 +0100
+Subject: [PATCH] Fix the build with Samba 4.20
+
+Guenther
+---
+ src/external/samba.m4 | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/external/samba.m4 b/src/external/samba.m4
+index 49c6db8d2..5ab0e7527 100644
+--- a/src/external/samba.m4
++++ b/src/external/samba.m4
+@@ -58,7 +58,7 @@ with argument --without-samba
+         SAVE_CFLAGS=$CFLAGS
+         SAVE_LIBS=$LIBS
+         CFLAGS="$CFLAGS $SMBCLIENT_CFLAGS $NDR_NBT_CFLAGS $NDR_KRB5PAC_CFLAGS"
+-        LIBS="$LIBS -L${sambalibdir} -lidmap-samba4 -Wl,-rpath ${sambalibdir}"
++        LIBS="$LIBS -L${sambalibdir} -lidmap-private-samba -Wl,-rpath ${sambalibdir}"
+         AC_RUN_IFELSE(
+             [AC_LANG_SOURCE([
+ #include <stdlib.h>
+--
+2.43.0
