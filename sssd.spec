@@ -43,7 +43,7 @@
 
 Name: sssd
 Version: 2.9.4
-Release: 6%{?dist}
+Release: 7%{?dist}
 Summary: System Security Services Daemon
 License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
@@ -53,6 +53,7 @@ Source0: https://github.com/SSSD/sssd/releases/download/2.9.4/sssd-2.9.4.tar.gz
 Patch0001: 0001-ENUMERATION-conditional-build-of-enumeration-support.patch
 Patch0002: 0002-Fix-the-build-with-Samba-4.20.patch
 Patch0003: 0003-tests-Drop-extensions-from-openssl-command-if-there-.patch
+Patch0004: 0004-ad-gpo-use-hash-to-store-intermediate-results.patch
 
 ### Dependencies ###
 
@@ -1061,6 +1062,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Fri Apr 19 2024 Pavel Březina <pbrezina@redhat.com> - 2.9.4-7
+- Fix CVE-2023-3758 (rhbz#2275905)
+
 * Wed Apr  3 2024 Alexey Tikhonov <atikhono@redhat.com> - 2.9.4-6
 - Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2264610
 
