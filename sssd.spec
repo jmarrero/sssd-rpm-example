@@ -42,18 +42,15 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.9.4
-Release: 7%{?dist}
+Version: 2.9.5
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.9.4/sssd-2.9.4.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.9.5/sssd-2.9.5.tar.gz
 
 ### Patches ###
 Patch0001: 0001-ENUMERATION-conditional-build-of-enumeration-support.patch
-Patch0002: 0002-Fix-the-build-with-Samba-4.20.patch
-Patch0003: 0003-tests-Drop-extensions-from-openssl-command-if-there-.patch
-Patch0004: 0004-ad-gpo-use-hash-to-store-intermediate-results.patch
 
 ### Dependencies ###
 
@@ -1062,6 +1059,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Thu May 16 2024 Pavel Březina <pbrezina@redhat.com> - 2.9.5-1
+- Rebase to SSSD 2.9.5
+
 * Fri Apr 19 2024 Pavel Březina <pbrezina@redhat.com> - 2.9.4-7
 - Fix CVE-2023-3758 (rhbz#2275905)
 
