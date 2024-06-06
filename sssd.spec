@@ -1,18 +1,23 @@
 # SSSD SPEC file for Fedora 34+ and RHEL-9+
 
 # define SSSD user
-%if 0%{?rhel}
+%if 0%{?fedora} >= 41 || 0%{?rhel}
+%global use_sssd_user 1
 %global sssd_user sssd
 %else
+%global use_sssd_user 0
 %global sssd_user root
 %endif
 
-# Set setuid bit on child helpers if we support non-root user.
-%if "%{sssd_user}" == "root"
-%global child_attrs 0750
+# sysusers depends on presence of sssd user
+%if 0%{?fedora} >= 41 || 0%{?rhel} >= 10
+%global use_sysusers 1
 %else
-%global child_attrs 4750
+%global use_sysusers 0
 %endif
+
+# Capabilities of privileged child helpers (required even if SSSD runs under root)
+%global child_capabilities cap_chown,cap_dac_override,cap_setuid,cap_setgid=ep
 
 %if 0%{?fedora} >= 35 || 0%{?rhel} >= 9
 %global build_subid 1
@@ -30,6 +35,18 @@
 %global build_kcm_renewals 0
 %endif
 
+%if 0%{?fedora} >= 39 || 0%{?rhel} >= 9
+%global build_passkey 1
+%else
+%global build_passkey 0
+%endif
+
+%if 0%{?fedora} >= 41 || 0%{?rhel} >= 10
+%global build_ssh_known_hosts_proxy 0
+%else
+%global build_ssh_known_hosts_proxy 1
+%endif
+
 # we don't want to provide private python extension libs
 %define __provides_exclude_from %{python3_sitearch}/.*\.so$
 
@@ -42,15 +59,15 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.9.5
-Release: 2%{?dist}
+Version: 2.10.0~beta1
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.9.5/sssd-2.9.5.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.10.0-beta1/sssd-2.10.0-beta1.tar.gz
+Source1: sssd.sysusers
 
 ### Patches ###
-Patch0001: 0001-ENUMERATION-conditional-build-of-enumeration-support.patch
 
 ### Dependencies ###
 
@@ -76,7 +93,6 @@ Suggests: sssd-dbus = %{version}-%{release}
 %global secdbpath %{sssdstatedir}/secrets
 %global deskprofilepath %{sssdstatedir}/deskprofile
 
-
 ### Build Dependencies ###
 
 BuildRequires: autoconf
@@ -95,14 +111,17 @@ BuildRequires: gettext-devel
 # required for p11_child smartcard tests
 BuildRequires: gnutls-utils
 BuildRequires: jansson-devel
+BuildRequires: libcap-devel
 BuildRequires: libcurl-devel
 BuildRequires: libjose-devel
 BuildRequires: keyutils-libs-devel
 BuildRequires: krb5-devel
 BuildRequires: libcmocka-devel >= 1.0.0
 BuildRequires: libdhash-devel >= 0.4.2
+%if %{build_passkey}
 BuildRequires: libfido2-devel
-BuildRequires: libini_config-devel >= 1.1
+%endif
+BuildRequires: libini_config-devel >= 1.3
 BuildRequires: libldb-devel >= %{ldb_version}
 BuildRequires: libnfsidmap-devel
 BuildRequires: libnl3-devel
@@ -133,7 +152,7 @@ BuildRequires: pcre2-devel
 BuildRequires: pkgconfig
 BuildRequires: popt-devel
 BuildRequires: python3-devel
-BuildRequires: (python3-setuptools if python3 >= 3.12)
+BuildRequires: python3-setuptools
 BuildRequires: samba-devel
 # required for idmap_sss.so
 BuildRequires: samba-winbind
@@ -145,11 +164,16 @@ BuildRequires: systemd-devel
 BuildRequires: systemtap-sdt-devel
 BuildRequires: uid_wrapper
 BuildRequires: po4a
+BuildRequires: valgrind-devel
 %if %{build_subid}
 BuildRequires: shadow-utils-subid-devel
 %endif
 %if %{build_kcm_renewals}
 BuildRequires: krb5-libs >= %{krb5_version}
+%endif
+%if %{use_sysusers} || %{build_passkey}
+BuildRequires: systemd-rpm-macros
+%{?sysusers_requires_compat}
 %endif
 
 %description
@@ -178,7 +202,9 @@ Requires: (libsss_autofs%{?_isa} = %{version}-%{release} if autofs)
 Requires: (sssd-nfs-idmap = %{version}-%{release} if libnfsidmap)
 Requires: libsss_idmap = %{version}-%{release}
 Requires: libsss_certmap = %{version}-%{release}
-%if 0%{?rhel}
+Requires(post): coreutils
+Requires(postun): coreutils
+%if %{use_sssd_user}
 Requires(pre): shadow-utils
 %endif
 %{?systemd_requires}
@@ -427,7 +453,7 @@ Requires: sssd-common = %{version}-%{release}
 Provides the D-Bus responder of the SSSD, called the InfoPipe, that allows
 the information from the SSSD to be transmitted over the system bus.
 
-%if 0%{?rhel}
+%if %{use_sssd_user}
 %package polkit-rules
 Summary: Rules for polkit integration for SSSD
 Group: Applications/System
@@ -483,6 +509,7 @@ License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 %if %{build_kcm_renewals}
 Requires: krb5-libs >= %{krb5_version}
+Requires: sssd-krb5-common = %{version}-%{release}
 %endif
 %{?systemd_requires}
 
@@ -500,24 +527,30 @@ This package provides Kerberos plugins that are required to enable
 authentication against external identity providers. Additionally a helper
 program to handle the OAuth 2.0 Device Authorization Grant is provided.
 
+%if %{build_passkey}
 %package passkey
 Summary: SSSD helpers and plugins needed for authentication with passkey token
 License: GPL-3.0-or-later
 Requires: sssd-common = %{version}-%{release}
 Requires: libfido2
+%if "%{sssd_user}" != "root"
+Requires: acl
+%endif
 
 %description passkey
 This package provides helper processes and Kerberos plugins that are required to
 enable authentication with passkey token.
+%endif
 
 %prep
-%autosetup -p1
+%autosetup -n sssd-2.10.0-beta1 -p1
 
 %build
 
 autoreconf -ivf
 
 %configure \
+    --runstatedir=%{_rundir} \
     --disable-rpath \
     --disable-static \
     --enable-gss-spnego-for-zero-maxssf \
@@ -532,7 +565,6 @@ autoreconf -ivf
     --with-initscript=systemd \
     --with-krb5-rcache-dir=%{_localstatedir}/cache/krb5rcache \
     --with-mcache-path=%{mcpath} \
-    --with-pid-path=%{_rundir} \
     --with-pipe-path=%{pipepath} \
     --with-pubconf-path=%{pubconfpath} \
     --with-sssd-user=%{sssd_user} \
@@ -541,10 +573,15 @@ autoreconf -ivf
 %if %{build_subid}
     --with-subid \
 %endif
-%if 0%{?fedora}
+%if ! %{use_sssd_user}
     --disable-polkit-rules-path \
 %endif
+%if %{build_passkey}
     --with-passkey \
+%endif
+%if %{build_ssh_known_hosts_proxy}
+    --with-ssh-known-hosts-proxy \
+%endif
     %{nil}
 
 %make_build all docs runstatedir=%{_rundir}
@@ -582,8 +619,13 @@ cp $RPM_BUILD_ROOT/%{_datadir}/sssd/krb5-snippets/sssd_enable_idp \
    $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d/sssd_enable_idp
 
 # Enable krb5 passkey plugins by default (when sssd-passkey package is installed)
+%if %{build_passkey}
 cp $RPM_BUILD_ROOT/%{_datadir}/sssd/krb5-snippets/sssd_enable_passkey \
    $RPM_BUILD_ROOT/%{_sysconfdir}/krb5.conf.d/sssd_enable_passkey
+%if "%{sssd_user}" != "root"
+install -D -p -m 0644 contrib/90-sssd-token-access.rules %{buildroot}%{_udevrulesdir}/90-sssd-token-access.rules
+%endif
+%endif
 
 # krb5 configuration snippet
 cp $RPM_BUILD_ROOT/%{_datadir}/sssd/krb5-snippets/enable_sssd_conf_dir \
@@ -592,6 +634,9 @@ cp $RPM_BUILD_ROOT/%{_datadir}/sssd/krb5-snippets/enable_sssd_conf_dir \
 # Create directory for cifs-idmap alternative
 # Otherwise this directory could not be owned by sssd-client
 mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/cifs-utils
+
+# tmpfiles.d config
+install -D -m 0644 contrib/sssd-tmpfiles.conf %{buildroot}%{_tmpfilesdir}/%{name}.conf
 
 # Remove .la files created by libtool
 find $RPM_BUILD_ROOT -name "*.la" -exec rm -f {} \;
@@ -687,6 +732,10 @@ do
     cat $subpackage.lang
 done
 
+%if %{use_sysusers}
+install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
+%endif
+
 %files
 %license COPYING
 
@@ -702,12 +751,13 @@ done
 %{_unitdir}/sssd-pac.socket
 %{_unitdir}/sssd-pac.service
 %{_unitdir}/sssd-pam.socket
-%{_unitdir}/sssd-pam-priv.socket
 %{_unitdir}/sssd-pam.service
 %{_unitdir}/sssd-ssh.socket
 %{_unitdir}/sssd-ssh.service
 %{_unitdir}/sssd-sudo.socket
 %{_unitdir}/sssd-sudo.service
+
+%{_tmpfilesdir}/%{name}.conf
 
 %dir %{_libexecdir}/%{servicename}
 %{_libexecdir}/%{servicename}/sssd_be
@@ -740,40 +790,42 @@ done
 
 %{ldb_modulesdir}/memberof.so
 %{_bindir}/sss_ssh_authorizedkeys
+%{_bindir}/sss_ssh_knownhosts
 %{_bindir}/sss_ssh_knownhostsproxy
 %{_sbindir}/sss_cache
 %{_libexecdir}/%{servicename}/sss_signal
 
-%dir %{sssdstatedir}
+%attr(775,%{sssd_user},%{sssd_user}) %dir %{sssdstatedir}
 %dir %{_localstatedir}/cache/krb5rcache
-%attr(700,%{sssd_user},%{sssd_user}) %dir %{dbpath}
+%attr(770,%{sssd_user},%{sssd_user}) %dir %{dbpath}
 %attr(775,%{sssd_user},%{sssd_user}) %dir %{mcpath}
-%attr(700,root,root) %dir %{secdbpath}
-%attr(751,root,root) %dir %{deskprofilepath}
-%ghost %attr(0664,%{sssd_user},%{sssd_user}) %verify(not md5 size mtime) %{mcpath}/passwd
-%ghost %attr(0664,%{sssd_user},%{sssd_user}) %verify(not md5 size mtime) %{mcpath}/group
-%ghost %attr(0664,%{sssd_user},%{sssd_user}) %verify(not md5 size mtime) %{mcpath}/initgroups
-%attr(755,%{sssd_user},%{sssd_user}) %dir %{pipepath}
-%attr(750,%{sssd_user},root) %dir %{pipepath}/private
-%attr(755,%{sssd_user},%{sssd_user}) %dir %{pubconfpath}
-%attr(755,%{sssd_user},%{sssd_user}) %dir %{gpocachepath}
-%attr(750,%{sssd_user},%{sssd_user}) %dir %{_var}/log/%{name}
-%attr(700,%{sssd_user},%{sssd_user}) %dir %{_sysconfdir}/sssd
-%attr(711,%{sssd_user},%{sssd_user}) %dir %{_sysconfdir}/sssd/conf.d
-%attr(711,root,root) %dir %{_sysconfdir}/sssd/pki
-%ghost %attr(0600,root,root) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
+%attr(770,%{sssd_user},%{sssd_user}) %dir %{secdbpath}
+%attr(771,%{sssd_user},%{sssd_user}) %dir %{deskprofilepath}
+%attr(775,%{sssd_user},%{sssd_user}) %dir %{pipepath}
+%attr(770,%{sssd_user},%{sssd_user}) %dir %{pipepath}/private
+%attr(775,%{sssd_user},%{sssd_user}) %dir %{pubconfpath}
+%attr(770,%{sssd_user},%{sssd_user}) %dir %{gpocachepath}
+%attr(770,%{sssd_user},%{sssd_user}) %dir %{_var}/log/%{name}
+%attr(750,%{sssd_user},%{sssd_user}) %dir %{_sysconfdir}/sssd
+%attr(750,%{sssd_user},%{sssd_user}) %dir %{_sysconfdir}/sssd/conf.d
+%attr(750,%{sssd_user},%{sssd_user}) %dir %{_sysconfdir}/sssd/pki
+%ghost %attr(0600,%{sssd_user},%{sssd_user}) %config(noreplace) %{_sysconfdir}/sssd/sssd.conf
 %dir %{_sysconfdir}/logrotate.d
 %config(noreplace) %{_sysconfdir}/logrotate.d/sssd
 %dir %{_sysconfdir}/rwtab.d
 %config(noreplace) %{_sysconfdir}/rwtab.d/sssd
 %dir %{_datadir}/sssd
+%attr(775,%{sssd_user},%{sssd_user}) %dir %{_rundir}/sssd
 %config(noreplace) %{_sysconfdir}/pam.d/sssd-shadowutils
 %dir %{_libdir}/%{name}/conf
 %{_libdir}/%{name}/conf/sssd.conf
 
 %{_datadir}/sssd/cfg_rules.ini
 %{_mandir}/man1/sss_ssh_authorizedkeys.1*
+%{_mandir}/man1/sss_ssh_knownhosts.1*
+%if %{build_ssh_known_hosts_proxy}
 %{_mandir}/man1/sss_ssh_knownhostsproxy.1*
+%endif
 %{_mandir}/man5/sssd.conf.5*
 %{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man5/sssd-sudo.5*
@@ -790,8 +842,12 @@ done
 %{_datadir}/systemtap/tapset/sssd.stp
 %{_datadir}/systemtap/tapset/sssd_functions.stp
 %{_mandir}/man5/sssd-systemtap.5*
+%if %{use_sysusers}
+%{_sysusersdir}/sssd.conf
+%endif
 
-%if 0%{?rhel}
+
+%if %{use_sssd_user}
 %files polkit-rules
 %{_datadir}/polkit-1/rules.d/*
 %endif
@@ -804,9 +860,9 @@ done
 
 %files krb5-common
 %license COPYING
-%attr(755,%{sssd_user},%{sssd_user}) %dir %{pubconfpath}/krb5.include.d
-%attr(%{child_attrs},root,%{sssd_user}) %{_libexecdir}/%{servicename}/ldap_child
-%attr(%{child_attrs},root,%{sssd_user}) %{_libexecdir}/%{servicename}/krb5_child
+%attr(775,%{sssd_user},%{sssd_user}) %dir %{pubconfpath}/krb5.include.d
+%attr(0750,root,%{sssd_user}) %caps(%{child_capabilities}) %{_libexecdir}/%{servicename}/ldap_child
+%attr(0750,root,%{sssd_user}) %caps(%{child_capabilities}) %{_libexecdir}/%{servicename}/krb5_child
 
 %files krb5 -f sssd_krb5.lang
 %license COPYING
@@ -822,9 +878,9 @@ done
 
 %files ipa -f sssd_ipa.lang
 %license COPYING
-%attr(700,%{sssd_user},%{sssd_user}) %dir %{keytabdir}
+%attr(770,%{sssd_user},%{sssd_user}) %dir %{keytabdir}
 %{_libdir}/%{name}/libsss_ipa.so
-%attr(%{child_attrs},root,%{sssd_user}) %{_libexecdir}/%{servicename}/selinux_child
+%attr(0750,root,%{sssd_user}) %caps(%{child_capabilities}) %{_libexecdir}/%{servicename}/selinux_child
 %{_mandir}/man5/sssd-ipa.5*
 
 %files ad -f sssd_ad.lang
@@ -835,7 +891,7 @@ done
 
 %files proxy
 %license COPYING
-%attr(%{child_attrs},root,%{sssd_user}) %{_libexecdir}/%{servicename}/proxy_child
+%{_libexecdir}/%{servicename}/proxy_child
 %{_libdir}/%{name}/libsss_proxy.so
 
 %files dbus -f sssd_dbus.lang
@@ -979,16 +1035,25 @@ done
 %{_datadir}/sssd/krb5-snippets/sssd_enable_idp
 %config(noreplace) %{_sysconfdir}/krb5.conf.d/sssd_enable_idp
 
+%if %{build_passkey}
 %files passkey
 %attr(755,%{sssd_user},%{sssd_user}) %{_libexecdir}/%{servicename}/passkey_child
 %{_libdir}/%{name}/modules/sssd_krb5_passkey_plugin.so
 %{_datadir}/sssd/krb5-snippets/sssd_enable_passkey
+%if "%{sssd_user}" != "root"
+%{_udevrulesdir}/90-sssd-token-access.rules
+%endif
 %config(noreplace) %{_sysconfdir}/krb5.conf.d/sssd_enable_passkey
+%endif
 
-%if 0%{?rhel}
+%if %{use_sssd_user}
 %pre common
+%if %{use_sysusers}
+%sysusers_create_compat %{SOURCE1}
+%else
 getent group sssd >/dev/null || groupadd -r sssd
 getent passwd sssd >/dev/null || useradd -r -g sssd -d / -s /sbin/nologin -c "User for sssd" sssd
+%endif
 %endif
 
 %post common
@@ -997,9 +1062,17 @@ getent passwd sssd >/dev/null || useradd -r -g sssd -d / -s /sbin/nologin -c "Us
 %systemd_post sssd-nss.socket
 %systemd_post sssd-pac.socket
 %systemd_post sssd-pam.socket
-%systemd_post sssd-pam-priv.socket
 %systemd_post sssd-ssh.socket
 %systemd_post sssd-sudo.socket
+%__rm -f %{mcpath}/passwd
+%__rm -f %{mcpath}/group
+%__rm -f %{mcpath}/initgroups
+%__rm -f %{mcpath}/sid
+%__chown -f %{sssd_user}:%{sssd_user} %{dbpath}/* || true
+%__chown -f %{sssd_user}:%{sssd_user} %{_sysconfdir}/sssd/sssd.conf || true
+%__chown -f -R %{sssd_user}:%{sssd_user} %{_sysconfdir}/sssd/conf.d || true
+%__chown -f %{sssd_user}:%{sssd_user} %{_var}/log/%{name}/*.log || true
+%__chown -f %{sssd_user}:%{sssd_user} %{secdbpath}/*.ldb || true
 
 %preun common
 %systemd_preun sssd.service
@@ -1007,16 +1080,18 @@ getent passwd sssd >/dev/null || useradd -r -g sssd -d / -s /sbin/nologin -c "Us
 %systemd_preun sssd-nss.socket
 %systemd_preun sssd-pac.socket
 %systemd_preun sssd-pam.socket
-%systemd_preun sssd-pam-priv.socket
 %systemd_preun sssd-ssh.socket
 %systemd_preun sssd-sudo.socket
 
 %postun common
+%__rm -f %{mcpath}/passwd
+%__rm -f %{mcpath}/group
+%__rm -f %{mcpath}/initgroups
+%__rm -f %{mcpath}/sid
 %systemd_postun_with_restart sssd-autofs.socket
 %systemd_postun_with_restart sssd-nss.socket
 %systemd_postun_with_restart sssd-pac.socket
 %systemd_postun_with_restart sssd-pam.socket
-%systemd_postun_with_restart sssd-pam-priv.socket
 %systemd_postun_with_restart sssd-ssh.socket
 %systemd_postun_with_restart sssd-sudo.socket
 
@@ -1059,6 +1134,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Fri Jun 07 2024 Pavel Březina <pbrezina@redhat.com> - 2.10.0~beta1-1
+- Rebase to SSSD 2.10.0-beta1
+
 * Fri Jun 07 2024 Python Maint <python-maint@redhat.com> - 2.9.5-2
 - Rebuilt for Python 3.13
 
