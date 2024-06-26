@@ -59,12 +59,12 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.10.0~beta1
-Release: 2%{?dist}
+Version: 2.10.0~beta2
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.10.0-beta1/sssd-2.10.0-beta1.tar.gz
+Source0: https://github.com/SSSD/sssd/releases/download/2.10.0-beta2/sssd-2.10.0-beta2.tar.gz
 Source1: sssd.sysusers
 
 ### Patches ###
@@ -543,7 +543,7 @@ enable authentication with passkey token.
 %endif
 
 %prep
-%autosetup -n sssd-2.10.0-beta1 -p1
+%autosetup -n sssd-2.10.0-beta2 -p1
 
 %build
 
@@ -762,7 +762,7 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 %dir %{_libexecdir}/%{servicename}
 %{_libexecdir}/%{servicename}/sssd_be
 %{_libexecdir}/%{servicename}/sssd_nss
-%{_libexecdir}/%{servicename}/sssd_pam
+%attr(0750,root,%{sssd_user}) %caps(cap_dac_read_search=p) %{_libexecdir}/%{servicename}/sssd_pam
 %{_libexecdir}/%{servicename}/sssd_autofs
 %{_libexecdir}/%{servicename}/sssd_ssh
 %{_libexecdir}/%{servicename}/sssd_sudo
@@ -891,7 +891,7 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 
 %files proxy
 %license COPYING
-%{_libexecdir}/%{servicename}/proxy_child
+%attr(0750,root,%{sssd_user}) %{_libexecdir}/%{servicename}/proxy_child
 %{_libdir}/%{name}/libsss_proxy.so
 
 %files dbus -f sssd_dbus.lang
@@ -1037,7 +1037,7 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 
 %if %{build_passkey}
 %files passkey
-%attr(755,%{sssd_user},%{sssd_user}) %{_libexecdir}/%{servicename}/passkey_child
+%{_libexecdir}/%{servicename}/passkey_child
 %{_libdir}/%{name}/modules/sssd_krb5_passkey_plugin.so
 %{_datadir}/sssd/krb5-snippets/sssd_enable_passkey
 %if "%{sssd_user}" != "root"
@@ -1134,6 +1134,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Fri Jun 26 2024 Pavel Březina <pbrezina@redhat.com> - 2.10.0~beta2-1
+- Rebase to SSSD 2.10.0-beta2
+
 * Fri Jun 07 2024 Python Maint <python-maint@redhat.com>
 - Rebuilt for Python 3.13
 
