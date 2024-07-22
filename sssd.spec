@@ -1141,7 +1141,7 @@ fi
 * Sat Jul 20 2024 Fedora Release Engineering <releng@fedoraproject.org> - 2.10.0~beta2-2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_41_Mass_Rebuild
 
-* Fri Jun 26 2024 Pavel Březina <pbrezina@redhat.com> - 2.10.0~beta2-1
+* Wed Jun 26 2024 Pavel Březina <pbrezina@redhat.com> - 2.10.0~beta2-1
 - Rebase to SSSD 2.10.0-beta2
 
 * Fri Jun 07 2024 Python Maint <python-maint@redhat.com>
