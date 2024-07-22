@@ -60,7 +60,7 @@
 
 Name: sssd
 Version: 2.10.0~beta2
-Release: 2%{?dist}
+Release: 3%{?dist}
 Summary: System Security Services Daemon
 License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
@@ -162,6 +162,7 @@ BuildRequires: softhsm >= 2.1.0
 BuildRequires: bc
 BuildRequires: systemd-devel
 BuildRequires: systemtap-sdt-devel
+BuildRequires: systemtap-sdt-dtrace
 BuildRequires: uid_wrapper
 BuildRequires: po4a
 BuildRequires: valgrind-devel
@@ -1134,6 +1135,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Mon Jul 22 2024 Lumír Balhar <lbalhar@redhat.com> - 2.10.0~beta2-3
+- Add new systemtap-sdt-dtrace to build deps
+
 * Sat Jul 20 2024 Fedora Release Engineering <releng@fedoraproject.org> - 2.10.0~beta2-2
 - Rebuilt for https://fedoraproject.org/wiki/Fedora_41_Mass_Rebuild
 
