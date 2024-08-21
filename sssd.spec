@@ -60,7 +60,7 @@
 
 Name: sssd
 Version: 2.10.0~beta2
-Release: 3%{?dist}
+Release: 4%{?dist}
 Summary: System Security Services Daemon
 License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
@@ -1135,6 +1135,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Wed Aug 21 2024 Pavel Březina <pbrezina@redhat.com> - 2.10.0~beta2-4
+- Rebuild for samba-4.21.0-0.4.rc3.fc42
+
 * Mon Jul 22 2024 Lumír Balhar <lbalhar@redhat.com> - 2.10.0~beta2-3
 - Add new systemtap-sdt-dtrace to build deps
 
