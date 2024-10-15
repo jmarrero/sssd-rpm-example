@@ -1,5 +1,12 @@
 # SSSD SPEC file for Fedora 34+ and RHEL-9+
 
+# Upstream version is using pre-release version with dash as a separator
+# since git does not support tilde in tag name. On the other side, Fedora and
+# RHEL requires tilde as a separator to correctly order builds.
+# For example: 2.10.0-beta1 vs 2.10.0~beta1
+%global upstream_version 2.10.0
+%global downstream_version %(echo "2.10.0" | sed 's/-/~/g')
+
 # define SSSD user
 %if 0%{?fedora} >= 41 || 0%{?rhel}
 %global use_sssd_user 1
@@ -59,12 +66,12 @@
 %global samba_package_version %(rpm -q samba-devel --queryformat %{version}-%{release})
 
 Name: sssd
-Version: 2.10.0~beta2
-Release: 4%{?dist}
+Version: %{downstream_version}
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
-Source0: https://github.com/SSSD/sssd/releases/download/2.10.0-beta2/sssd-2.10.0-beta2.tar.gz
+Source0: %{url}/archive/%{upstream_version}/%{name}-%{upstream_version}.tar.gz
 Source1: sssd.sysusers
 
 ### Patches ###
@@ -162,7 +169,9 @@ BuildRequires: softhsm >= 2.1.0
 BuildRequires: bc
 BuildRequires: systemd-devel
 BuildRequires: systemtap-sdt-devel
+%if 0%{?fedora} >= 41
 BuildRequires: systemtap-sdt-dtrace
+%endif
 BuildRequires: uid_wrapper
 BuildRequires: po4a
 BuildRequires: valgrind-devel
@@ -193,6 +202,11 @@ License: GPL-3.0-or-later
 # libsss_simpleifp is removed
 Obsoletes: libsss_simpleifp < 2.9.2
 Obsoletes: libsss_simpleifp-debuginfo < 2.9.2
+%if 0%{?rhel} != 9
+%if %{use_sssd_user}
+Obsoletes: sssd-polkit-rules < 2.10.0
+%endif
+%endif
 # Requires
 # due to ABI changes in 1.1.30/1.2.0
 Requires: libldb >= %{ldb_version}
@@ -454,6 +468,7 @@ Requires: sssd-common = %{version}-%{release}
 Provides the D-Bus responder of the SSSD, called the InfoPipe, that allows
 the information from the SSSD to be transmitted over the system bus.
 
+%if 0%{?rhel} == 9
 %if %{use_sssd_user}
 %package polkit-rules
 Summary: Rules for polkit integration for SSSD
@@ -464,12 +479,30 @@ Requires: sssd-common = %{version}-%{release}
 
 %description polkit-rules
 Provides rules for polkit integration with SSSD. This is required
-for smartcard support.
+for smartcard support if SSSD service is running as user 'sssd'.
+%endif
+
+%package -n libsss_simpleifp
+Summary: The SSSD D-Bus responder helper library
+License: GPL-3.0-or-later
+Requires: sssd-dbus = %{version}-%{release}
+
+%description -n libsss_simpleifp
+Provides library that simplifies D-Bus API for the SSSD InfoPipe responder.
+
+%package -n libsss_simpleifp-devel
+Summary: The SSSD D-Bus responder helper library
+License: GPL-3.0-or-later
+Requires: dbus-devel
+Requires: libsss_simpleifp = %{version}-%{release}
+
+%description -n libsss_simpleifp-devel
+Provides library that simplifies D-Bus API for the SSSD InfoPipe responder.
 %endif
 
 %package winbind-idmap
 Summary: SSSD's idmap_sss Backend for Winbind
-License: GPL-3.0-or-later AND LGPL-3.0-or-later
+License: GPL-3.0-or-later and LGPL-3.0-or-later
 Requires: libsss_nss_idmap = %{version}-%{release}
 Requires: libsss_idmap = %{version}-%{release}
 Conflicts: sssd-common < %{version}-%{release}
@@ -544,7 +577,7 @@ enable authentication with passkey token.
 %endif
 
 %prep
-%autosetup -n sssd-2.10.0-beta2 -p1
+%autosetup -n %{name}-%{upstream_version} -p1
 
 %build
 
@@ -571,6 +604,13 @@ autoreconf -ivf
     --with-sssd-user=%{sssd_user} \
     --with-syslog=journald \
     --with-test-dir=/dev/shm \
+%if 0%{?rhel} == 9
+    --with-libsifp \
+    --with-conf-service-user-support \
+    --with-files-provider \
+    --with-extended-enumeration-support \
+    --with-ssh-known-hosts-proxy \
+%endif
 %if %{build_subid}
     --with-subid \
 %endif
@@ -771,6 +811,9 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 %{_libexecdir}/%{servicename}/sssd_check_socket_activated_responders
 
 %dir %{_libdir}/%{name}
+%if 0%{?rhel} == 9
+%{_libdir}/%{name}/libsss_files.so
+%endif
 %{_libdir}/%{name}/libsss_simple.so
 
 #Internal shared libraries
@@ -828,6 +871,9 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 %{_mandir}/man1/sss_ssh_knownhostsproxy.1*
 %endif
 %{_mandir}/man5/sssd.conf.5*
+%if 0%{?rhel} == 9
+%{_mandir}/man5/sssd-files.5*
+%endif
 %{_mandir}/man5/sssd-simple.5*
 %{_mandir}/man5/sssd-sudo.5*
 %{_mandir}/man5/sssd-session-recording.5*
@@ -846,12 +892,13 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 %if %{use_sysusers}
 %{_sysusersdir}/sssd.conf
 %endif
-
-
 %if %{use_sssd_user}
+%if 0%{?rhel} == 9
 %files polkit-rules
+%endif
 %{_datadir}/polkit-1/rules.d/*
 %endif
+
 
 %files ldap -f sssd_ldap.lang
 %license COPYING
@@ -903,6 +950,18 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 # InfoPipe DBus plumbing
 %{_datadir}/dbus-1/system.d/org.freedesktop.sssd.infopipe.conf
 %{_datadir}/dbus-1/system-services/org.freedesktop.sssd.infopipe.service
+
+%if 0%{?rhel} == 9
+%files -n libsss_simpleifp
+%{_libdir}/libsss_simpleifp.so.*
+
+%files -n libsss_simpleifp-devel
+%doc sss_simpleifp_doc/html
+%{_includedir}/sss_sifp.h
+%{_includedir}/sss_sifp_dbus.h
+%{_libdir}/libsss_simpleifp.so
+%{_libdir}/pkgconfig/sss_simpleifp.pc
+%endif
 
 %files client -f sssd_client.lang
 %license src/sss_client/COPYING src/sss_client/COPYING.LESSER
@@ -1049,11 +1108,12 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 
 %if %{use_sssd_user}
 %pre common
+! getent passwd sssd >/dev/null || usermod sssd -d /run/sssd >/dev/null || true
 %if %{use_sysusers}
 %sysusers_create_compat %{SOURCE1}
 %else
 getent group sssd >/dev/null || groupadd -r sssd
-getent passwd sssd >/dev/null || useradd -r -g sssd -d / -s /sbin/nologin -c "User for sssd" sssd
+getent passwd sssd >/dev/null || useradd -r -g sssd -d /run/sssd -s /sbin/nologin -c "User for sssd" sssd
 %endif
 %endif
 
@@ -1074,6 +1134,7 @@ getent passwd sssd >/dev/null || useradd -r -g sssd -d / -s /sbin/nologin -c "Us
 %__chown -f -R %{sssd_user}:%{sssd_user} %{_sysconfdir}/sssd/conf.d || true
 %__chown -f %{sssd_user}:%{sssd_user} %{_var}/log/%{name}/*.log || true
 %__chown -f %{sssd_user}:%{sssd_user} %{secdbpath}/*.ldb || true
+%__chown -f %{sssd_user}:%{sssd_user} %{gpocachepath}/* || true
 
 %preun common
 %systemd_preun sssd.service
@@ -1128,13 +1189,16 @@ getent passwd sssd >/dev/null || useradd -r -g sssd -d / -s /sbin/nologin -c "Us
 
 %preun client
 if [ $1 -eq 0 ] ; then
-        /usr/sbin/alternatives --remove cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so
+        /usr/sbin/alternatives --remove cifs-idmap-plugin %{_libdir}/cifs-utils/cifs_idmap_sss.so || true
 fi
 
 %posttrans common
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Oct 15 2024 Pavel Březina <pbrezina@redhat.com> - 2.10.0-1
+- Rebase to SSSD 2.10.0
+
 * Wed Aug 21 2024 Pavel Březina <pbrezina@redhat.com> - 2.10.0~beta2-4
 - Rebuild for samba-4.21.0-0.4.rc3.fc42
 
