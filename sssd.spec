@@ -67,7 +67,7 @@
 
 Name: sssd
 Version: %{downstream_version}
-Release: 1%{?dist}
+Release: 2%{?dist}
 Summary: System Security Services Daemon
 License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
@@ -1196,6 +1196,10 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Oct 22 2024 Richard W.M. Jones <rjones@redhat.com> - 2.10.0-2
+- Rebuild for Jansson 2.14
+  (https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/thread/3PYINSQGKQ4BB25NQUI2A2UCGGLAG5ND/)
+
 * Tue Oct 15 2024 Pavel Březina <pbrezina@redhat.com> - 2.10.0-1
 - Rebase to SSSD 2.10.0
 
