@@ -1,0 +1,101 @@
+From fe72979318b171e2ab4fd95890c806401afb5296 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Alejandro=20L=C3=B3pez?= <allopez@redhat.com>
+Date: Mon, 28 Oct 2024 14:28:33 +0100
+Subject: [PATCH] SSH: sss_ssh_knownhosts must ignore DNS errors
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+When the DNS cannot resolve the provided hostname, sss_ssh_knownhosts
+must not fail.
+
+Instead it should try its best to find it. It will now try to find
+the host account in IPA using both the fqdn and serverHostName
+attributes (the later contains the shortname); and using the name and
+nameAlias when looking for the host in the cache.
+
+However, the IP address is not (and must not be) stored in the cache
+or IPA entries, so this case will not work if the DNS fails to associate
+a hostname to the provided IP address. In such a situtation, not key
+will be retrieved and provided to `ssh`.
+
+Resolves: https://github.com/SSSD/sssd/issues/7664
+
+Reviewed-by: Dan Lavu <dlavu@redhat.com>
+Reviewed-by: Pavel Březina <pbrezina@redhat.com>
+(cherry picked from commit 76682050022cba204ec5450f274a6e10a3726943)
+---
+ src/db/sysdb_ssh.c                      | 4 +++-
+ src/providers/ldap/sdap_async_hosts.c   | 5 ++++-
+ src/sss_client/ssh/sss_ssh_knownhosts.c | 6 +++---
+ 3 files changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/src/db/sysdb_ssh.c b/src/db/sysdb_ssh.c
+index 4983dcc34..c8920f23f 100644
+--- a/src/db/sysdb_ssh.c
++++ b/src/db/sysdb_ssh.c
+@@ -335,12 +335,14 @@ sysdb_get_ssh_host(TALLOC_CTX *mem_ctx,
+         return ENOMEM;
+     }
+ 
+-    filter = talloc_asprintf(tmp_ctx, "(%s=%s)", SYSDB_NAME, name);
++    filter = talloc_asprintf(tmp_ctx, "(|(%s=%s)(%s=%s))",
++                             SYSDB_NAME, name, SYSDB_NAME_ALIAS, name);
+     if (!filter) {
+         ret = ENOMEM;
+         goto done;
+     }
+ 
++    DEBUG(SSSDBG_TRACE_INTERNAL, "Searching sysdb with filter '%s'\n", filter);
+     ret = sysdb_search_ssh_hosts(tmp_ctx, domain, filter, attrs,
+                                  &num_hosts, &hosts);
+     if (ret != EOK) {
+diff --git a/src/providers/ldap/sdap_async_hosts.c b/src/providers/ldap/sdap_async_hosts.c
+index 0633a3f6c..af3aca7e6 100644
+--- a/src/providers/ldap/sdap_async_hosts.c
++++ b/src/providers/ldap/sdap_async_hosts.c
+@@ -93,9 +93,12 @@ sdap_host_info_send(TALLOC_CTX *mem_ctx,
+         state->host_filter = talloc_asprintf(state, "(objectClass=%s)",
+                                              host_map[SDAP_OC_HOST].name);
+     } else {
+-        state->host_filter = talloc_asprintf(state, "(&(objectClass=%s)(%s=%s))",
++        state->host_filter = talloc_asprintf(state,
++                                             "(&(objectClass=%s)(|(%s=%s)(%s=%s)))",
+                                              host_map[SDAP_OC_HOST].name,
+                                              host_map[SDAP_AT_HOST_FQDN].name,
++                                             hostname,
++                                             host_map[SDAP_AT_HOST_SERVERHOSTNAME].name,
+                                              hostname);
+     }
+     if (state->host_filter == NULL) {
+diff --git a/src/sss_client/ssh/sss_ssh_knownhosts.c b/src/sss_client/ssh/sss_ssh_knownhosts.c
+index 7dd08c229..9344345e5 100644
+--- a/src/sss_client/ssh/sss_ssh_knownhosts.c
++++ b/src/sss_client/ssh/sss_ssh_knownhosts.c
+@@ -118,7 +118,7 @@ static errno_t known_hosts(TALLOC_CTX *mem_ctx, const char *domain,
+         if (ret != EOK) {
+             DEBUG(SSSDBG_OP_FAILURE,
+                   "getaddrinfo() failed (%d): %s\n", ret, gai_strerror(ret));
+-            goto done;
++            canonname = host;
+         } else {
+             canonname = ai->ai_canonname;
+         }
+@@ -128,12 +128,12 @@ static errno_t known_hosts(TALLOC_CTX *mem_ctx, const char *domain,
+         if (ret != EOK) {
+             DEBUG(SSSDBG_OP_FAILURE,
+                   "getnameinfo() failed (%d): %s\n", ret, gai_strerror(ret));
+-            goto done;
++            canonname = host;
+         } else {
+             canonname = canonhost;
+         }
+     }
+-    DEBUG(SSSDBG_FUNC_DATA, "Found canonical name: %s\n", canonname);
++    DEBUG(SSSDBG_FUNC_DATA, "Looking for name: %s\n", canonname);
+ 
+     /* look up public keys */
+     ret = sss_ssh_get_ent(mem_ctx, SSS_SSH_GET_HOST_PUBKEYS,
+-- 
+2.46.1
+
