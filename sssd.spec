@@ -4,8 +4,8 @@
 # since git does not support tilde in tag name. On the other side, Fedora and
 # RHEL requires tilde as a separator to correctly order builds.
 # For example: 2.10.0-beta1 vs 2.10.0~beta1
-%global upstream_version 2.10.0
-%global downstream_version %(echo "2.10.0" | sed 's/-/~/g')
+%global upstream_version 2.10.1
+%global downstream_version %(echo "2.10.1" | sed 's/-/~/g')
 
 # define SSSD user
 %if 0%{?fedora} >= 41 || 0%{?rhel}
@@ -22,9 +22,6 @@
 %else
 %global use_sysusers 0
 %endif
-
-# Capabilities of privileged child helpers (required even if SSSD runs under root)
-%global child_capabilities cap_chown,cap_dac_override,cap_setuid,cap_setgid=ep
 
 %if 0%{?fedora} >= 35 || 0%{?rhel} >= 9
 %global build_subid 1
@@ -67,7 +64,7 @@
 
 Name: sssd
 Version: %{downstream_version}
-Release: 3%{?dist}
+Release: 1%{?dist}
 Summary: System Security Services Daemon
 License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
@@ -75,7 +72,6 @@ Source0: %{url}/archive/%{upstream_version}/%{name}-%{upstream_version}.tar.gz
 Source1: sssd.sysusers
 
 ### Patches ###
-Patch0001: 0001-SSH-sss_ssh_knownhosts-must-ignore-DNS-errors.patch
 
 ### Dependencies ###
 
@@ -149,10 +145,10 @@ BuildRequires: m4
 BuildRequires: make
 BuildRequires: nss_wrapper
 BuildRequires: openldap-devel
-BuildRequires: openssh
 # required for p11_child smartcard tests
-BuildRequires: openssl
-BuildRequires: openssl-devel
+BuildRequires: openssh
+BuildRequires: openssl >= 1.0.1
+BuildRequires: openssl-devel >= 1.0.1
 BuildRequires: p11-kit-devel
 BuildRequires: pam_wrapper
 BuildRequires: pam-devel
@@ -170,7 +166,7 @@ BuildRequires: softhsm >= 2.1.0
 BuildRequires: bc
 BuildRequires: systemd-devel
 BuildRequires: systemtap-sdt-devel
-%if 0%{?fedora} >= 41 || 0%{?rhel} >= 11
+%if 0%{?fedora} >= 41 || 0%{?rhel} >= 10
 BuildRequires: systemtap-sdt-dtrace
 %endif
 BuildRequires: uid_wrapper
@@ -611,6 +607,7 @@ autoreconf -ivf
     --with-files-provider \
     --with-extended-enumeration-support \
     --with-ssh-known-hosts-proxy \
+    --with-allow-remote-domain-local-groups \
 %endif
 %if %{build_subid}
     --with-subid \
@@ -825,7 +822,6 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 %{_libdir}/%{name}/libsss_krb5_common.so
 %{_libdir}/%{name}/libsss_ldap_common.so
 %{_libdir}/%{name}/libsss_util.so
-%{_libdir}/%{name}/libsss_semanage.so
 %{_libdir}/%{name}/libifp_iface.so
 %{_libdir}/%{name}/libifp_iface_sync.so
 %{_libdir}/%{name}/libsss_iface.so
@@ -910,8 +906,8 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 %files krb5-common
 %license COPYING
 %attr(775,%{sssd_user},%{sssd_user}) %dir %{pubconfpath}/krb5.include.d
-%attr(0750,root,%{sssd_user}) %caps(%{child_capabilities}) %{_libexecdir}/%{servicename}/ldap_child
-%attr(0750,root,%{sssd_user}) %caps(%{child_capabilities}) %{_libexecdir}/%{servicename}/krb5_child
+%attr(0750,root,%{sssd_user}) %caps(cap_dac_read_search=p) %{_libexecdir}/%{servicename}/ldap_child
+%attr(0750,root,%{sssd_user}) %caps(cap_dac_read_search,cap_setuid,cap_setgid=p) %{_libexecdir}/%{servicename}/krb5_child
 
 %files krb5 -f sssd_krb5.lang
 %license COPYING
@@ -929,7 +925,7 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 %license COPYING
 %attr(770,%{sssd_user},%{sssd_user}) %dir %{keytabdir}
 %{_libdir}/%{name}/libsss_ipa.so
-%attr(0750,root,%{sssd_user}) %caps(%{child_capabilities}) %{_libexecdir}/%{servicename}/selinux_child
+%attr(0750,root,%{sssd_user}) %caps(cap_setuid,cap_setgid=p) %{_libexecdir}/%{servicename}/selinux_child
 %{_mandir}/man5/sssd-ipa.5*
 
 %files ad -f sssd_ad.lang
@@ -1130,12 +1126,12 @@ getent passwd sssd >/dev/null || useradd -r -g sssd -d /run/sssd -s /sbin/nologi
 %__rm -f %{mcpath}/group
 %__rm -f %{mcpath}/initgroups
 %__rm -f %{mcpath}/sid
+%__chown -f -R root:%{sssd_user} %{_sysconfdir}/sssd || true
+%__chmod -f -R g+r %{_sysconfdir}/sssd || true
 %__chown -f %{sssd_user}:%{sssd_user} %{dbpath}/* || true
-%__chown -f %{sssd_user}:%{sssd_user} %{_sysconfdir}/sssd/sssd.conf || true
-%__chown -f -R %{sssd_user}:%{sssd_user} %{_sysconfdir}/sssd/conf.d || true
 %__chown -f %{sssd_user}:%{sssd_user} %{_var}/log/%{name}/*.log || true
 %__chown -f %{sssd_user}:%{sssd_user} %{secdbpath}/*.ldb || true
-%__chown -f %{sssd_user}:%{sssd_user} %{gpocachepath}/* || true
+%__chown -f -R %{sssd_user}:%{sssd_user} %{gpocachepath} || true
 
 %preun common
 %systemd_preun sssd.service
@@ -1197,6 +1193,9 @@ fi
 %systemd_postun_with_restart sssd.service
 
 %changelog
+* Tue Dec 10 2024 Pavel Březina <pbrezina@redhat.com> - 2.10.1-1
+- Rebase to SSSD 2.10.1
+
 * Mon Nov 11 2024 Alexey Tikhonov <atikhono@redhat.com> - 2.10.0-3
 - Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2323496
 
