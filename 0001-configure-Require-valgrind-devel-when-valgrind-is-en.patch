@@ -1,0 +1,91 @@
+From 3aab117ea3c543e5711577456c5bb87ae6b8fbd3 Mon Sep 17 00:00:00 2001
+From: Andrea Bolognani <abologna@redhat.com>
+Date: Thu, 20 Feb 2025 18:16:21 +0100
+Subject: [PATCH] configure: Require valgrind-devel when valgrind is enabled
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Currently we include <valgrind/valgrind.h> unconditionally to
+access the RUNNING_ON_VALGRIND macro, which allows us to skip
+one of the tests which is known not to work correctly under
+valgrind.
+
+However, if only the runtime part of valgrind in installed on
+the system and the devel part is missing, this will result in
+a very late compilation error. Checking for the header's
+presence at configure time allows us to provide better
+diagnostics, earlier.
+
+More importantly, this makes it possible to build sssd at all
+on architectures where valgrind is not yet available, such as
+riscv64.
+
+Signed-off-by: Andrea Bolognani <abologna@redhat.com>
+
+Reviewed-by: Alejandro López <allopez@redhat.com>
+Reviewed-by: Alexey Tikhonov <atikhono@redhat.com>
+(cherry picked from commit 8477aa0658f5af5133a694bba09e0a68fbedc649)
+---
+ configure.ac                  | 7 +++++++
+ src/tests/cmocka/test_iobuf.c | 6 ++++++
+ 2 files changed, 13 insertions(+)
+
+diff --git a/configure.ac b/configure.ac
+index 90cb1f3ec..804c150de 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -543,6 +543,13 @@ AM_CHECK_PAM_WRAPPER
+ AM_CHECK_TEST_CA
+ AX_VALGRIND_CHECK
+ 
++AS_IF([test x$VALGRIND_ENABLED = xyes], [
++    AC_CHECK_HEADERS([valgrind/valgrind.h],,AC_MSG_ERROR([valgrind-devel required with valgrind enabled]))
++], [
++    AC_CHECK_HEADERS([valgrind/valgrind.h])
++])
++
++
+ # Check if the user wants SSSD to be compiled with systemtap probes
+ AM_CHECK_SYSTEMTAP
+ 
+diff --git a/src/tests/cmocka/test_iobuf.c b/src/tests/cmocka/test_iobuf.c
+index 7b4de54f5..145bee07e 100644
+--- a/src/tests/cmocka/test_iobuf.c
++++ b/src/tests/cmocka/test_iobuf.c
+@@ -20,6 +20,8 @@
+ */
+ #define _GNU_SOURCE                /* For memmem() */
+ 
++#include "config.h"
++
+ #include <stdio.h>
+ #include <fcntl.h>
+ #include <errno.h>
+@@ -28,7 +30,9 @@
+ #include <string.h>
+ #include <stddef.h>
+ #include <setjmp.h>
++#ifdef HAVE_VALGRIND_VALGRIND_H
+ #include <valgrind/valgrind.h>
++#endif
+ #include <cmocka.h>
+ #include <sys/mman.h>
+ #include <sys/stat.h>
+@@ -187,11 +191,13 @@ static void test_sss_iobuf_secure(void **state)
+     struct sss_iobuf *iobuf_secret_2;
+     struct sss_iobuf *iobuf_nosecret;
+ 
++#ifdef HAVE_VALGRIND_VALGRIND_H
+     /* Valgrind interferes with this test by somehow making disappear the heap.
+      * So don't run it on Valgrind. */
+     if (RUNNING_ON_VALGRIND) {
+         skip();
+     }
++#endif
+ 
+ 
+     mem_ctx = talloc_new(NULL);
+-- 
+2.48.1
+
