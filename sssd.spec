@@ -26,6 +26,7 @@ License: GPL-3.0-or-later
 URL: https://github.com/SSSD/sssd/
 Source0: %{url}/releases/download/%{version_no_tilde}/%{name}-%{version_no_tilde}.tar.gz
 Source1: sssd.sysusers
+Source4: sssd-tmpfiles-bootc.conf
 %if %{verify_signature}
 Source2: %{url}/releases/download/%{version_no_tilde}/%{name}-%{version_no_tilde}.tar.gz.asc
 Source3: pubkey.asc
@@ -166,7 +167,8 @@ Requires: libsss_idmap = %{version}-%{release}
 Requires: libsss_certmap = %{version}-%{release}
 Requires(post): coreutils
 Requires(postun): coreutils
-Requires(pre): shadow-utils
+# Use systemd-sysusers for user/group creation (bootc/rpm-ostree compatible)
+%{?sysusers_requires_compat}
 %{?systemd_requires}
 
 %description common
@@ -568,6 +570,8 @@ mkdir -p $RPM_BUILD_ROOT/%{_sysconfdir}/cifs-utils
 
 # tmpfiles.d config
 install -D -m 0644 contrib/sssd-tmpfiles.conf %{buildroot}%{_tmpfilesdir}/%{name}.conf
+# tmpfiles.d config for bootc/rpm-ostree file ownership fix
+install -D -m 0644 %{SOURCE4} %{buildroot}%{_tmpfilesdir}/%{name}-bootc.conf
 
 # Remove .la files created by libtool
 find $RPM_BUILD_ROOT -name "*.la" -exec rm -f {} \;
@@ -687,6 +691,7 @@ install -D -p -m 0644 %{SOURCE1} %{buildroot}%{_sysusersdir}/sssd.conf
 %{_unitdir}/sssd-sudo.service
 
 %{_tmpfilesdir}/%{name}.conf
+%{_tmpfilesdir}/%{name}-bootc.conf
 
 %dir %{_libexecdir}/%{servicename}
 %{_libexecdir}/%{servicename}/sssd_be

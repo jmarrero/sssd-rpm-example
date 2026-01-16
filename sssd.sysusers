@@ -1,1 +1,3 @@
-u     sssd   -   "User for sssd"     /run/sssd/      /sbin/nologin
+#Type Name     ID                  GECOS              Home        Shell
+g     sssd     -                   -                  -           -
+u     sssd     -:sssd              "User for sssd"    /run/sssd   /sbin/nologin
